@@ -91,12 +91,6 @@ class Skill:
             if self.skill_frequency['frequency_type'] in ['turn','round']:
                 _start = 0 if 'skill_first_round' not in self.skill_frequency else min(self.skill_frequency['skill_first_round'] - 1,0)
                 if (_round - _start) % self.skill_frequency['frequency_value'] != 0 : return False
-            # attack frequency: fires every N attacks by the skill's troop type
-            elif self.skill_frequency['frequency_type'] == 'attack':
-                troop_ut = _to_unitx(self.skill_troop_type)
-                next_attack_num = fighter.cumul_attacks.get(troop_ut, 0) + 1
-                if next_attack_num % self.skill_frequency['frequency_value'] != 0:
-                    return False
             # chance
             if self.skill_is_chance :
                 if not self.proc(_round): return False # do not return self.proc(_round), more checks could be added later 
@@ -292,6 +286,9 @@ class RoundEffect:
         self.attempted_in_round = True
         # Already activated in round for unit, unless stackable in the same round
         if self.activated_in_round and (self._effect.trig_for_unit == 'once'): return False
+        # attack frequency
+        if (not self._effect.is_permanent) and ('attack' in self._effect.frequency['frequency_type']):
+            if fighter.cumul_attacks[ut] % self._effect.frequency['frequency_value'] != 0 : return False
         # check if could be triggered by unit
         if self._effect.trig_for_unit == "friendly":
             if _to_unitx(self._effect.troop_type) == ut : return False
