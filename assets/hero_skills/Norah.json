@@ -131,7 +131,9 @@
                     "4": "80.0",
                     "5": 100
                 },
-                "special": {"extra_vs_all": 0.7}
+                "special": {
+                    "extra_vs_all": true
+                }
             }
         ]
     },
