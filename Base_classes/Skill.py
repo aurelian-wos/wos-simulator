@@ -52,6 +52,14 @@ class Skill:
         # trackers:
         self.procs = {}
 
+    def reset_for_new_battle(self):
+        """Reset cached random rolls so each battle gets independent probability draws.
+
+        Must be called before each battle when Skill objects are reused across multiple
+        battle runs. Clears the procs cache so round-specific random rolls are not
+        carried over from a previous battle.
+        """
+        self.procs = {}
 
     def r_skill_condition(self, fighter, _round):
         """Check if skill activation conditions are met for a given round.
@@ -89,8 +97,12 @@ class Skill:
             if 'skill_last_round' in self.skill_frequency and (_round + 1) > self.skill_frequency['skill_last_round'] : return False
             # round frequency
             if self.skill_frequency['frequency_type'] in ['turn','round']:
-                _start = 0 if 'skill_first_round' not in self.skill_frequency else min(self.skill_frequency['skill_first_round'] - 1,0)
-                if (_round - _start) % self.skill_frequency['frequency_value'] != 0 : return False
+                fv = self.skill_frequency['frequency_value']
+                # Default start: fire first at turn N (0-indexed: round N-1), not turn 1.
+                # Skills that need a different first-fire round set skill_first_round explicitly.
+                # Without this default, (0 - 0) % N == 0 fires on turn 1 for all every-N-turn skills.
+                _start = (fv - 1) if 'skill_first_round' not in self.skill_frequency else self.skill_frequency['skill_first_round'] - 1
+                if (_round - _start) % fv != 0 : return False
             # chance
             if self.skill_is_chance :
                 if not self.proc(_round): return False # do not return self.proc(_round), more checks could be added later 
@@ -286,9 +298,9 @@ class RoundEffect:
         self.attempted_in_round = True
         # Already activated in round for unit, unless stackable in the same round
         if self.activated_in_round and (self._effect.trig_for_unit == 'once'): return False
-        # attack frequency
+        # attack frequency: gate on > 0 to prevent firing at cumul=0 (before any attacks)
         if (not self._effect.is_permanent) and ('attack' in self._effect.frequency['frequency_type']):
-            if fighter.cumul_attacks[ut] % self._effect.frequency['frequency_value'] != 0 : return False
+            if fighter.cumul_attacks[ut] == 0 or fighter.cumul_attacks[ut] % self._effect.frequency['frequency_value'] != 0 : return False
         # check if could be triggered by unit
         if self._effect.trig_for_unit == "friendly":
             if _to_unitx(self._effect.troop_type) == ut : return False
@@ -387,7 +399,11 @@ class Benefit:
         else:
             raise ValueError(f"Unknown value for ben_for_units ({roundEff._effect.ben_for_unit}) for hero '{roundEff._effect._skill.skill_hero}' effect '{roundEff.r_eff_id}' ")
 
-        # vs_units : Unit types the benefit applies against
+        # vs_units : Unit types the benefit applies against.
+        # For extra_attack benefits, this controls fan-out targeting:
+        #   "target" = hit primary target only (e.g. Mia S2, Molly S2)
+        #   "all"    = hit all enemy types (e.g. Norah S2 fan-out)
+        #   specific type (e.g. "lancer") = hit that type only (e.g. Wayne S2)
         if roundEff._effect.ben_vs_unit == 'target':
             self.vs_units = [vs]
         elif roundEff._effect.ben_vs_unit == 'all':
@@ -459,10 +475,13 @@ class Benefit:
                 if evo_data['step'] in ['round', 'turn']:
                     correct_value = max(self.value - (round_idx - self.start_round) * evo_data['decrease_value'],0)
             elif evo_data['type'] == "pct_value_pct_decrease":
+                # Geometric decay: each step the value is (1 - decrease%) of the previous value.
+                # e.g. decrease_value=15 → factor=0.85 → value * 0.85^counter
+                factor = 1 - evo_data['decrease_value'] / 100
                 if evo_data['step'] == 'attack':
-                    correct_value = self.value * (1 - self.attack_counter * evo_data['decrease_value']/100)
+                    correct_value = self.value * (factor ** self.attack_counter)
                 if evo_data['step'] in ['round', 'turn']:
-                    correct_value = max(self.value * (1 - (round_idx - self.start_round) * evo_data['decrease_value']),0)
+                    correct_value = self.value * (factor ** (round_idx - self.start_round))
         # To-do: Add more effect evolution types if needed
         elif evo_category == 'fixed_damage':
             pass
