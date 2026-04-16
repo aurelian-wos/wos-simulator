@@ -13,42 +13,112 @@ import os
 import statistics
 
 BattleRound.DEBUG = False
-POWER_SCORE_GAMMA = 3.0
-POWER_SCORE_EPSILON = 1e-6
-POWER_DELTA_PERCENT_SCALE = 100
+DEFAULT_Z_THRESHOLD = 2.0
+
 
 def measure_distance(sim_result, game_result, winner_init_count, ignore_one_diff):
     # SQRT(SUM-SQUARE((sim.att-game.att);(sim.def-game.def)))
-    diff = math.sqrt(sum(math.pow( sim_result[key] - game_result[key] ,2) for key in ['attacker', 'defender']))
-    if ignore_one_diff and diff <= 1: diff = 0
-    diff_ratio = diff / winner_init_count
-    return round(diff,1) , round(diff_ratio * 100,2)
+    diff = math.sqrt(sum(math.pow(sim_result[key] - game_result[key], 2) for key in ['attacker', 'defender']))
+    if ignore_one_diff and diff <= 1:
+        diff = 0
+    diff_ratio = diff / winner_init_count if winner_init_count else 0.0
+    return round(diff, 1), round(diff_ratio * 100, 2)
+
+
+def measure_signed_outcome_error_ratio(sim_result, game_result, winner_init_count, ignore_one_diff):
+    # Signed outcome error as % of winner_init_count: positive means sim predicts the attacker
+    # doing better (relative to the defender) than the game did; negative means the opposite.
+    if ignore_one_diff:
+        euclidean = math.sqrt(sum(math.pow(sim_result[key] - game_result[key], 2) for key in ['attacker', 'defender']))
+        if euclidean <= 1:
+            return 0.0
+    sim_outcome = sim_result['attacker'] - sim_result['defender']
+    game_outcome = game_result['attacker'] - game_result['defender']
+    signed_diff = sim_outcome - game_outcome
+    if not winner_init_count:
+        return 0.0
+    return round(signed_diff / winner_init_count * 100, 2)
+
 
 def get_signed_outcome(result):
     return round(result['attacker'] - result['defender'], 2)
 
-def get_outcome_score(result, attacker_init_count, defender_init_count, gamma=POWER_SCORE_GAMMA):
-    attacker_survival_ratio = max(result['attacker'], 0) / attacker_init_count if attacker_init_count else 0
-    defender_survival_ratio = max(result['defender'], 0) / defender_init_count if defender_init_count else 0
-    return math.pow(attacker_survival_ratio, gamma) - math.pow(defender_survival_ratio, gamma)
 
-def get_power_space_value(outcome_score, epsilon=POWER_SCORE_EPSILON):
-    clamped_score = max(-1 + epsilon, min(1 - epsilon, outcome_score))
-    return math.atanh(clamped_score)
+def extract_game_outcomes(testcase):
+    """Return a list of signed (attacker - defender) outcomes from game_report_result."""
+    gr = testcase.get('game_report_result')
+    if isinstance(gr, list):
+        return [r['attacker'] - r['defender'] for r in gr]
+    if isinstance(gr, dict):
+        return [gr['attacker'] - gr['defender']]
+    return []
 
-def measure_power_space_distance(sim_result, game_result, attacker_init_count, defender_init_count, ignore_one_diff):
-    sim_outcome = get_signed_outcome(sim_result)
-    game_outcome = get_signed_outcome(game_result)
 
-    if ignore_one_diff:
-        troop_space_diff = math.sqrt(sum(math.pow(sim_result[key] - game_result[key], 2) for key in ['attacker', 'defender']))
-        if troop_space_diff <= 1:
-            return game_outcome, sim_outcome, 0.0
+def compute_testcase_stats(sim_outcomes, game_outcomes, attacker_init, defender_init):
+    """Compute aggregate statistics for a testcase.
 
-    sim_score = get_outcome_score(sim_result, attacker_init_count, defender_init_count)
-    game_score = get_outcome_score(game_result, attacker_init_count, defender_init_count)
-    power_diff = abs(get_power_space_value(sim_score) - get_power_space_value(game_score))
-    return game_outcome, sim_outcome, round(power_diff, 4)
+    sim_outcomes:  list of raw (sim_att - sim_def) values, one per replicate.
+    game_outcomes: list of raw (game_att - game_def) values, one per game observation.
+
+    Returns a dict:
+      n_sim, mu_sim, sigma_sim
+      n_game, mu_game, sigma_game
+      bias_raw         = mu_sim - mu_game (signed, in troops)
+      bias_pct         = bias_raw / winner_init * 100  (for display only)
+      stat             = Welch z/t statistic, or None if both sides are deterministic
+      stat_type        = 't' (both sides have variance), 'z' (one side has variance), or 'deterministic'
+      sem              = sqrt(sigma_sim^2/n_sim + sigma_game^2/n_game)  (raw troops)
+    """
+    n_sim = len(sim_outcomes)
+    n_game = len(game_outcomes)
+    mu_sim = statistics.fmean(sim_outcomes) if n_sim else 0.0
+    mu_game = statistics.fmean(game_outcomes) if n_game else 0.0
+    sigma_sim = statistics.stdev(sim_outcomes) if n_sim > 1 else 0.0
+    sigma_game = statistics.stdev(game_outcomes) if n_game > 1 else 0.0
+
+    bias_raw = mu_sim - mu_game
+
+    # Denominator uses the game's winner so it stays stable across replicates.
+    if mu_game >= 0:
+        winner_init = attacker_init
+    else:
+        winner_init = defender_init
+    if not winner_init:
+        winner_init = (attacker_init or 0) + (defender_init or 0) or 1
+    bias_pct = round(bias_raw / winner_init * 100, 2)
+
+    var_sum = (sigma_sim ** 2 / max(n_sim, 1)) + (sigma_game ** 2 / max(n_game, 1))
+    if var_sum > 0:
+        sem = math.sqrt(var_sum)
+        stat = bias_raw / sem
+        stat_type = 't' if (n_sim > 1 and n_game > 1) else 'z'
+    else:
+        sem = 0.0
+        stat = None
+        stat_type = 'deterministic'
+
+    return {
+        'n_sim': n_sim,
+        'mu_sim': round(mu_sim, 2),
+        'sigma_sim': round(sigma_sim, 2),
+        'n_game': n_game,
+        'mu_game': round(mu_game, 2),
+        'sigma_game': round(sigma_game, 2),
+        'bias_raw': round(bias_raw, 2),
+        'bias_pct': bias_pct,
+        'sem': round(sem, 2),
+        'stat': None if stat is None else round(stat, 2),
+        'stat_type': stat_type,
+    }
+
+
+def format_stat(stats):
+    """Pretty-print the z/t cell for a per-file row."""
+    if stats['stat_type'] == 'deterministic':
+        return 'n/a'
+    prefix = stats['stat_type']  # 'z' or 't'
+    return f"{prefix}={stats['stat']:+.2f}"
+
 
 def format_skip_reason(exc):
     if isinstance(exc, SystemExit):
@@ -57,10 +127,12 @@ def format_skip_reason(exc):
         return str(exc).strip() or f"SystemExit({exc.code})"
     return str(exc).strip() or exc.__class__.__name__
 
-def format_power_delta_percent(value):
-    return round(value * POWER_DELTA_PERCENT_SCALE, 2)
 
-def resolve_testcase_files(matching_patterns, TESTCASES_PATH = 'testcases'):
+def is_deterministic_file(file_path):
+    return file_path.split('.')[-2][-3:] == '_nc'
+
+
+def resolve_testcase_files(matching_patterns, TESTCASES_PATH='testcases'):
     if matching_patterns == "all":
         matching_patterns = ["all"]
     if not matching_patterns or "all" in matching_patterns:
@@ -71,7 +143,8 @@ def resolve_testcase_files(matching_patterns, TESTCASES_PATH = 'testcases'):
         resolved.extend(glob.glob(os.path.join(TESTCASES_PATH, pattern), recursive=True))
     return sorted(dict.fromkeys(resolved))
 
-def resolve_testcase_name_matches(name_patterns, TESTCASES_PATH = 'testcases'):
+
+def resolve_testcase_name_matches(name_patterns, TESTCASES_PATH='testcases'):
     if not name_patterns:
         return []
 
@@ -84,32 +157,48 @@ def resolve_testcase_name_matches(name_patterns, TESTCASES_PATH = 'testcases'):
                 resolved.append(file)
     return sorted(dict.fromkeys(resolved))
 
-def resolve_cli_testcase_files(glob_patterns=None, mathing_patterns=None, TESTCASES_PATH = 'testcases'):
-    if not glob_patterns and not mathing_patterns:
+
+def resolve_cli_testcase_files(glob_patterns=None, matching_patterns=None, TESTCASES_PATH='testcases'):
+    if not glob_patterns and not matching_patterns:
         return resolve_testcase_files(["all"], TESTCASES_PATH=TESTCASES_PATH)
 
     resolved = []
     if glob_patterns:
         resolved.extend(resolve_testcase_files(glob_patterns, TESTCASES_PATH=TESTCASES_PATH))
-    if mathing_patterns:
-        resolved.extend(resolve_testcase_name_matches(mathing_patterns, TESTCASES_PATH=TESTCASES_PATH))
+    if matching_patterns:
+        resolved.extend(resolve_testcase_name_matches(matching_patterns, TESTCASES_PATH=TESTCASES_PATH))
     return sorted(dict.fromkeys(resolved))
 
-def get_testcases(file_list, TESTCASES_PATH = 'testcases', resolve_patterns=True):
+
+def get_testcases(file_list, TESTCASES_PATH='testcases', resolve_patterns=True):
     if resolve_patterns:
         file_list = resolve_testcase_files(file_list, TESTCASES_PATH=TESTCASES_PATH)
     if not file_list:
         raise FileNotFoundError(f"No testcase files matched in '{TESTCASES_PATH}'")
-    
+
     testcases_files = {}
     for file in file_list:
         with open(file, 'r+') as f:
             _f = f.read()
-            if _f: testcases_files[file] = json.loads(_f)
-            else: print(f"⚠️  Attention: file '{file}' is not a proper testcases file !")
+            if _f:
+                testcases_files[file] = json.loads(_f)
+            else:
+                print(f"⚠️  Attention: file '{file}' is not a proper testcases file !")
     return testcases_files
 
+
 def fight_from_testcase(testcase, ignore_one_diff=False, show_rounds_freq=-1):
+    """Run one simulator replicate for a testcase and return the per-row display tuple.
+
+    The row layout produced here (indices):
+       0 test_id
+       1 att troops    2 def troops    3 ✦
+       4 att hero      5 def hero      6 ✦
+       7 game att      8 game def      9 ✦
+      10 sim att      11 sim def      12 ✦
+      13 diff (raw)   14 diff %       15 game Δ  16 sim Δ  17 signed err %
+    (The caller appends the per-row ✅/❌ at index 18.)
+    """
     # attacker
     attacker = Fighter(None, load_fighter_data=False)
     attacker.stats = StatsBonus.from_dict(testcase['attacker']['stats'])
@@ -124,7 +213,6 @@ def fight_from_testcase(testcase, ignore_one_diff=False, show_rounds_freq=-1):
     defender.heroes = testcase['defender']['heroes']
     defender.joiner_heroes = testcase['defender']['joiner_heroes']
 
-    # Fight
     f = Fight(attacker, defender, dont_save=True)
     attacker_init_count = sum(attacker.troops.values())
     defender_init_count = sum(defender.troops.values())
@@ -135,21 +223,16 @@ def fight_from_testcase(testcase, ignore_one_diff=False, show_rounds_freq=-1):
 
     if isinstance(testcase['game_report_result'], list):
         game_result = {
-            'attacker': round(statistics.fmean(r['attacker'] for r in testcase['game_report_result']),2),
-            'defender': round(statistics.fmean(r['defender'] for r in testcase['game_report_result']),2),
+            'attacker': round(statistics.fmean(r['attacker'] for r in testcase['game_report_result']), 2),
+            'defender': round(statistics.fmean(r['defender'] for r in testcase['game_report_result']), 2),
         }
-    else: game_result = testcase['game_report_result']
+    else:
+        game_result = testcase['game_report_result']
 
-
-    # Measure difference between game result and simulator result
     diff, diff_ratio = measure_distance(sim_result, game_result, winner_init_count, ignore_one_diff=ignore_one_diff)
-    game_outcome, sim_outcome, power_diff = measure_power_space_distance(
-        sim_result,
-        game_result,
-        attacker_init_count,
-        defender_init_count,
-        ignore_one_diff=ignore_one_diff,
-    )
+    signed_diff_ratio = measure_signed_outcome_error_ratio(sim_result, game_result, winner_init_count, ignore_one_diff=ignore_one_diff)
+    game_outcome = get_signed_outcome(game_result)
+    sim_outcome = get_signed_outcome(sim_result)
 
     result = []
     result.append("_".join(x[:2] for x in testcase['test_id'].split("_")[2:]))
@@ -169,30 +252,44 @@ def fight_from_testcase(testcase, ignore_one_diff=False, show_rounds_freq=-1):
     result.append(diff_ratio)
     result.append(game_outcome)
     result.append(sim_outcome)
-    result.append(power_diff)
+    result.append(signed_diff_ratio)
 
     return result
 
-def check_testcases(testcases_files, TESTCASES_PATH = 'testcases', max_diff_ratio = 0.03, repeat = 0, combine_repeats=False, max_repeat_print=5, ignore_one_diff= False, show_rounds_freq=-1, skip_invalid=False, show_raw_outcomes=False, resolve_patterns=True):
-    if combine_repeats: max_repeat_print = 0
-    print(f"\n ✦✦ Max difference ratio: {max_diff_ratio * 100} %")
-    testcases_files = get_testcases(testcases_files, TESTCASES_PATH = TESTCASES_PATH, resolve_patterns=resolve_patterns)
+
+def check_testcases(testcases_files, TESTCASES_PATH='testcases', max_diff_ratio=0.03,
+                     max_diff_ratio_deterministic=0.01, repeat=0, combine_repeats=False,
+                     max_repeat_print=5, ignore_one_diff=False, show_rounds_freq=-1,
+                     skip_invalid=False, show_raw_outcomes=False, resolve_patterns=True,
+                     z_threshold=DEFAULT_Z_THRESHOLD):
+    if combine_repeats:
+        max_repeat_print = 0
+    print(f"\n ✦✦ Divergence flag: |z| or |t| > {z_threshold}   (deterministic fallback: linear diff > {max_diff_ratio_deterministic * 100} %)")
+    testcases_files = get_testcases(testcases_files, TESTCASES_PATH=TESTCASES_PATH, resolve_patterns=resolve_patterns)
     overall_prints = []
-    overall_results = []
-    overall_power_results = []
+    overall_diff_ratios = []
+    overall_signed_biases = []
+    overall_z_stats = []     # per-testcase (testcase_id, stat, stat_type, passes)
     skipped_testcases = []
 
     for file, testcases in testcases_files.items():
         file_prints = []
-        file_averages = []
-        file_power_averages = []
+        file_diff_ratios = []
+        file_signed_biases = []
+        file_testcase_stats = []  # list of stats dicts (one per testcase)
         file_skipped = []
         file_updated = False
-        print(f"\n⏩⏩⏩ File '{file}' ")
+        file_is_deterministic = is_deterministic_file(file)
+        print(f"\n⏩⏩⏩ File '{file}' {'[deterministic]' if file_is_deterministic else ''}")
         for testcase in testcases:
-            num_tests = max(repeat, 1) if file.split('.')[-2][-3:] != '_nc' else 1
+            num_tests = max(repeat, 1) if not file_is_deterministic else 1
             tc_results = []
             testcase_id = testcase.get('test_id', '<missing test_id>')
+
+            attacker_init = sum(testcase['attacker']['troops'].values())
+            defender_init = sum(testcase['defender']['troops'].values())
+            game_outcomes_raw = extract_game_outcomes(testcase)
+
             for i in range(num_tests):
                 try:
                     result = fight_from_testcase(
@@ -209,60 +306,88 @@ def check_testcases(testcases_files, TESTCASES_PATH = 'testcases', max_diff_rati
                     print(f"⚠️  Skipping invalid testcase '{testcase_id}': {reason}")
                     tc_results = []
                     break
-                file_averages.append(result[14])
-                overall_results.append(result[14])
-                file_power_averages.append(result[17])
-                overall_power_results.append(result[17])
-                result.append("✅" if result[14] <= (max_diff_ratio * 100) else "❌")
+
+                # Per-replicate pass uses linear diff% — conservative single-run check.
+                per_replicate_passes = result[14] <= (max_diff_ratio_deterministic * 100) if file_is_deterministic \
+                    else result[14] <= (max_diff_ratio * 100)
+                result.append("✅" if per_replicate_passes else "❌")
                 result[14] = (result[14] or '-')
+
+                file_diff_ratios.append(result[14] if isinstance(result[14], (int, float)) else 0)
+                file_signed_biases.append(result[17])
+                overall_diff_ratios.append(result[14] if isinstance(result[14], (int, float)) else 0)
+                overall_signed_biases.append(result[17])
+
                 tc_results.append(result)
-                if i > 0 and i >= max_repeat_print: continue
+                if i > 0 and i >= max_repeat_print:
+                    continue
                 if num_tests > 1:
-                    if combine_repeats: result[0] += f'_avg'
-                    else: result[0] += f'_{i}'
-                if not combine_repeats or i==0: file_prints.append(result)
+                    if combine_repeats:
+                        result[0] += '_avg'
+                    else:
+                        result[0] += f'_{i}'
+                if not combine_repeats or i == 0:
+                    file_prints.append(result)
+
             if not tc_results:
                 continue
-            # Append simulator snapshot to testcase
-            tc_sim_outcomes = [r[16] for r in tc_results if isinstance(r[16], (int, float))]
-            tc_power_diffs = [r[17] for r in tc_results if isinstance(r[17], float)]
-            tc_game_outcomes = [r[15] for r in tc_results if isinstance(r[15], (int, float))]
-            if tc_sim_outcomes:
-                avg_sim_outcome = statistics.fmean(tc_sim_outcomes)
-                avg_power_diff = statistics.fmean(tc_power_diffs) if tc_power_diffs else 0.0
-                avg_game_outcome = statistics.fmean(tc_game_outcomes) if tc_game_outcomes else 0.0
-                sign = 1 if avg_sim_outcome >= avg_game_outcome else -1
-                signed_power_delta = round(avg_power_diff * sign, 4)
-                ts = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                if 'past_simulator_results' not in testcase:
-                    testcase['past_simulator_results'] = {}
-                testcase['past_simulator_results'][ts] = {
-                    'result': round(avg_sim_outcome, 2),
-                    'power_delta': signed_power_delta,
-                    'replicates': len(tc_results),
-                }
-                file_updated = True
+
+            # Per-testcase aggregate: compute divergence statistic
+            sim_outcomes_raw = [r[16] for r in tc_results if isinstance(r[16], (int, float))]
+            stats = compute_testcase_stats(sim_outcomes_raw, game_outcomes_raw, attacker_init, defender_init)
+            if stats['stat_type'] == 'deterministic':
+                stats['passes'] = abs(stats['bias_pct']) <= (max_diff_ratio_deterministic * 100)
+            else:
+                stats['passes'] = abs(stats['stat']) <= z_threshold
+            stats['testcase_id'] = testcase_id
+            stats['file'] = file
+            file_testcase_stats.append(stats)
+            overall_z_stats.append(stats)
+
+            # Persist a compact per-run snapshot on the testcase for history tracking
+            ts = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            testcase.setdefault('past_simulator_results', {})
+            past = testcase['past_simulator_results']
+            past[ts] = {
+                'result': stats['mu_sim'],
+                'sigma_sim': stats['sigma_sim'],
+                'bias_pct': stats['bias_pct'],
+                'stat_type': stats['stat_type'],
+                'stat': stats['stat'],
+                'replicates': stats['n_sim'],
+            }
+            if len(past) > 3:
+                oldest = sorted(past.keys())[:-3]
+                for k in oldest:
+                    del past[k]
+            file_updated = True
+
             if combine_repeats:
-                file_prints[-1][10] = round(statistics.fmean([(x[10] if isinstance(x[10], int) else 0) for x in tc_results]),1) or '-'
-                file_prints[-1][11] = round(statistics.fmean([(x[11] if isinstance(x[11], int) else 0) for x in tc_results]),1) or '-'
-                file_prints[-1][13] = round(statistics.fmean([(x[13] if isinstance(x[13], (float, int)) else 0) for x in tc_results]),1) or '-'
-                tc_ratio_avg = round(statistics.fmean([(x[14] if isinstance(x[14], float) else 0) for x in tc_results]),2)
-                tc_game_outcome_avg = round(statistics.fmean([(x[15] if isinstance(x[15], (float, int)) else 0) for x in tc_results]),2)
-                tc_sim_outcome_avg = round(statistics.fmean([(x[16] if isinstance(x[16], (float, int)) else 0) for x in tc_results]),2)
-                tc_power_avg = round(statistics.fmean([(x[17] if isinstance(x[17], float) else 0) for x in tc_results]),4)
+                file_prints[-1][10] = round(statistics.fmean([(x[10] if isinstance(x[10], int) else 0) for x in tc_results]), 1) or '-'
+                file_prints[-1][11] = round(statistics.fmean([(x[11] if isinstance(x[11], int) else 0) for x in tc_results]), 1) or '-'
+                file_prints[-1][13] = round(statistics.fmean([(x[13] if isinstance(x[13], (float, int)) else 0) for x in tc_results]), 1) or '-'
+                tc_ratio_avg = round(statistics.fmean([(x[14] if isinstance(x[14], float) else 0) for x in tc_results]), 2)
                 file_prints[-1][14] = tc_ratio_avg or '-'
-                file_prints[-1][15] = tc_game_outcome_avg or '-'
-                file_prints[-1][16] = tc_sim_outcome_avg or '-'
-                file_prints[-1][17] = tc_power_avg
-                file_prints[-1][-1] = "✅" if tc_ratio_avg <= (max_diff_ratio * 100) else "❌"
-                
-            if num_tests > 1 and max_repeat_print > 0: file_prints.append(['✦'] * 19)            
-        
+                file_prints[-1][15] = stats['mu_game']
+                file_prints[-1][16] = stats['mu_sim']
+                file_prints[-1][17] = stats['bias_pct']
+                file_prints[-1][-1] = "✅" if stats['passes'] else "❌"
+
+            if num_tests > 1 and max_repeat_print > 0:
+                # Summary separator row after each testcase's replicates
+                sep = ['✦'] * len(tc_results[0])
+                sep[0] = '✦ stats'
+                sep[14] = '-'
+                sep[15] = stats['mu_game']
+                sep[16] = f"{stats['mu_sim']} ±{stats['sigma_sim']}"
+                sep[17] = stats['bias_pct']
+                sep[-1] = format_stat(stats) + (' ✅' if stats['passes'] else ' ❌')
+                file_prints.append(sep)
+
+        # Render the per-file table
         display_rows = []
         for row in file_prints:
             display_row = row[:]
-            if display_row[17] != '✦':
-                display_row[17] = format_power_delta_percent(display_row[17])
             if show_raw_outcomes:
                 display_rows.append(display_row)
             else:
@@ -283,54 +408,104 @@ def check_testcases(testcases_files, TESTCASES_PATH = 'testcases', max_diff_rati
                 ])
 
         if show_raw_outcomes:
-            headers = ['Test_ID', 'Att Troops', 'Def Troops','✦✦','Att hero','Def Her','✦✦','Game Att','Game Def','✦✦','Sim Att', 'Sim Def','✦✦', 'Diff', 'Diff %', 'Game Out', 'Sim Out', 'Power Δ %', '?']
+            headers = ['Test_ID', 'Att Troops', 'Def Troops', '✦✦', 'Att hero', 'Def Her', '✦✦',
+                       'Game Att', 'Game Def', '✦✦', 'Sim Att', 'Sim Def', '✦✦',
+                       'Diff', 'Diff %', 'Game Δ', 'Sim Δ', 'Signed Err %', '?']
         else:
-            headers = ['Test_ID', 'Att Troops', 'Def Troops','✦✦','Att hero','Def Her','✦✦', 'Diff', 'Diff %', 'Game Out', 'Sim Out', 'Power Δ %', '?']
+            headers = ['Test_ID', 'Att Troops', 'Def Troops', '✦✦', 'Att hero', 'Def Her', '✦✦',
+                       'Diff', 'Diff %', 'Game Δ', 'Sim Δ', 'Signed Err %', '?']
         print(tabulate(display_rows, headers=headers, tablefmt="pretty"))
 
-        if file_averages:
-            file_average = statistics.fmean(file_averages)
-            file_power_average = statistics.fmean(file_power_averages)
-            print(f"✦✦ Average difference ratio: {file_average:.2f} % ","✅" if file_average <= (max_diff_ratio * 100) else "❌")
-            print(f"✦✦ Average power-space delta: {format_power_delta_percent(file_power_average):.2f} %")
+        # Per-file summary
+        if file_testcase_stats:
+            file_average = statistics.fmean([s['bias_pct'] for s in file_testcase_stats if s['bias_pct'] is not None])
+            file_mean_abs_diff = statistics.fmean([r for r in file_diff_ratios if isinstance(r, (int, float))]) if file_diff_ratios else 0.0
+
+            stat_values = [s['stat'] for s in file_testcase_stats if s['stat'] is not None]
+            if stat_values:
+                mean_stat = statistics.fmean(stat_values)
+                max_abs_stat = max(abs(s) for s in stat_values)
+            else:
+                mean_stat = None
+                max_abs_stat = None
+
+            flagged = [s for s in file_testcase_stats if not s['passes']]
+            file_passes = len(flagged) == 0
+
+            print(f"✦✦ Mean |diff|: {file_mean_abs_diff:.2f} %   Mean signed bias: {file_average:+.2f} %")
+            if mean_stat is not None:
+                print(f"✦✦ Mean {('t' if all(s['stat_type']=='t' for s in file_testcase_stats if s['stat'] is not None) else 'z')}: {mean_stat:+.2f}   Max |z/t|: {max_abs_stat:.2f}   Flagged: {len(flagged)}/{len(file_testcase_stats)}   ", "✅" if file_passes else "❌")
+            else:
+                print(f"✦✦ All {len(file_testcase_stats)} testcase(s) deterministic   Flagged: {len(flagged)}/{len(file_testcase_stats)}   ", "✅" if file_passes else "❌")
         else:
             file_average = None
-            file_power_average = None
-            print("✦✦ Average difference ratio: n/a (all testcases skipped)")
-            print("✦✦ Average power-space delta: n/a (all testcases skipped)")
+            file_mean_abs_diff = None
+            mean_stat = None
+            max_abs_stat = None
+            flagged = []
+            file_passes = None
+            print("✦✦ No testcases processed (all skipped)")
+
         if file_skipped:
             print(f"⚠️  Skipped invalid testcases in file: {len(file_skipped)}")
-        file_name = file.split('\\')[-1].split('/')[-1].replace('.json','').replace('testcases','').replace('tc','').replace('_',' ')
-        if file_name in ['',' ']:
+        file_name = file.split('\\')[-1].split('/')[-1].replace('.json', '').replace('testcases', '').replace('tc', '').replace('_', ' ')
+        if file_name in ['', ' ']:
             if file_updated:
                 with open(file, 'w') as fw:
                     fw.write(json.dumps(testcases, indent=2))
                 file_updated = False
             continue
-        if file_average is None:
-            overall_prints.append([file_name, 'n/a', 'n/a', '⚠️'])
+
+        if not file_testcase_stats:
+            overall_prints.append([file_name, 'n/a', 'n/a', 'n/a', 'n/a', '⚠️'])
         else:
-            overall_prints.append([file_name, round(file_average,2), format_power_delta_percent(file_power_average), f'{"✅" if file_average <= (max_diff_ratio * 100) else "❌"}'])
+            overall_prints.append([
+                file_name,
+                round(file_mean_abs_diff, 2) if file_mean_abs_diff is not None else 'n/a',
+                f"{file_average:+.2f}",
+                f"{mean_stat:+.2f}" if mean_stat is not None else 'det',
+                f"{max_abs_stat:.2f}" if max_abs_stat is not None else 'det',
+                '✅' if file_passes else '❌',
+            ])
         if file_updated:
             with open(file, 'w') as fw:
                 fw.write(json.dumps(testcases, indent=2))
             file_updated = False
-    
+
     print("\n🔹🔹🔹  RECAP 🔹🔹🔹")
-    recap_headers = ['file','Avg Error %', 'Avg Power Δ %', "✦✦"]
-    print(tabulate(overall_prints, headers=recap_headers, tablefmt="fancy_grid", colalign=("left", "center", "center")))
-    if overall_results:
-        glob_avg = statistics.fmean(overall_results)
-        glob_power_avg = statistics.fmean(overall_power_results)
-        print(f"🔹  Overall Average error: {glob_avg:.2f} % ","✅" if glob_avg <= (max_diff_ratio * 100) else "❌")
-        print(f"🔹  Overall Average power-space delta: {format_power_delta_percent(glob_power_avg):.2f} %")
+    recap_headers = ['file', 'Mean |diff| %', 'Mean signed bias %', 'Mean z/t', 'Max |z/t|', '✦✦']
+    print(tabulate(overall_prints, headers=recap_headers, tablefmt="fancy_grid", colalign=("left", "center", "center", "center", "center", "center")))
+
+    if overall_z_stats:
+        stat_values = [s['stat'] for s in overall_z_stats if s['stat'] is not None]
+        bias_values = [s['bias_pct'] for s in overall_z_stats]
+        glob_mean_abs_diff = statistics.fmean(overall_diff_ratios) if overall_diff_ratios else 0.0
+        glob_signed_bias = statistics.fmean(bias_values)
+        flagged = [s for s in overall_z_stats if not s['passes']]
+        det_cases = [s for s in overall_z_stats if s['stat_type'] == 'deterministic']
+
+        print(f"🔹  Overall Mean |diff|: {glob_mean_abs_diff:.2f} %")
+        print(f"🔹  Overall Mean signed bias: {glob_signed_bias:+.2f} %")
+        if stat_values:
+            stouffer_z = sum(stat_values) / math.sqrt(len(stat_values))  # combined z-score assuming independence
+            print(f"🔹  Overall Mean z/t: {statistics.fmean(stat_values):+.2f}   Max |z/t|: {max(abs(s) for s in stat_values):.2f}")
+            print(f"🔹  Stouffer combined z across {len(stat_values)} stochastic testcases: {stouffer_z:+.2f}")
+        print(f"🔹  Flagged testcases (|z/t| > {z_threshold} or deterministic miss): {len(flagged)}/{len(overall_z_stats)}   (deterministic: {len(det_cases)})")
+        if flagged:
+            print("🔹  Flagged list:")
+            for s in flagged:
+                if s['stat_type'] == 'deterministic':
+                    print(f"    • {s['file']} :: {s['testcase_id']}  bias={s['bias_pct']:+.2f} %  (deterministic)")
+                else:
+                    print(f"    • {s['file']} :: {s['testcase_id']}  bias={s['bias_pct']:+.2f} %  {s['stat_type']}={s['stat']:+.2f}  (μ_sim={s['mu_sim']} ±{s['sigma_sim']}, μ_game={s['mu_game']}, N_sim={s['n_sim']}, N_game={s['n_game']})")
     else:
-        print("🔹  Overall Average error: n/a (all testcases skipped)")
-        print("🔹  Overall Average power-space delta: n/a (all testcases skipped)")
+        print("🔹  Overall: n/a (all testcases skipped)")
+
     if skipped_testcases:
         print(f"\n⚠️⚠️⚠️  Skipped invalid testcases: {len(skipped_testcases)}")
         for file, testcase_id, reason in skipped_testcases:
             print(f"⚠️  {file} :: {testcase_id} :: {reason}")
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Run simulator testcases with optional file matching.")
@@ -352,11 +527,33 @@ if __name__ == '__main__':
             "Examples: 'alonso', 'solo', 'tc'"
         ),
     )
-    parser.add_argument("--max-diff-ratio", type=float, default=0.05)
+    parser.add_argument("--max-diff-ratio", type=float, default=0.05,
+                        help="Linear %%-diff threshold used for per-replicate pass/fail (default: 0.05 = 5%%).")
+    parser.add_argument("--max-diff-ratio-deterministic", type=float, default=0.01,
+                        help="Linear threshold for fully-deterministic testcases (default: 0.01 = 1%%)")
+    parser.add_argument("--z-threshold", type=float, default=DEFAULT_Z_THRESHOLD,
+                        help=f"Absolute z/t threshold above which a testcase is flagged as divergent (default: {DEFAULT_Z_THRESHOLD}).")
     parser.add_argument("--repeat", type=int, default=100)
     parser.add_argument("--combine-repeats", action="store_true")
     parser.add_argument("--max-repeat-print", type=int, default=5)
     parser.add_argument("--show-rounds-freq", type=int, default=-1)
+    parser.add_argument(
+        "--debug-battle",
+        action="store_true",
+        help="Enable detailed per-round battle debug output, including skills, effects, benefits, and kills.",
+    )
+    parser.add_argument(
+        "--debug-battle-freq",
+        type=int,
+        default=None,
+        help="Print debug output every N rounds when --debug-battle is enabled.",
+    )
+    parser.add_argument(
+        "--debug-max-rounds",
+        type=int,
+        default=None,
+        help="Limit detailed debug output to the first N rounds when --debug-battle is enabled.",
+    )
     parser.add_argument(
         "--skip-invalid",
         action="store_true",
@@ -376,14 +573,25 @@ if __name__ == '__main__':
     )
     args = parser.parse_args()
 
+    if args.debug_battle:
+        BattleRound.DEBUG = True
+        if args.debug_battle_freq is not None:
+            BattleRound.DEBUG_FREQ = args.debug_battle_freq
+        elif args.show_rounds_freq > 0:
+            BattleRound.DEBUG_FREQ = args.show_rounds_freq
+        else:
+            BattleRound.DEBUG_FREQ = 1
+        BattleRound.DEBUG_MAX_ROUND = args.debug_max_rounds if args.debug_max_rounds is not None else 9999
+
     selected_files = resolve_cli_testcase_files(
         glob_patterns=args.glob,
-        mathing_patterns=args.matching,
+        matching_patterns=args.matching,
     )
 
     check_testcases(
         selected_files,
         max_diff_ratio=args.max_diff_ratio,
+        max_diff_ratio_deterministic=args.max_diff_ratio_deterministic,
         repeat=args.repeat,
         combine_repeats=args.combine_repeats,
         max_repeat_print=args.max_repeat_print,
@@ -392,10 +600,11 @@ if __name__ == '__main__':
         skip_invalid=args.skip_invalid,
         show_raw_outcomes=args.show_raw_outcomes,
         resolve_patterns=False,
+        z_threshold=args.z_threshold,
     )
-    
+
 
     # If repeat is specified, the simulation will be run that many times for each test, unless file ends with '_nc' (no chance skills). But only 'max_repeat_print' will be printed !
 
-    # When repeating, if combine_repeats = True then the average result of repeated simulation will be printed for each testcase (max_repeat_print is ignored), 
+    # When repeating, if combine_repeats = True then the average result of repeated simulation will be printed for each testcase (max_repeat_print is ignored),
     #    otherwise it will print individual repeated simulation results up to the specified 'max_repeat_print'
