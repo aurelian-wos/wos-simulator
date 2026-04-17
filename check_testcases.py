@@ -14,6 +14,7 @@ import statistics
 
 BattleRound.DEBUG = False
 DEFAULT_Z_THRESHOLD = 2.0
+DEFAULT_MIN_BIAS_PCT = 0.5  # practical-significance floor: sub-half-percent biases never flag
 
 
 def measure_distance(sim_result, game_result, winner_init_count, ignore_one_diff):
@@ -60,14 +61,12 @@ def compute_testcase_stats(sim_outcomes, game_outcomes, attacker_init, defender_
     sim_outcomes:  list of raw (sim_att - sim_def) values, one per replicate.
     game_outcomes: list of raw (game_att - game_def) values, one per game observation.
 
-    Returns a dict:
-      n_sim, mu_sim, sigma_sim
-      n_game, mu_game, sigma_game
-      bias_raw         = mu_sim - mu_game (signed, in troops)
-      bias_pct         = bias_raw / winner_init * 100  (for display only)
-      stat             = Welch z/t statistic, or None if both sides are deterministic
-      stat_type        = 't' (both sides have variance), 'z' (one side has variance), or 'deterministic'
-      sem              = sqrt(sigma_sim^2/n_sim + sigma_game^2/n_game)  (raw troops)
+    Three statistical regimes:
+      - Both sides σ=0:              deterministic → linear bias_pct vs threshold
+      - N_game = 1 (single obs):     single-obs z = (mu_sim - game_obs) / sigma_sim
+                                     (asks: is this single game observation plausible under the sim distribution?)
+      - N_game ≥ 2:                  Welch t = bias_raw / SEM
+                                     (asks: are the two sample means statistically different?)
     """
     n_sim = len(sim_outcomes)
     n_game = len(game_outcomes)
@@ -87,12 +86,21 @@ def compute_testcase_stats(sim_outcomes, game_outcomes, attacker_init, defender_
         winner_init = (attacker_init or 0) + (defender_init or 0) or 1
     bias_pct = round(bias_raw / winner_init * 100, 2)
 
-    var_sum = (sigma_sim ** 2 / max(n_sim, 1)) + (sigma_game ** 2 / max(n_game, 1))
-    if var_sum > 0:
-        sem = math.sqrt(var_sum)
+    # Choose the denominator based on how much game-side information we have.
+    if n_game >= 2 and (sigma_sim > 0 or sigma_game > 0):
+        # Welch's t-statistic: comparing two sample means with variance on both sides.
+        sem = math.sqrt(sigma_sim ** 2 / max(n_sim, 1) + sigma_game ** 2 / n_game)
         stat = bias_raw / sem
-        stat_type = 't' if (n_sim > 1 and n_game > 1) else 'z'
+        stat_type = 't'
+    elif n_game == 1 and sigma_sim > 0:
+        # Single-observation z-score: where does the one game obs sit in the sim distribution?
+        # Denominator is σ_sim (not SEM), since there is no estimate of game-side variance
+        # and we are scoring a single draw, not a sample mean.
+        sem = sigma_sim
+        stat = bias_raw / sem
+        stat_type = 'z'
     else:
+        # Both sides have σ=0 (e.g. nc testcase with single or repeated-identical game reports).
         sem = 0.0
         stat = None
         stat_type = 'deterministic'
@@ -261,10 +269,10 @@ def check_testcases(testcases_files, TESTCASES_PATH='testcases', max_diff_ratio=
                      max_diff_ratio_deterministic=0.01, repeat=0, combine_repeats=False,
                      max_repeat_print=5, ignore_one_diff=False, show_rounds_freq=-1,
                      skip_invalid=False, show_raw_outcomes=False, resolve_patterns=True,
-                     z_threshold=DEFAULT_Z_THRESHOLD):
+                     z_threshold=DEFAULT_Z_THRESHOLD, min_bias_pct=DEFAULT_MIN_BIAS_PCT):
     if combine_repeats:
         max_repeat_print = 0
-    print(f"\n ✦✦ Divergence flag: |z| or |t| > {z_threshold}   (deterministic fallback: linear diff > {max_diff_ratio_deterministic * 100} %)")
+    print(f"\n ✦✦ Divergence flag: |z| or |t| > {z_threshold} AND |bias| > {min_bias_pct} %   (deterministic fallback: linear diff > {max_diff_ratio_deterministic * 100} %)")
     testcases_files = get_testcases(testcases_files, TESTCASES_PATH=TESTCASES_PATH, resolve_patterns=resolve_patterns)
     overall_prints = []
     overall_diff_ratios = []
@@ -338,7 +346,9 @@ def check_testcases(testcases_files, TESTCASES_PATH='testcases', max_diff_ratio=
             if stats['stat_type'] == 'deterministic':
                 stats['passes'] = abs(stats['bias_pct']) <= (max_diff_ratio_deterministic * 100)
             else:
-                stats['passes'] = abs(stats['stat']) <= z_threshold
+                # Flag only if BOTH the statistic is significant AND the bias is practically relevant.
+                # Sub-half-percent biases are below the useful-action threshold regardless of |z/t|.
+                stats['passes'] = (abs(stats['stat']) <= z_threshold) or (abs(stats['bias_pct']) <= min_bias_pct)
             stats['testcase_id'] = testcase_id
             stats['file'] = file
             file_testcase_stats.append(stats)
@@ -490,7 +500,7 @@ def check_testcases(testcases_files, TESTCASES_PATH='testcases', max_diff_ratio=
             stouffer_z = sum(stat_values) / math.sqrt(len(stat_values))  # combined z-score assuming independence
             print(f"🔹  Overall Mean z/t: {statistics.fmean(stat_values):+.2f}   Max |z/t|: {max(abs(s) for s in stat_values):.2f}")
             print(f"🔹  Stouffer combined z across {len(stat_values)} stochastic testcases: {stouffer_z:+.2f}")
-        print(f"🔹  Flagged testcases (|z/t| > {z_threshold} or deterministic miss): {len(flagged)}/{len(overall_z_stats)}   (deterministic: {len(det_cases)})")
+        print(f"🔹  Flagged testcases (|z/t| > {z_threshold} AND |bias| > {min_bias_pct} %, or deterministic miss): {len(flagged)}/{len(overall_z_stats)}   (deterministic: {len(det_cases)})")
         if flagged:
             print("🔹  Flagged list:")
             for s in flagged:
@@ -533,6 +543,8 @@ if __name__ == '__main__':
                         help="Linear threshold for fully-deterministic testcases (default: 0.01 = 1%%)")
     parser.add_argument("--z-threshold", type=float, default=DEFAULT_Z_THRESHOLD,
                         help=f"Absolute z/t threshold above which a testcase is flagged as divergent (default: {DEFAULT_Z_THRESHOLD}).")
+    parser.add_argument("--min-bias-pct", type=float, default=DEFAULT_MIN_BIAS_PCT,
+                        help=f"Practical-significance floor: stochastic testcases with |bias_pct| below this never flag, regardless of |z/t| (default: {DEFAULT_MIN_BIAS_PCT}).")
     parser.add_argument("--repeat", type=int, default=100)
     parser.add_argument("--combine-repeats", action="store_true")
     parser.add_argument("--max-repeat-print", type=int, default=5)
@@ -601,6 +613,7 @@ if __name__ == '__main__':
         show_raw_outcomes=args.show_raw_outcomes,
         resolve_patterns=False,
         z_threshold=args.z_threshold,
+        min_bias_pct=args.min_bias_pct,
     )
 
 
