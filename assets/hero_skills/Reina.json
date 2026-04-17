@@ -30,7 +30,8 @@
                 },
                 "benefit_types": {
                     "benefit_for": "trigger",
-                    "benefit_vs": "target"
+                    "benefit_vs": "target",
+                    "benefit_on": "normal"
                 },
                 "effect_duration": {
                     "duration_type": "turn",
@@ -45,9 +46,7 @@
                     "4": "25.0",
                     "5": 30
                 },
-                "special": {
-                    "only_normal": true
-                }
+                "special": {}
             }
         ]
     },
@@ -82,7 +81,8 @@
                 },
                 "benefit_types": {
                     "benefit_for": "trigger",
-                    "benefit_vs": "all"
+                    "benefit_vs": "any",
+                    "benefit_on": "normal"
                 },
                 "effect_duration": {
                     "duration_type": "attack",
@@ -97,9 +97,7 @@
                     "5": 20
                 },
                 "effect_values": {},
-                "special": {
-                    "only_normal": true
-                }
+                "special": {}
             }
         ]
     },
@@ -195,7 +193,7 @@
                 },
                 "benefit_types": {
                     "benefit_for": "trigger",
-                    "benefit_vs": "all"
+                    "benefit_vs": "any"
                 },
                 "effect_duration": {
                     "duration_type": "turn",

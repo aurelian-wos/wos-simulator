@@ -30,7 +30,7 @@
                 },
                 "benefit_types": {
                     "benefit_for": "friendly",
-                    "benefit_vs": "all"
+                    "benefit_vs": "any"
                 },
                 "effect_duration": {
                     "duration_type": "turn",
@@ -45,7 +45,9 @@
                     "4": "25.0",
                     "5": 30
                 },
-                "special": {}
+                "special": {
+                    "pause_attack": true
+                }
             },
             {
                 "affects_opponent": false,
@@ -60,7 +62,7 @@
                 },
                 "benefit_types": {
                     "benefit_for": "infantry",
-                    "benefit_vs": "all"
+                    "benefit_vs": "any"
                 },
                 "effect_duration": {
                     "duration_type": "turn",
@@ -240,7 +242,7 @@
                 },
                 "benefit_types": {
                     "benefit_for": "trigger",
-                    "benefit_vs": "all"
+                    "benefit_vs": "any"
                 },
                 "effect_duration": {
                     "duration_type": "turn",

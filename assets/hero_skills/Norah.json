@@ -30,7 +30,7 @@
                 },
                 "benefit_types": {
                     "benefit_for": "friendly",
-                    "benefit_vs": "all"
+                    "benefit_vs": "any"
                 },
                 "effect_duration": {
                     "duration_type": "turn",
@@ -144,7 +144,7 @@
         "skill_permanent": false,
         "skill_is_chance": false,
         "skill_probability": 0,
-        "skill_round_stackable": true,
+        "skill_round_stackable": false,
         "skill_type_relation": false,
         "skill_order": 1,
         "skill_type": "hero_skill",
@@ -161,17 +161,17 @@
                 "effect_is_chance": false,
                 "effect_num": "Momentum/1",
                 "trigger_types": {
-                    "trigger_for": "lancer",
+                    "trigger_for": "all",
                     "trigger_vs": "all"
                 },
                 "benefit_types": {
-                    "benefit_for": "all",
+                    "benefit_for": "trigger",
                     "benefit_vs": "target"
                 },
                 "effect_duration": {
                     "duration_type": "turns",
                     "duration_value": 2,
-                    "effect_lag": 1
+                    "effect_lag": 0
                 },
                 "effect_probabilities": {},
                 "effect_values": {
@@ -191,12 +191,12 @@
                 "effect_is_chance": false,
                 "effect_num": "Momentum/2",
                 "trigger_types": {
-                    "trigger_for": "lancer",
+                    "trigger_for": "all",
                     "trigger_vs": "all"
                 },
                 "benefit_types": {
-                    "benefit_for": "all",
-                    "benefit_vs": "all"
+                    "benefit_for": "trigger",
+                    "benefit_vs": "any"
                 },
                 "effect_duration": {
                     "duration_type": "turns",
@@ -246,7 +246,7 @@
                 },
                 "benefit_types": {
                     "benefit_for": "trigger",
-                    "benefit_vs": "all"
+                    "benefit_vs": "any"
                 },
                 "effect_duration": {
                     "duration_type": "turn",

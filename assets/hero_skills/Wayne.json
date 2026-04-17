@@ -20,7 +20,7 @@
             {
                 "affects_opponent": false,
                 "effect_type": "DamageUp",
-                "effect_op": 101,
+                "effect_op": 1010,
                 "extra_attack": true,
                 "effect_is_chance": false,
                 "effect_num": "Thunder Strike/1",
@@ -70,7 +70,7 @@
             {
                 "affects_opponent": false,
                 "effect_type": "DamageUp",
-                "effect_op": 101,
+                "effect_op": 1011,
                 "extra_attack": true,
                 "effect_is_chance": false,
                 "effect_num": "Roundabout Hit/1",
@@ -100,7 +100,7 @@
             {
                 "affects_opponent": false,
                 "effect_type": "DamageUp",
-                "effect_op": 101,
+                "effect_op": 1012,
                 "extra_attack": true,
                 "effect_is_chance": false,
                 "effect_num": "Roundabout Hit/2",
@@ -150,7 +150,7 @@
             {
                 "affects_opponent": false,
                 "effect_type": "DamageUp",
-                "effect_op": 101,
+                "effect_op": 1013,
                 "extra_attack": false,
                 "effect_is_chance": true,
                 "effect_num": "Fleet/1",
@@ -159,7 +159,7 @@
                     "trigger_vs": "all"
                 },
                 "benefit_types": {
-                    "benefit_for": "all",
+                    "benefit_for": "trigger",
                     "benefit_vs": "target"
                 },
                 "effect_duration": {
@@ -216,7 +216,7 @@
                 },
                 "benefit_types": {
                     "benefit_for": "trigger",
-                    "benefit_vs": "all"
+                    "benefit_vs": "any"
                 },
                 "effect_duration": {
                     "duration_type": "turn",

@@ -4,6 +4,7 @@
 
 ### Core Mechanics Fixes
 
+- **`benefit_vs` Semantics Cleanup** - Disambiguated the overloaded `benefit_vs: "all"` keyword. Previously `"all"` was doing double duty: in pass 2 (extra attacks) it meant "fan out splash to every surviving enemy type", but in pass 1 (normal attacks) it was quietly being used as "globally active buff" — two different jobs under the same name. Introduced a new `benefit_vs: "any"` value for the "globally active, non-splash" case, reserved `"all"` exclusively for fan-out splash (which requires `extra_attack: true`), and added a load-time check in `Effect.__init__` that rejects `benefit_vs: "all"` without `extra_attack: true` with a helpful message suggesting `any` or `target` instead. Migrated 52 existing hero/troop effects from `all` to `any` accordingly. Fixes a subtle target-freezing bug that surfaced in jessie_solo_nc #8 (both sides running Jessie) where `benefit_vs: "target"` on a permanent skill locked the DamageUp benefit to the round-0 primary target rather than applying globally.
 - **OppDamageDown Calculation** - Fixed debuff calculation that was incorrectly multiplying by 0.8 instead of dividing by 1.2 (for 20% debuff)
 - **Mean Calculation** - Switched from geometric mean to arithmetic mean, which improved accuracy to <1% error (would need further investigation for perfect accuracy)
 - **Empty Troop Types** - Fixed crash when one troop type has zero units

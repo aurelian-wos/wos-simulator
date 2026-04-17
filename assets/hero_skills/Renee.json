@@ -34,7 +34,7 @@
                     "benefit_vs": "target"
                 },
                 "effect_duration": {
-                    "duration_type": "turn",
+                    "duration_type": "attack",
                     "duration_value": 1,
                     "effect_lag": 1
                 },
@@ -182,7 +182,7 @@
                 },
                 "benefit_types": {
                     "benefit_for": "trigger",
-                    "benefit_vs": "all"
+                    "benefit_vs": "any"
                 },
                 "effect_duration": {
                     "duration_type": "turn",
