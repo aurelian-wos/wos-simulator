@@ -22,14 +22,14 @@
                 "effect_type": "OppDefenseDown",
                 "effect_op": 212,
                 "extra_attack": false,
-                "effect_is_chance": false,
+                "effect_is_chance": true,
                 "effect_num": "Bad luck streak/1",
                 "trigger_types": {
                     "trigger_for": "all",
                     "trigger_vs": "all"
                 },
                 "benefit_types": {
-                    "benefit_for": "trigger",
+                    "benefit_for": "all",
                     "benefit_vs": "target"
                 },
                 "effect_duration": {
