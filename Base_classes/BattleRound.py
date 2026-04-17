@@ -48,6 +48,7 @@ class BattleRound():
         # results
         self.round_kills = {}
         self.round_dmg_coef = {ut:0 for ut in UnitType}
+        self.paused_units = set()
         # self.need_continue_skills = {}  # Not used for now
 
         # Calc Round troops
@@ -91,6 +92,15 @@ class BattleRound():
             if effect._skill.r_skill_condition(self.fighter, self.round_idx):
                 if effect.r_effect_condition(self.fighter, self.opponent, self.round_idx):
                     self.add_round_effect(effect)
+
+        if BattleRound.DEBUG and self.round_idx % BattleRound.DEBUG_FREQ == 0 and self.round_idx < self.DEBUG_MAX_ROUND:
+            def format_effects(effects):
+                return ', '.join(f"{r._effect._skill.skill_name}:{r._effect.name}" for r in effects) or '-'
+
+            print(f"\nROUND {self.round_idx} EFFECTS ({self.fighter.name})")
+            print(f"      order : {format_effects(self.order_effects)}")
+            print(f"      dodge : {format_effects(self.dodge_effects)}")
+            print(f"      other : {format_effects(self.round_effects)}")
     
     def add_round_effect(self, effect: Effect):
         """Add an activated effect to the appropriate list for this round.
@@ -120,7 +130,11 @@ class BattleRound():
         for ut, num in self.round_troops.items():
             if not num: continue
             self.targets[ut] = self.get_unit_target(ut)
-    
+
+        if BattleRound.DEBUG and self.round_idx % BattleRound.DEBUG_FREQ == 0 and self.round_idx < self.DEBUG_MAX_ROUND:
+            print(f"\nROUND {self.round_idx} TARGETS ({self.fighter.name})")
+            print('      ' + ', '.join(f"{ut.name}->{self.targets.get(ut).name if self.targets.get(ut) else 'None'}" for ut in UnitType if self.round_troops[ut]))
+
     def get_unit_target(self, ut: UnitType):
         """Get the target unit type for a given attacking unit type.
         
@@ -162,7 +176,9 @@ class BattleRound():
                 if r_effect.trigger_condition(self.fighter, self.opponent, ut, target, self.round_idx):
                     benefit = r_effect.activate_effect(self.fighter, ut, target)
                     self.round_benefits.append(benefit)
-        
+                    if r_effect._effect.special.get('pause_attack'):
+                        self.paused_units.add(ut)
+
         for r_effect in defense_effects:
             r_effect : RoundEffect
             for vs in UnitType:
@@ -203,41 +219,47 @@ class BattleRound():
 
     def calc_round_kills(self):
         """Calculate casualties inflicted by this fighter this round.
-        
-        For each unit type, calculates base damage, applies skill bonuses and
-        debuffs, and stores resulting casualties.
+
+        Two-pass damage model:
+          Pass 1 (normal): base_dmg * effective * normal_coef against primary target
+          Pass 2 (extra):  base_dmg * effective * extra_bonus * extra_mult against each enemy type
         """
         if BattleRound.DEBUG and self.round_idx % BattleRound.DEBUG_FREQ == 0 and self.round_idx < self.DEBUG_MAX_ROUND:
             print(f"\n🔹🔹🔹🔹🔹🔹🔹🔹  R{self.round_idx} : BONUS CALCS - {self.fighter.name}")
-              
+
+        # PASS 1: Normal damage against primary target
         for ut in UnitType:
-            # army size
             army = self.calc_round_army(ut)
             if army == 0:
                 continue
 
-            # get Target
             target = self.targets[ut]
 
-            # check Dodging
+            if ut in self.paused_units:
+                self.fighter.cumul_attacks[ut] += 1
+                self.opponent.cumul_received_attacks[target] += 1
+                continue
+
             self.calc_dodging_benefits(ut, target)
 
-            # calc Unit Base Damage
             unit_base_dmg = army * self.fighter.attack_by_type[ut] / self.opponent.defense_by_type[target] / 100
-
-            # Calc kills with bonus dmg
             ut_kills = self.calc_bonus_dmg(unit_base_dmg, ut, target)
 
-            ### ROUNDING: Try later. PROBABLY NOT USED !
-            # ut_kills = math.ceil(ut_kills)
-
-            # store result
             if ut_kills > 0:
-                self.round_kills[ut] = { target : ut_kills }
+                self.round_kills[ut] = {target: ut_kills}
 
-        # Extra attacks against non-primary targets
-        # benefit_vs controls targeting: "target" = primary only (fails is_valid here),
-        # "all" = fan-out to all types, "lancer" etc. = specific type only.
+        # PASS 2: Extra (skill) damage against every surviving enemy type.
+        # This pass iterates (ut -> extra_vs) across all enemy unit types and is the
+        # only place fan-out splash happens. A benefit only reaches this pass if it
+        # has extra_attack=True; its benefit_vs setting controls the fan-out shape:
+        #   benefit_vs="all"    -> hits every surviving enemy type (splash)
+        #   benefit_vs="target" -> hits the primary target only
+        #   benefit_vs=<unit>   -> hits that type only
+        # `benefit_vs="any"` is only meaningful in PASS 1 (global buffs on normal
+        # attacks) and is rejected at load time on extra_attack effects.
+        attack_keys = ['DamageUp', 'OppDefenseDown']
+        defense_keys = ['DefenseUp', 'OppDamageDown']
+
         for ut in UnitType:
             army = self.calc_round_army(ut)
             if army == 0: continue
@@ -245,31 +267,81 @@ class BattleRound():
             if primary_target is None: continue
 
             for extra_vs in UnitType:
-                if extra_vs == primary_target: continue
                 if self.opponent.rounds[self.round_idx].round_troops[extra_vs] <= 0: continue
 
-                extra_effects = {key: {} for key in ['DamageUp', 'OppDefenseDown']}
-                matched_benefits = []
+                # Collect benefits into three buckets
+                extra_att = {k: {} for k in attack_keys}       # extra_attack=True (the actual extra attacks)
+                extra_mult_att = {k: {} for k in attack_keys}  # benefit_on="extra" (multipliers like Wu Ming S3)
+                effective_att = {k: {} for k in attack_keys}   # benefit_on="all" (general buffs)
+                matched_extra = []
 
                 for benefit in self.round_benefits:
-                    if not benefit.extra_attack: continue
-                    if benefit.benefit_type not in extra_effects: continue
+                    if benefit.benefit_type not in attack_keys: continue
                     if not benefit.is_valid(ut, extra_vs, self.round_idx): continue
 
                     ben_value = float(benefit.correct_value(self.round_idx))
-                    effect_dict = extra_effects[benefit.benefit_type]
-                    if benefit.op not in effect_dict: effect_dict[benefit.op] = 0
-                    effect_dict[benefit.op] += ben_value
-                    matched_benefits.append((benefit, ben_value))
 
-                if not matched_benefits: continue
+                    if benefit.extra_attack:
+                        effect_dict = extra_att[benefit.benefit_type]
+                        if benefit.op not in effect_dict: effect_dict[benefit.op] = 0
+                        effect_dict[benefit.op] += ben_value
+                        matched_extra.append((benefit, ben_value))
+                    elif benefit.benefit_on == 'extra':
+                        effect_dict = extra_mult_att[benefit.benefit_type]
+                        if benefit.op not in effect_dict: effect_dict[benefit.op] = 0
+                        effect_dict[benefit.op] += ben_value
+                    elif benefit.benefit_on == 'all':
+                        effect_dict = effective_att[benefit.benefit_type]
+                        if benefit.op not in effect_dict: effect_dict[benefit.op] = 0
+                        effect_dict[benefit.op] += ben_value
+
+                if not matched_extra: continue
+
+                # Check dodge covering extra attacks
+                dodge_extra = False
+                for opp_benefit in self.opponent.rounds[self.round_idx].round_benefits:
+                    if 'dodge' not in opp_benefit.benefit_type.lower(): continue
+                    if not opp_benefit.is_valid(extra_vs, ut, self.round_idx): continue
+                    if opp_benefit.benefit_on in ('all', 'extra'):
+                        dodge_extra = True
+                        break
+
+                if dodge_extra: continue
+
+                # Collect opponent defensive benefits for extra pass
+                effective_def = {k: {} for k in defense_keys}
+                extra_mult_def = {k: {} for k in defense_keys}
+
+                for opp_benefit in self.opponent.rounds[self.round_idx].round_benefits:
+                    if 'dodge' in opp_benefit.benefit_type.lower(): continue
+                    if opp_benefit.benefit_type not in defense_keys: continue
+                    if opp_benefit.extra_attack: continue
+                    if opp_benefit.benefit_on == 'normal': continue
+                    if not opp_benefit.is_valid(extra_vs, ut, self.round_idx): continue
+
+                    opp_value = float(opp_benefit.correct_value(self.round_idx))
+
+                    if opp_benefit.benefit_on == 'extra':
+                        effect_dict = extra_mult_def[opp_benefit.benefit_type]
+                        if opp_benefit.op not in effect_dict: effect_dict[opp_benefit.op] = 0
+                        effect_dict[opp_benefit.op] += opp_value
+                    elif opp_benefit.benefit_on == 'all':
+                        effect_dict = effective_def[opp_benefit.benefit_type]
+                        if opp_benefit.op not in effect_dict: effect_dict[opp_benefit.op] = 0
+                        effect_dict[opp_benefit.op] += opp_value
 
                 unit_base_dmg = army * self.fighter.attack_by_type[ut] / self.opponent.defense_by_type[extra_vs] / 100
-                extra_coef = self.calc_coef(extra_effects, {key: {} for key in ['DefenseUp', 'OppDamageDown']})
-                extra_kills = unit_base_dmg * (extra_coef - 1.0)
+
+                effective = self.calc_coef(effective_att, effective_def)
+                extra_coef = self.calc_coef(extra_att, {k: {} for k in defense_keys})
+                extra_mult = self.calc_coef(extra_mult_att, extra_mult_def)
+                extra_kills = unit_base_dmg * effective * (extra_coef - 1.0) * extra_mult
+
+                if BattleRound.DEBUG and self.round_idx % BattleRound.DEBUG_FREQ == 0 and self.round_idx < self.DEBUG_MAX_ROUND:
+                    print(f"           🔷 EXTRA: {ut.name}->{extra_vs.name}  effective:{effective:.3f} extra_coef:{extra_coef:.3f} extra_mult:{extra_mult:.3f} -> kills:{extra_kills:.1f}")
 
                 if extra_kills > 0:
-                    for benefit, ben_value in matched_benefits:
+                    for benefit, ben_value in matched_extra:
                         benefit._effect.extra_kills += unit_base_dmg * ben_value / 100
                         if not benefit.used:
                             benefit.use()
@@ -281,149 +353,146 @@ class BattleRound():
                     else:
                         self.round_kills[ut] = {extra_vs: extra_kills}
 
+        if BattleRound.DEBUG and self.round_idx % BattleRound.DEBUG_FREQ == 0 and self.round_idx < self.DEBUG_MAX_ROUND:
+            if self.round_kills:
+                print(f"\nROUND {self.round_idx} KILLS ({self.fighter.name})")
+                for ut, targets in self.round_kills.items():
+                    print('      ' + ', '.join(f"{ut.name}->{vs.name}:{kills:.1f}" for vs, kills in targets.items()))
+            else:
+                print(f"\nROUND {self.round_idx} KILLS ({self.fighter.name}): none")
+
     def calc_bonus_dmg(self, unit_base_dmg, ut: UnitType, vs: UnitType):
-        """Calculate final damage with all skill bonuses and debuffs applied.
-        
+        """Pass 1: Calculate normal attack damage with general and normal-only buffs.
+
+        Computes: base_dmg * effective * normal_coef
+        Where effective = general buffs (benefit_on: "all") and
+        normal_coef = normal-only buffs (benefit_on: "normal").
+        Extra attack benefits and benefit_on: "extra" are handled in pass 2.
+
         Args:
             unit_base_dmg: Base damage before bonuses.
             ut: Attacking unit type.
-            vs: Defending unit type.
-            
+            vs: Defending unit type (primary target).
+
         Returns:
-            float: Final damage value after applying all offensive buffs,
-                   defensive buffs, extra attacks, and dodge effects.
+            float: Normal attack damage after buffs and dodge.
         """
         if BattleRound.DEBUG and self.round_idx % BattleRound.DEBUG_FREQ == 0 and self.round_idx < self.DEBUG_MAX_ROUND:
             print(f'\n🔸🔸🔸   {ut.name} / {vs.name}     ({self.fighter.name})')
-        
+
         attack_effects_keys = ['DamageUp', 'OppDefenseDown']
         defense_effects_keys = ['DefenseUp', 'OppDamageDown']
-        all_effects_keys = attack_effects_keys  + defense_effects_keys
 
-        attacker_effects        = {key: {} for key in attack_effects_keys}
-        defender_effects        = {key: {} for key in defense_effects_keys}
-        only_normal_attacker = {key: {} for key in attack_effects_keys}
-        only_normal_defender = {key: {} for key in defense_effects_keys}
-        extra_attack_effects = {key: {} for key in attack_effects_keys}
-        
-        # Track which skill+effect combinations have been applied to avoid value stacking
-        # Key: (skill_name, effect_type, ben_op), Value: max_value
+        # Effective = general benefits (benefit_on: "all")
+        effective_attacker = {key: {} for key in attack_effects_keys}
+        effective_defender = {key: {} for key in defense_effects_keys}
+        # Normal-only = benefits with benefit_on: "normal"
+        normal_attacker = {key: {} for key in attack_effects_keys}
+        normal_defender = {key: {} for key in defense_effects_keys}
+
         applied_skill_effects = {}
-        
+
         # Fighter benefits (attacker's offensive buffs)
         for benefit in self.round_benefits:
             benefit: Benefit
+            if benefit.extra_attack: continue
+            if benefit.benefit_on == 'extra': continue
             if benefit.benefit_type not in attack_effects_keys: continue
-            if not benefit.is_valid(ut, vs, self.round_idx): continue 
+            if not benefit.is_valid(ut, vs, self.round_idx): continue
+
             ben_type = benefit.benefit_type
             ben_op = benefit.op
             ben_value = float(benefit.correct_value(self.round_idx))
 
-            if benefit.extra_attack:
-                effect_dict = extra_attack_effects[ben_type]
-                if ben_op not in effect_dict: effect_dict[ben_op] = 0
-                effect_dict[ben_op] += ben_value
-                self.fighter.cumul_attacks[ut] += 1
-                self.opponent.cumul_received_attacks[vs] += 1
-                benefit._effect.extra_kills += unit_base_dmg * ben_value / 100
-
-            elif benefit.only_normal:
-                effect_dict = only_normal_attacker[ben_type]
+            if benefit.benefit_on == 'normal':
+                effect_dict = normal_attacker[ben_type]
                 if ben_op not in effect_dict: effect_dict[ben_op] = 0
                 effect_dict[ben_op] += ben_value
             else:
-                # For chance-based effects from same skill (like multiple Mias), use max value not sum
+                # benefit_on == 'all': general buffs go into effective
                 skill_name = benefit._effect._skill.skill_name
                 effect_key = (skill_name, ben_type, ben_op)
-                effect_dict = attacker_effects[ben_type]
-                
+                effect_dict = effective_attacker[ben_type]
+
                 if ben_op not in effect_dict:
                     effect_dict[ben_op] = 0
-                
+
                 if benefit._effect.is_chance and effect_key in applied_skill_effects:
-                    # Same skill's chance-based effect already applied - take max, don't stack
                     applied_skill_effects[effect_key] = max(applied_skill_effects[effect_key], ben_value)
                     effect_dict[ben_op] = applied_skill_effects[effect_key]
                 elif benefit._effect.is_chance:
-                    # First time this skill's chance effect is applied
                     applied_skill_effects[effect_key] = ben_value
                     effect_dict[ben_op] = max(effect_dict[ben_op], ben_value)
                 else:
-                    # Non-chance effects stack normally
                     effect_dict[ben_op] += ben_value
+
             benefit.use()
             if BattleRound.DEBUG and self.round_idx % BattleRound.DEBUG_FREQ == 0 and self.round_idx < self.DEBUG_MAX_ROUND:
                 print(f"           APPLIED: ", benefit)
-                
+
         # Opponent benefits (defender's defensive buffs)
-        dodging = 0
+        dodge_normal = False
         for opp_benefit in self.opponent.rounds[self.round_idx].round_benefits:
             opp_benefit: Benefit
             if not opp_benefit.is_valid(vs, ut, self.round_idx): continue
             opp_ben_type = opp_benefit.benefit_type
+
             if 'dodge' in opp_ben_type.lower():
-                dodging = max(1 if opp_benefit.only_normal else 2, dodging)
+                if opp_benefit.benefit_on in ('all', 'normal'):
+                    dodge_normal = True
                 opp_benefit.use()
                 if BattleRound.DEBUG and self.round_idx % BattleRound.DEBUG_FREQ == 0 and self.round_idx < self.DEBUG_MAX_ROUND:
                     print(f"           OPP_DODGE: ", opp_benefit)
                 continue
 
+            if opp_benefit.extra_attack: continue
+            if opp_benefit.benefit_on == 'extra': continue
             if opp_ben_type not in defense_effects_keys: continue
+
             opp_ben_op = opp_benefit.op
             opp_ben_value = float(opp_benefit.correct_value(self.round_idx))
-            if opp_benefit.only_normal:
-                opp_effect_dict = only_normal_defender[opp_ben_type]
+
+            if opp_benefit.benefit_on == 'normal':
+                opp_effect_dict = normal_defender[opp_ben_type]
                 if opp_ben_op not in opp_effect_dict:
                     opp_effect_dict[opp_ben_op] = 0
                 opp_effect_dict[opp_ben_op] += opp_ben_value
-                opp_benefit.use()
-                continue
-            # For chance-based effects from same skill (like multiple Mias), use max value not sum
-            opp_skill_name = opp_benefit._effect._skill.skill_name
-            opp_effect_key = (opp_skill_name, opp_ben_type, opp_ben_op)
-            opp_effect_dict = defender_effects[opp_ben_type]
-            
-            if opp_ben_op not in opp_effect_dict:
-                opp_effect_dict[opp_ben_op] = 0
-            
-            if opp_benefit._effect.is_chance and opp_effect_key in applied_skill_effects:
-                # Same skill's chance-based effect already applied - take max, don't stack
-                applied_skill_effects[opp_effect_key] = max(applied_skill_effects[opp_effect_key], opp_ben_value)
-                opp_effect_dict[opp_ben_op] = applied_skill_effects[opp_effect_key]
-            elif opp_benefit._effect.is_chance:
-                # First time this skill's chance effect is applied
-                applied_skill_effects[opp_effect_key] = opp_ben_value
-                opp_effect_dict[opp_ben_op] = max(opp_effect_dict[opp_ben_op], opp_ben_value)
             else:
-                # Non-chance effects stack normally
-                opp_effect_dict[opp_ben_op] += opp_ben_value
-            opp_benefit.use()
+                opp_skill_name = opp_benefit._effect._skill.skill_name
+                opp_effect_key = (opp_skill_name, opp_ben_type, opp_ben_op)
+                opp_effect_dict = effective_defender[opp_ben_type]
 
+                if opp_ben_op not in opp_effect_dict:
+                    opp_effect_dict[opp_ben_op] = 0
+
+                if opp_benefit._effect.is_chance and opp_effect_key in applied_skill_effects:
+                    applied_skill_effects[opp_effect_key] = max(applied_skill_effects[opp_effect_key], opp_ben_value)
+                    opp_effect_dict[opp_ben_op] = applied_skill_effects[opp_effect_key]
+                elif opp_benefit._effect.is_chance:
+                    applied_skill_effects[opp_effect_key] = opp_ben_value
+                    opp_effect_dict[opp_ben_op] = max(opp_effect_dict[opp_ben_op], opp_ben_value)
+                else:
+                    opp_effect_dict[opp_ben_op] += opp_ben_value
+
+            opp_benefit.use()
             if BattleRound.DEBUG and self.round_idx % BattleRound.DEBUG_FREQ == 0 and self.round_idx < self.DEBUG_MAX_ROUND:
                 print(f"           OPP_APPLIED: ", opp_benefit)
-        
-        base = self.calc_coef(attacker_effects, defender_effects)
-        normal_only = self.calc_coef(only_normal_attacker, only_normal_defender)
-        extra = self.calc_coef(extra_attack_effects, {key: {} for key in defense_effects_keys})
-        
-        if dodging == 2:
+
+        effective = self.calc_coef(effective_attacker, effective_defender)
+        normal_coef = self.calc_coef(normal_attacker, normal_defender)
+
+        if dodge_normal:
             coef = 0
-        elif dodging == 1:
-            coef = base * (extra - 1)
-        elif dodging == 0:
-            coef = base * (extra + normal_only - 1)
+        else:
+            coef = effective * normal_coef
 
-        # coef = round(coef,4)
-        
         self.round_dmg_coef[ut] = coef
-        if dodging < 2:
-            self.fighter.cumul_attacks[ut] += 1
-            self.opponent.cumul_received_attacks[vs] += 1
+        self.fighter.cumul_attacks[ut] += 1
+        self.opponent.cumul_received_attacks[vs] += 1
 
-        # DEBUG
         if BattleRound.DEBUG and self.round_idx % BattleRound.DEBUG_FREQ == 0 and self.round_idx < self.DEBUG_MAX_ROUND:
-            print(f"\n           🔶 BONUS_COEF: R{self.round_idx} - {self.fighter.name} - {ut.name} / {vs.name} :    base:{base:.3f} - extra:{extra:.3f} - normal_only:{normal_only:.3f}  ---> 🔶 coef: {coef:.3f}")
-        
+            print(f"\n           🔶 NORMAL_COEF: R{self.round_idx} - {self.fighter.name} - {ut.name} / {vs.name} :    effective:{effective:.3f} - normal:{normal_coef:.3f}  ---> 🔶 coef: {coef:.3f}")
+
         return unit_base_dmg * coef
     
     def calc_coef(self, attacker_dict, defender_dict):

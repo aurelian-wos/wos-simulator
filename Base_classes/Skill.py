@@ -150,7 +150,12 @@ class Effect():
         trig_for_unit (str): Which unit types can trigger this effect ('all', 'once', 'inf', 'mark', 'lanc').
         trig_vs_unit (str): Which enemy unit types this can trigger against ('all', 'inf', 'mark', 'lanc').
         ben_for_unit (str): Which friendly unit types receive the benefit ('all', 'trigger', 'inf', etc.).
-        ben_vs_unit (str): Which enemy unit types the benefit applies against ('all', 'target', 'inf', etc.).
+        ben_vs_unit (str): Which enemy unit types the benefit applies against.
+            See Effect.__init__ for full semantics. Summary:
+              'all'    -- fan-out splash, requires extra_attack=True
+              'any'    -- global (any primary target), normal attacks; non-splash
+              'target' -- locked to primary target at creation time
+              '<unit>' -- a specific type (e.g. 'lancer').
         type (str): Effect type (e.g., 'damage_up', 'defense_up', 'dodge').
         op (int): Operation code controlling stacking behavior with other effects.
         duration (dict): Duration configuration.
@@ -179,10 +184,40 @@ class Effect():
         # trig_for_unit values: All, once (only once per turn), inf, mark, lanc
         self.trig_vs_unit = effect_dict['trigger_types']['trigger_vs']  
         # trig_vs_unit values: All, inf, mark, lanc
-        self.ben_for_unit = effect_dict['benefit_types']['benefit_for'] 
+        self.ben_for_unit = effect_dict['benefit_types']['benefit_for']
         # ben_for_unit values: All, friendly, trigger (benefit only applies to unit who triggered it), inf, lanc, mark
-        self.ben_vs_unit = effect_dict['benefit_types']['benefit_vs']   
-        # ben_vs_unit values: All, target (benefit only applies to unit aginst whom it was triggered), inf, lanc, mark
+        self.ben_vs_unit = effect_dict['benefit_types']['benefit_vs']
+        # ben_vs_unit values:
+        #   all    -- fan-out splash: benefit applies against every surviving enemy troop type.
+        #             Only valid when extra_attack=True. Drives the pass-2 fan-out loop
+        #             (BattleRound.calc_extra_kills) so the extra attack hits each enemy type
+        #             that is still alive.
+        #   any    -- "whatever is being hit": benefit applies regardless of which enemy
+        #             troop type the current attack is aimed at. Use this for global buffs
+        #             (e.g. "increase damage dealt by X%") where the intent is "active all
+        #             the time", not "add extra attacks against every type". Mechanically
+        #             vs_units is populated with every UnitType, so is_valid(ut, vs, _) is
+        #             True for any vs; semantically distinct from `all` because it does NOT
+        #             imply fan-out / extra attacks.
+        #   target -- locked to whichever enemy troop type was the primary target at the
+        #             moment this benefit was created. Stays locked for the benefit's whole
+        #             lifetime even if primary targets change (use a re-triggering, non-
+        #             permanent skill if you want the lock to refresh each turn/attack).
+        #   <unit> -- a specific troop type name (e.g. "lancer"): benefit only applies
+        #             against that one type.
+        # Invariant enforced below: benefit_vs="all" requires extra_attack=True. Otherwise
+        # use "any" for a global buff or "target"/"<unit>" for a targeted buff.
+        self.ben_on = effect_dict['benefit_types'].get('benefit_on', 'all')
+        # ben_on values: all (default, goes into effective coef), normal (only normal pass), extra (only extra pass)
+
+        if self.ben_vs_unit == 'all' and not self.extra_attack:
+            raise ValueError(
+                f"Invalid benefit_vs='all' with extra_attack=false on effect "
+                f"'{self.name}' (skill '{skill.skill_name}'). "
+                f"`all` means fan-out splash targeting and is only meaningful when "
+                f"extra_attack=true. Use `any` for a global buff that applies regardless "
+                f"of the current target, or `target`/<unit_type> for a targeted buff."
+            )
 
         self.type = effect_dict['effect_type']
         self.op = effect_dict['effect_op']
@@ -383,9 +418,7 @@ class Benefit:
         self.value = roundEff._effect.value
         self.extra_attack = roundEff._effect.extra_attack
 
-        self.only_normal = False
-        if 'only_normal' in roundEff._effect.special:
-            self.only_normal = True
+        self.benefit_on = roundEff._effect.ben_on  # "all", "normal", or "extra"
 
         # for_units : Unit types the benefit applies for        
         if roundEff._effect.ben_for_unit == 'trigger':
@@ -400,13 +433,16 @@ class Benefit:
             raise ValueError(f"Unknown value for ben_for_units ({roundEff._effect.ben_for_unit}) for hero '{roundEff._effect._skill.skill_hero}' effect '{roundEff.r_eff_id}' ")
 
         # vs_units : Unit types the benefit applies against.
-        # For extra_attack benefits, this controls fan-out targeting:
-        #   "target" = hit primary target only (e.g. Mia S2, Molly S2)
-        #   "all"    = hit all enemy types (e.g. Norah S2 fan-out)
-        #   specific type (e.g. "lancer") = hit that type only (e.g. Wayne S2)
+        #   "target" = locked to the primary target at creation time (e.g. Mia S2, Molly S2)
+        #   "all"    = fan-out to every enemy type (extra_attack only, e.g. Norah S2)
+        #   "any"    = active regardless of what's being hit; no fan-out implied.
+        #              Use for global buffs on normal attacks (e.g. Jessie S1 DamageUp).
+        #   specific type (e.g. "lancer") = only vs that type (e.g. Wayne S2)
+        # Note: `all` and `any` both expand to vs_units=[every UnitType] mechanically,
+        # but only `all` is allowed on extra_attack effects (see Effect.__init__ check).
         if roundEff._effect.ben_vs_unit == 'target':
             self.vs_units = [vs]
-        elif roundEff._effect.ben_vs_unit == 'all':
+        elif roundEff._effect.ben_vs_unit in ('all', 'any'):
             self.vs_units = ALL_UNIT_TYPES.copy()
         elif _to_unitx(roundEff._effect.ben_vs_unit) in UnitType.list():
             self.vs_units = [_to_unitx(roundEff._effect.ben_vs_unit)]
@@ -418,21 +454,19 @@ class Benefit:
         self.attack_counter = 0
         self.used = False
 
-    def is_valid(self, ut, vs, _round, extra_attack = False):
+    def is_valid(self, ut, vs, _round):
         """Check if benefit is valid for a given unit interaction at current time.
-        
+
         Args:
             ut (str or UnitType): Unit type to check, or 'any' to skip unit type check.
             vs (str or UnitType): Enemy unit type to check, or 'any' to skip.
             _round (int): Current round number.
-            extra_attack (bool, optional): If True, this is an extra attack. Defaults to False.
-        
+
         Returns:
             bool: True if benefit is valid and active, False otherwise.
         """
         if ut != "any" and ut not in self.for_units: return False
         if vs != "any" and vs not in self.vs_units: return False
-        if extra_attack and self.only_normal: return False
         if self.duration_type in ['turn', 'round', 'turns', 'rounds'] and self.duration != -1:
             if (_round - self.start_round) < self.lag: return False
             if (_round - self.start_round - self.lag) >= self.duration: return False
@@ -495,5 +529,5 @@ class Benefit:
         Returns:
             str: Formatted string with benefit details.
         """
-        return f"{self._effect._skill.skill_hero}:{self.id} - {self.benefit_type} - Op: {self.op} - Value: {self.value} - Extra: {self.extra_attack} ; duration: {self.duration} {self.duration_type} - ut: {[u.name for u in self.for_units] if self.for_units else None} - vs: {[u.name for u in self.vs_units] if self.vs_units else None}"
+        return f"{self._effect._skill.skill_hero}:{self.id} - {self.benefit_type} - Op: {self.op} - Value: {self.value} - ExtraAtk: {self.extra_attack} - On: {self.benefit_on} ; duration: {self.duration} {self.duration_type} - ut: {[u.name for u in self.for_units] if self.for_units else None} - vs: {[u.name for u in self.vs_units] if self.vs_units else None}"
         
