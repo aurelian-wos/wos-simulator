@@ -14,6 +14,7 @@
 import Database from "better-sqlite3";
 import fs from "fs";
 import path from "path";
+import zlib from "zlib";
 import type { CoverageSnapshot, Hero, HeroSkill, Run, RunTestcase } from "@/types/dashboard";
 
 /**
@@ -229,6 +230,28 @@ export function getCoverageMatrix(runId: string): CoverageSnapshot[] {
 }
 
 /**
+ * Return decompressed patch text for a run, or null if the run has no patch blob.
+ */
+export function getRunPatch(runId: string): string | null {
+  const database = getDb();
+  if (!database) return null;
+  try {
+    const run = database
+      .prepare(`SELECT patch_blob_id FROM runs WHERE id = ?`)
+      .get(runId) as { patch_blob_id: string | null } | undefined;
+    if (!run?.patch_blob_id) return null;
+    const blob = database
+      .prepare(`SELECT content_gzip FROM blobs WHERE id = ?`)
+      .get(run.patch_blob_id) as { content_gzip: Buffer } | undefined;
+    if (!blob?.content_gzip) return null;
+    return zlib.gunzipSync(blob.content_gzip).toString("utf8");
+  } catch (err) {
+    console.error("[wos-dashboard] getRunPatch failed:", err);
+    return null;
+  }
+}
+
+/**
  * Return a blob's raw gzipped content by its id.
  */
 export function getBlob(blobId: string): { content_gzip: Buffer } | undefined {
@@ -394,5 +417,28 @@ export function getHeroErrorHistory(
   } catch (err) {
     console.error("[wos-dashboard] getHeroErrorHistory failed:", err);
     return [];
+  }
+}
+
+/**
+ * Return names of required tables that are absent from the schema.
+ * Used by pages to surface misconfiguration instead of silently returning empty data.
+ */
+export function getMissingTables(
+  required = ["heroes", "hero_skills"]
+): string[] {
+  const database = getDb();
+  if (!database) return required;
+  try {
+    const placeholders = required.map(() => "?").join(",");
+    const existing = database
+      .prepare(
+        `SELECT name FROM sqlite_master WHERE type='table' AND name IN (${placeholders})`
+      )
+      .all(...required) as { name: string }[];
+    const existingNames = new Set(existing.map((r) => r.name));
+    return required.filter((t) => !existingNames.has(t));
+  } catch {
+    return required;
   }
 }

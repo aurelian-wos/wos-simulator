@@ -1,15 +1,71 @@
-import zlib from "zlib";
 import Link from "next/link";
+import { parsePatch, applyPatch, createTwoFilesPatch, formatPatch } from "diff";
 import {
   getRun,
   getRunTestcases,
-  getBlob,
   getPreviousRun,
   getRunTestcaseKeys,
+  getRunPatch,
 } from "@/lib/db";
 import TestcaseTable from "@/components/TestcaseTable";
 
 export const dynamic = "force-dynamic";
+
+function normalizeName(s: string | undefined): string {
+  return (s ?? "").replace(/^[ab]\//, "");
+}
+
+function reconstructBefore(parsed: ReturnType<typeof parsePatch>[0]): string {
+  const lines: string[] = [];
+  for (const hunk of parsed.hunks ?? []) {
+    for (const line of hunk.lines) {
+      if (line[0] === " " || line[0] === "-") lines.push(line.slice(1));
+    }
+  }
+  return lines.join("\n");
+}
+
+function computeIncrementalDiff(prevPatch: string, currPatch: string): string {
+  const parsedPrev = parsePatch(prevPatch);
+  const parsedCurr = parsePatch(currPatch);
+
+  const mapPrev = new Map(
+    parsedPrev.map((p) => [normalizeName(p.newFileName || p.oldFileName), p])
+  );
+  const mapCurr = new Map(
+    parsedCurr.map((p) => [normalizeName(p.newFileName || p.oldFileName), p])
+  );
+
+  const parts: string[] = [];
+
+  // Files in both: compute incremental diff
+  for (const [name, filePrev] of mapPrev) {
+    const fileCurr = mapCurr.get(name);
+    if (!fileCurr) continue; // no longer modified; skip
+    mapCurr.delete(name);
+
+    const before = reconstructBefore(filePrev);
+    const stateA = applyPatch(before, filePrev);
+    const stateB = applyPatch(before, fileCurr);
+
+    if (stateA === false || stateB === false) {
+      parts.push(formatPatch([fileCurr])); // fallback
+      continue;
+    }
+    if (stateA !== stateB) {
+      parts.push(
+        createTwoFilesPatch(name, name, stateA, stateB, "prev run", "this run")
+      );
+    }
+  }
+
+  // Files only in current run (newly changed): show them as-is
+  for (const [, fileCurr] of mapCurr) {
+    parts.push(formatPatch([fileCurr]));
+  }
+
+  return parts.join("\n");
+}
 
 function formatDate(iso: string | null | undefined): string {
   if (!iso) return "—";
@@ -87,18 +143,8 @@ export default async function RunDetailPage({ params }: PageProps) {
   const totalTestcases = testcases.length;
   const passingTestcases = testcases.filter((t) => t.passes === 1).length;
 
-  // Diff blob decompression
-  let patchText: string | null = null;
-  if (run.dirty === 1 && run.patch_blob_id) {
-    try {
-      const blob = getBlob(run.patch_blob_id);
-      if (blob?.content_gzip) {
-        patchText = zlib.gunzipSync(blob.content_gzip).toString("utf8");
-      }
-    } catch (err) {
-      console.error("[wos-dashboard] Failed to decompress patch blob:", err);
-    }
-  }
+  // Diff blob decompression for current run
+  const patchText: string | null = run.dirty === 1 ? getRunPatch(id) : null;
 
   // Testcase set diff vs previous run
   const previousRun = getPreviousRun(id);
@@ -117,6 +163,26 @@ export default async function RunDetailPage({ params }: PageProps) {
 
     addedKeys = currentKeys.filter((k) => !previousSet.has(toStr(k)));
     removedKeys = previousKeys.filter((k) => !currentSet.has(toStr(k)));
+  }
+
+  // Incremental diff computation
+  let diffLabel = "Dirty State Patch (vs clean baseline)";
+  let diffWarning: string | null = null;
+  let displayPatch: string | null = patchText;
+
+  if (patchText && previousRun) {
+    const prevPatch = getRunPatch(previousRun.id);
+    if (prevPatch !== null && previousRun.dirty === 1) {
+      if (previousRun.git_sha === run.git_sha) {
+        diffLabel = "Code Changes Since Previous Run";
+        displayPatch = computeIncrementalDiff(prevPatch, patchText);
+      } else {
+        diffWarning =
+          "Previous run used a different git baseline — showing full cumulative patch instead of incremental delta.";
+      }
+    } else if (prevPatch === null && previousRun.dirty === 1) {
+      diffWarning = "Previous run has no stored patch — showing full cumulative patch.";
+    }
   }
 
   return (
@@ -224,7 +290,7 @@ export default async function RunDetailPage({ params }: PageProps) {
       )}
 
       {/* Diff viewer */}
-      {patchText && (
+      {displayPatch && (
         <div
           className="rounded p-4 mb-8 overflow-x-auto"
           style={{
@@ -233,10 +299,22 @@ export default async function RunDetailPage({ params }: PageProps) {
           }}
         >
           <h3 className="font-bold mb-3 text-xs uppercase tracking-wider opacity-60">
-            Dirty State Patch
+            {diffLabel}
           </h3>
+          {diffWarning && (
+            <div
+              className="rounded px-3 py-2 mb-3 text-xs"
+              style={{
+                backgroundColor: "#3d3000",
+                border: "1px solid #7a6000",
+                color: "#ffd966",
+              }}
+            >
+              {diffWarning}
+            </div>
+          )}
           <pre className="text-xs leading-relaxed overflow-x-auto whitespace-pre">
-            {patchText.split("\n").map((line, i) => (
+            {displayPatch.split("\n").map((line, i) => (
               <DiffLine key={i} line={line} />
             ))}
           </pre>
