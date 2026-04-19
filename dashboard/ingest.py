@@ -27,6 +27,11 @@ except ImportError:
     def waiver_for(file_path: str, testcase_id: str):  # type: ignore[misc]
         return None
 
+try:
+    from dashboard.coverage import snapshot_coverage as _snapshot_coverage
+except ImportError:
+    _snapshot_coverage = None  # type: ignore[assignment]
+
 _REPO_ROOT = Path(__file__).parent.parent
 DB_PATH = _REPO_ROOT / "test_results" / "dashboard.sqlite"
 _MIGRATIONS_DIR = Path(__file__).parent / "migrations"
@@ -269,6 +274,12 @@ def record_run(
                     "INSERT INTO run_testcase_files(run_id, file_path, sha256) VALUES (?, ?, ?)",
                     (run_id, file_path, sha),
                 )
+
+        if _snapshot_coverage is not None:
+            try:
+                _snapshot_coverage(run_id, conn, root)
+            except Exception:
+                pass
 
         return run_id
 
