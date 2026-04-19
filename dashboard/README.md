@@ -182,3 +182,14 @@ To populate historical runs:
 ```bash
 .venv/bin/python dashboard/backfill.py
 ```
+
+## Simulator-relevant path scope
+
+Captured patches and untracked tars are scoped to **simulator-relevant paths
+only** — the source allowlist lives in `dashboard/sim_paths.py` (mirrored for
+the web UI as `dashboard/web/lib/sim-paths.ts`). Changes to dashboard code,
+scratch scripts (`sim_custom.py`, `find_rng_*.py`, `troop_grid_search.py`,
+`test_*.py`), or documentation cannot move a testcase outcome, so they are
+stripped from both the stored blob (at capture time) and the rendered diff
+(at display time, for the benefit of legacy blobs). Amend the allowlist in
+both files when adding a new simulator input directory or root-level module.

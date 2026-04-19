@@ -3,8 +3,14 @@
 When a test run happens on a dirty git tree, we need to be able to reproduce
 it exactly from the dashboard. This module captures two gzipped blobs:
 
-* ``patch`` — output of ``git diff HEAD`` (staged + unstaged tracked changes).
-* ``untracked`` — a gzipped tar of every untracked-but-not-ignored file.
+* ``patch`` — ``git diff HEAD --binary`` scoped to simulator-relevant paths.
+* ``untracked`` — a gzipped tar of every untracked-but-not-ignored file that
+  lives under a simulator-relevant path.
+
+Dirtiness itself is still detected against the *whole* tree (so a run is still
+flagged ``dirty=1`` if you have scratch scripts edited), but only the scoped
+blobs are persisted. The scope allowlist lives in ``dashboard/sim_paths.py``
+and is mirrored in ``dashboard/web/lib/sim-paths.ts``.
 
 Each blob gets a content-addressed id of the form ``sha256:<hex>`` so the
 ingestion layer can dedupe blobs across runs.
@@ -23,6 +29,8 @@ import tarfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, TypedDict
+
+from .sim_paths import git_pathspec_args, is_simulator_path
 
 
 class CapturedDirtyState(TypedDict):
@@ -92,7 +100,19 @@ def _sha256_id(content: bytes) -> str:
 
 
 def _capture_patch(repo_root: Path) -> Optional[tuple[str, bytes]]:
-    diff = _run_git(repo_root, "diff", "HEAD", "--binary", binary=True)
+    # Scope the patch to simulator-relevant paths only (see dashboard/sim_paths.py).
+    # The board complained that raw ``git diff HEAD`` blobs were dominated by
+    # dashboard/scratch/doc noise that cannot change a testcase outcome, which
+    # obscured the actual simulator changes the dashboard exists to surface.
+    diff = _run_git(
+        repo_root,
+        "diff",
+        "HEAD",
+        "--binary",
+        "--",
+        *git_pathspec_args(),
+        binary=True,
+    )
     if not diff:
         return None
     blob = gzip.compress(diff)
@@ -102,6 +122,9 @@ def _capture_patch(repo_root: Path) -> Optional[tuple[str, bytes]]:
 def _capture_untracked(
     repo_root: Path, paths: tuple[str, ...]
 ) -> Optional[tuple[str, bytes]]:
+    # Same scope rule as _capture_patch: only archive untracked files that live
+    # under the simulator-relevant allowlist.
+    paths = tuple(p for p in paths if is_simulator_path(p))
     if not paths:
         return None
     buf = io.BytesIO()

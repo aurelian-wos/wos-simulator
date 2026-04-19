@@ -8,6 +8,7 @@ import {
 } from "@/lib/db";
 import {
   computeCrossShaDiff,
+  filterPatchText,
   formatCrossShaBanner,
   resolveRepoRoot,
   isShaReachable,
@@ -154,8 +155,16 @@ export default async function ComparePage({ params }: PageProps) {
 
   const deltaCounts = getRunDeltaCounts(b, a);
   const deltaRows = getRunDeltaTable(a, b);
-  const patchA = runA.dirty === 1 ? getRunPatch(a) : null;
-  const patchB = runB.dirty === 1 ? getRunPatch(b) : null;
+  // Old blobs can contain dashboard/scratch noise; filter at display time so
+  // the raw per-run collapsibles and single-sided fallbacks only show
+  // simulator-relevant changes. computeCrossShaDiff also filters internally,
+  // so pre-filtering here doesn't double-count.
+  const rawPatchA = runA.dirty === 1 ? getRunPatch(a) : null;
+  const rawPatchB = runB.dirty === 1 ? getRunPatch(b) : null;
+  const filteredA = rawPatchA ? filterPatchText(rawPatchA) : null;
+  const filteredB = rawPatchB ? filterPatchText(rawPatchB) : null;
+  const patchA = filteredA && filteredA.length > 0 ? filteredA : null;
+  const patchB = filteredB && filteredB.length > 0 ? filteredB : null;
 
   const shaA = runA.git_sha;
   const shaB = runB.git_sha;

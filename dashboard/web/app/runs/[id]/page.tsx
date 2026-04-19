@@ -1,6 +1,7 @@
 import Link from "next/link";
 import {
   computeCrossShaDiff,
+  filterPatchText,
   formatCrossShaBanner,
   resolveRepoRoot,
 } from "@/lib/diff";
@@ -79,8 +80,13 @@ export default async function RunDetailPage({ params }: PageProps) {
   const totalTestcases = testcases.length;
   const passingTestcases = testcases.filter((t) => t.passes === 1).length;
 
-  // Diff blob decompression for current run
-  const patchText: string | null = run.dirty === 1 ? getRunPatch(id) : null;
+  // Diff blob decompression for current run. Old blobs may include dashboard
+  // code / scratch noise; scope to simulator-relevant paths at display time so
+  // the fix (WOS-188) is retroactive without a storage backfill.
+  const rawPatchText: string | null = run.dirty === 1 ? getRunPatch(id) : null;
+  const filteredPatchText = rawPatchText ? filterPatchText(rawPatchText) : null;
+  const patchText: string | null =
+    filteredPatchText && filteredPatchText.length > 0 ? filteredPatchText : null;
 
   // Testcase set diff vs previous run
   const previousRun = getPreviousRun(id);

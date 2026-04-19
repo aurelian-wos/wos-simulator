@@ -2,9 +2,35 @@ import { execFileSync } from "child_process";
 import path from "path";
 import fs from "fs";
 import { parsePatch, applyPatch, createTwoFilesPatch, formatPatch } from "diff";
+import { isSimulatorPath } from "./sim-paths";
 
 export function normalizeName(s: string | undefined): string {
   return (s ?? "").replace(/^[ab]\//, "");
+}
+
+type ParsedPatchFile = ReturnType<typeof parsePatch>[0];
+
+// Historical runs captured before WOS-188 have patch blobs that include the
+// whole repo (dashboard code, scratch scripts, docs). Filter them at display
+// time so the fix is retroactive for old runs without a storage backfill.
+export function filterToSimulatorPaths(
+  files: ParsedPatchFile[]
+): ParsedPatchFile[] {
+  return files.filter((p) => {
+    const name = normalizeName(p.newFileName || p.oldFileName);
+    return isSimulatorPath(name);
+  });
+}
+
+// Convenience for call sites that hold a raw patch string (e.g. the raw
+// "Dirty State Patch vs Clean Baseline" collapsible). Round-trips through
+// parsePatch -> filter -> formatPatch. Returns "" when nothing simulator-
+// relevant remains so callers can branch on empty.
+export function filterPatchText(patchText: string): string {
+  if (!patchText) return "";
+  const filtered = filterToSimulatorPaths(parsePatch(patchText));
+  if (filtered.length === 0) return "";
+  return filtered.map((p) => formatPatch([p])).join("\n");
 }
 
 export function reconstructBefore(parsed: ReturnType<typeof parsePatch>[0]): string {
@@ -18,8 +44,8 @@ export function reconstructBefore(parsed: ReturnType<typeof parsePatch>[0]): str
 }
 
 export function computeIncrementalDiff(prevPatch: string, currPatch: string): string {
-  const parsedPrev = parsePatch(prevPatch);
-  const parsedCurr = parsePatch(currPatch);
+  const parsedPrev = filterToSimulatorPaths(parsePatch(prevPatch));
+  const parsedCurr = filterToSimulatorPaths(parsePatch(currPatch));
 
   const mapPrev = new Map(
     parsedPrev.map((p) => [normalizeName(p.newFileName || p.oldFileName), p])
@@ -119,7 +145,7 @@ export interface CrossShaDiffResult {
   degradedFileCount: number;
 }
 
-type ParsedPatch = ReturnType<typeof parsePatch>[0];
+type ParsedPatch = ParsedPatchFile;
 
 function reconstructDirtyState(
   file: ParsedPatch,
@@ -180,8 +206,8 @@ export function computeCrossShaDiff(
   const currShaReachable =
     repoRoot != null && isShaReachable(currSha, repoRoot);
 
-  const parsedPrev = parsePatch(prevPatch);
-  const parsedCurr = parsePatch(currPatch);
+  const parsedPrev = filterToSimulatorPaths(parsePatch(prevPatch));
+  const parsedCurr = filterToSimulatorPaths(parsePatch(currPatch));
 
   const mapPrev = new Map<string, ParsedPatch>();
   for (const p of parsedPrev) {
