@@ -15,7 +15,7 @@ import Database from "better-sqlite3";
 import fs from "fs";
 import path from "path";
 import zlib from "zlib";
-import type { CoverageSnapshot, Hero, HeroSkill, Run, RunTestcase } from "@/types/dashboard";
+import type { CoverageSnapshot, Hero, HeroSkill, Run, RunDeltaCounts, RunTestcase, RunWithDelta } from "@/types/dashboard";
 
 /**
  * Absolute path to the SQLite database file.
@@ -448,5 +448,137 @@ export function getMissingTables(
     return required.filter((t) => !existingNames.has(t));
   } catch {
     return required;
+  }
+}
+
+/**
+ * Compare two runs by their run_testcases and return counts of improved,
+ * regressed, added, and retired testcases.
+ */
+export function getRunDeltaCounts(
+  currRunId: string,
+  prevRunId: string
+): RunDeltaCounts {
+  const database = getDb();
+  if (!database) return { improved: 0, regressed: 0, added: 0, retired: 0 };
+  try {
+    const row = database
+      .prepare(
+        `WITH curr AS (
+          SELECT file || '|' || testcase_id || '|' || CAST(idx AS TEXT) AS key, passes
+          FROM run_testcases WHERE run_id = ?
+        ),
+        prev AS (
+          SELECT file || '|' || testcase_id || '|' || CAST(idx AS TEXT) AS key, passes
+          FROM run_testcases WHERE run_id = ?
+        ),
+        both AS (
+          SELECT c.key, c.passes as curr_passes, p.passes as prev_passes
+          FROM curr c JOIN prev p ON c.key = p.key
+        )
+        SELECT
+          SUM(CASE WHEN prev_passes = 0 AND curr_passes = 1 THEN 1 ELSE 0 END) as improved,
+          SUM(CASE WHEN prev_passes = 1 AND curr_passes = 0 THEN 1 ELSE 0 END) as regressed,
+          (SELECT COUNT(*) FROM curr c2 WHERE c2.key NOT IN (SELECT key FROM prev)) as added,
+          (SELECT COUNT(*) FROM prev p2 WHERE p2.key NOT IN (SELECT key FROM curr)) as retired
+        FROM both`
+      )
+      .get(currRunId, prevRunId) as {
+      improved: number | null;
+      regressed: number | null;
+      added: number | null;
+      retired: number | null;
+    };
+    return {
+      improved: row?.improved ?? 0,
+      regressed: row?.regressed ?? 0,
+      added: row?.added ?? 0,
+      retired: row?.retired ?? 0,
+    };
+  } catch (err) {
+    console.error("[wos-dashboard] getRunDeltaCounts failed:", err);
+    return { improved: 0, regressed: 0, added: 0, retired: 0 };
+  }
+}
+
+/**
+ * Return runs (newest first) enriched with delta fields vs. the previous run.
+ */
+export function getRunsWithDelta(limit = 50): RunWithDelta[] {
+  const database = getDb();
+  if (!database) return [];
+  try {
+    const rows = database
+      .prepare(`SELECT * FROM runs ORDER BY started_at DESC LIMIT ?`)
+      .all(limit + 1) as Run[];
+
+    const results: RunWithDelta[] = [];
+    for (let i = 0; i < Math.min(rows.length, limit); i++) {
+      const curr = rows[i];
+      const prev = rows[i + 1] ?? null;
+
+      const delta_avg_error_pct =
+        prev != null &&
+        curr.overall_avg_error_pct != null &&
+        prev.overall_avg_error_pct != null
+          ? curr.overall_avg_error_pct - prev.overall_avg_error_pct
+          : null;
+
+      const deltaCounts =
+        prev != null
+          ? getRunDeltaCounts(curr.id, prev.id)
+          : { improved: 0, regressed: 0, added: 0, retired: 0 };
+
+      results.push({
+        ...curr,
+        prev_run_id: prev?.id ?? null,
+        delta_avg_error_pct,
+        count_improved: deltaCounts.improved,
+        count_regressed: deltaCounts.regressed,
+        count_added: deltaCounts.added,
+        count_retired: deltaCounts.retired,
+      });
+    }
+    return results;
+  } catch (err) {
+    console.error("[wos-dashboard] getRunsWithDelta failed:", err);
+    return [];
+  }
+}
+
+/**
+ * Return trend data including bh_sig_count and dirty flag for the headline chart.
+ * Fetches DESC then reverses so the chart reads oldest→newest left to right.
+ */
+export function getRunTrendWithBH(
+  limit = 50
+): {
+  id: string;
+  started_at: string;
+  overall_avg_error_pct: number | null;
+  bh_sig_count: number | null;
+  dirty: number;
+}[] {
+  const database = getDb();
+  if (!database) return [];
+  try {
+    const rows = database
+      .prepare(
+        `SELECT id, started_at, overall_avg_error_pct, bh_sig_count, dirty
+         FROM runs
+         ORDER BY started_at DESC
+         LIMIT ?`
+      )
+      .all(limit) as {
+      id: string;
+      started_at: string;
+      overall_avg_error_pct: number | null;
+      bh_sig_count: number | null;
+      dirty: number;
+    }[];
+    return rows.reverse();
+  } catch (err) {
+    console.error("[wos-dashboard] getRunTrendWithBH failed:", err);
+    return [];
   }
 }

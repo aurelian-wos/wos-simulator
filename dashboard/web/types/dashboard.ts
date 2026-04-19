@@ -73,3 +73,19 @@ export interface CoverageSnapshot {
   battle_outcome_count: number;
   covered_bool: number; // 0 | 1
 }
+
+export interface RunDeltaCounts {
+  improved: number;
+  regressed: number;
+  added: number;
+  retired: number;
+}
+
+export interface RunWithDelta extends Run {
+  prev_run_id: string | null;
+  delta_avg_error_pct: number | null;
+  count_improved: number;
+  count_regressed: number;
+  count_added: number;
+  count_retired: number;
+}

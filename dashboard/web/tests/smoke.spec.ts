@@ -21,9 +21,9 @@ test.describe('Dashboard smoke tests', () => {
     expect(response?.status()).toBe(200);
     expect(response?.headers()['content-length']).not.toBe('0');
 
-    // Wait for the table to appear
-    await page.waitForSelector('tbody tr', { timeout: 10_000 });
-    const rows = await page.locator('tbody tr').count();
+    // Wait for the table to appear (inside accordion which defaults open)
+    await page.waitForSelector('[data-testid="runs-table"] tbody tr', { timeout: 10_000 });
+    const rows = await page.locator('[data-testid="runs-table"] tbody tr').count();
     expect(rows).toBeGreaterThan(0);
 
     expect(errors).toHaveLength(0);
