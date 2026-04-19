@@ -10,6 +10,10 @@
 - **Empty Troop Types** - Fixed crash when one troop type has zero units
 - **OppDefenseDown Formula** - Corrected denominator calculation from `1-x` to `1+x`, resolving division by zero errors
 
+### Regression Testing
+
+- **WOS-160 (2026-04-19)** — `lynn_solo` entry `_1` (balanced 1500/1500/1500 attacker) split into its own test_id `lynn_solo_balanced` and accept-residualled via `KNOWN_ISSUE_WAIVERS` in `check_testcases.py` (expected bias +0.93% ±0.5%). Root cause is a widget-state data gap: Lynn's S4 "Silent Threat" widget was fitted during the minxxx captures but the testcase JSON schema has no widget slot, so the sim under-predicts defender survival for that entry. Adding `skill_4: 3` to the entry collapses the bias to -0.02% (confirmed experimentally), while the non-balanced entry `_0` (kept as `lynn_solo`) was captured without the widget. The proper fix (extend the skill capture pipeline to record per-battle widget state) is tracked as a follow-up ticket.
+
 ### Hero & Skill System Fixes
 
 - **Multiple Same Joiners** - Fixed issue where duplicate joiners were stored in a dictionary by name, causing only one to be effective
