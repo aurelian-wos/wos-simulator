@@ -39,12 +39,6 @@ KNOWN_ISSUE_WAIVERS = {
         'tolerance_pct': 0.75,
         'note': 'Structural Alonso level-branching; no fix without schema extension (WOS-144).',
     },
-    'testcases/emulator_verified/lynn_solo.json::lynn_solo_balanced': {
-        'issue': 'WOS-160',
-        'expected_bias_pct': 0.93,
-        'tolerance_pct': 0.5,
-        'note': 'Lynn Silent Threat widget was fitted in-game but testcase schema has no widget slot; sim under-predicts defender survival. Fix deferred to widget-capture pipeline extension.',
-    },
 }
 
 

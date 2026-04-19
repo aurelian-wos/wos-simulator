@@ -76,8 +76,8 @@
     ]
   },
   {
-    "test_id": "lynn_solo_balanced",
-    "description": "Lynn solo defender test (balanced 1500/1500/1500 attacker). minxxx defending with Lynn (3/3/3) + Silent Threat widget fitted. Widget state not captured in testcase schema (see WOS-160); bias is accept-residual until widget-capture pipeline lands.",
+    "test_id": "lynn_solo",
+    "description": "Lynn solo defender test. WIP attacking no heroes 1500/1500/1500, minxxx defending with Lynn (3/3/3). Balanced around 0 outcome.",
     "attacker": {
       "name": "[BBQ]XxWIPxX",
       "heroes": {},
