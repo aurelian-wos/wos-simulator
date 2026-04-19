@@ -73,6 +73,22 @@ test.describe('Dashboard smoke tests', () => {
     expect(errors).toHaveLength(0);
   });
 
+  test('/heroes/Alonso — timeline and skill history visible', async ({ page }) => {
+    const errors: string[] = [];
+    page.on('console', msg => { if (msg.type() === 'error') errors.push(msg.text()); });
+    page.on('pageerror', err => errors.push(err.message));
+
+    const response = await page.goto('/heroes/Alonso');
+    expect(response?.status()).toBe(200);
+
+    // Coverage timeline section heading
+    await expect(page.locator('h3').filter({ hasText: 'Coverage Timeline' })).toBeVisible();
+    // Per-skill table with coverage column header
+    await expect(page.locator('body')).toContainText('Covered');
+    // No console errors
+    expect(errors).toHaveLength(0);
+  });
+
   test('/runs/[id] dirty — shows Dirty State Patch', async ({ page }) => {
     const errors: string[] = [];
     page.on('console', msg => { if (msg.type() === 'error') errors.push(msg.text()); });

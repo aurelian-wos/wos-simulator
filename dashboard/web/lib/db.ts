@@ -15,7 +15,7 @@ import Database from "better-sqlite3";
 import fs from "fs";
 import path from "path";
 import zlib from "zlib";
-import type { CoverageTrendPoint, CoverageSnapshot, Hero, HeroCoverageDelta, HeroSkill, Run, RunDeltaCounts, RunTestcase, RunWithDelta, TestcaseDeltaRow, TestcaseTrendRow } from "@/types/dashboard";
+import type { CoverageTrendPoint, CoverageSnapshot, Hero, HeroCoverageDelta, HeroCoverageTimelinePoint, HeroSkill, HeroSkillHistoryRow, Run, RunDeltaCounts, RunTestcase, RunWithDelta, TestcaseDeltaRow, TestcaseTrendRow } from "@/types/dashboard";
 
 /**
  * Absolute path to the SQLite database file.
@@ -694,6 +694,85 @@ export function getCoverageTrend(limit = 50): CoverageTrendPoint[] {
     return rows.reverse();
   } catch (err) {
     console.error("[wos-dashboard] getCoverageTrend failed:", err);
+    return [];
+  }
+}
+
+/**
+ * Return per-run testcase count + skill coverage % for a given hero.
+ * Ordered oldest → newest (for chart).
+ */
+export function getHeroCoverageTimeline(heroName: string, limit = 100): HeroCoverageTimelinePoint[] {
+  const database = getDb();
+  if (!database) return [];
+  try {
+    const rows = database
+      .prepare(
+        `SELECT
+           r.id as run_id,
+           r.started_at,
+           SUM(cs.testcase_count) as testcase_count,
+           COUNT(*) as skills_total,
+           SUM(cs.covered_bool) as skills_covered,
+           ROUND(100.0 * SUM(cs.covered_bool) / COUNT(*), 1) as coverage_pct
+         FROM runs r
+         JOIN coverage_snapshots cs ON cs.run_id = r.id
+         WHERE cs.hero = ? AND r.id IN (SELECT id FROM runs ORDER BY started_at DESC LIMIT ?)
+         GROUP BY r.id, r.started_at
+         ORDER BY r.started_at ASC`
+      )
+      .all(heroName, limit) as HeroCoverageTimelinePoint[];
+    return rows;
+  } catch (err) {
+    console.error("[wos-dashboard] getHeroCoverageTimeline failed:", err);
+    return [];
+  }
+}
+
+/**
+ * Return per-skill history (first covered, last changed, currently covered) for a hero.
+ */
+export function getHeroSkillHistory(heroName: string): HeroSkillHistoryRow[] {
+  const database = getDb();
+  if (!database) return [];
+  try {
+    const rows = database
+      .prepare(
+        `WITH ordered AS (
+           SELECT cs.skill_id, cs.skill_name, cs.covered_bool,
+                  r.started_at, r.id as run_id,
+                  ROW_NUMBER() OVER (PARTITION BY cs.skill_id ORDER BY r.started_at DESC) as rn
+           FROM coverage_snapshots cs
+           JOIN runs r ON cs.run_id = r.id
+           WHERE cs.hero = ?
+         ),
+         latest AS (
+           SELECT skill_id, skill_name, covered_bool as currently_covered
+           FROM ordered WHERE rn = 1
+         ),
+         first_covered AS (
+           SELECT skill_id, MIN(started_at) as first_seen_at
+           FROM ordered WHERE covered_bool = 1
+           GROUP BY skill_id
+         ),
+         changes AS (
+           SELECT o1.skill_id, MAX(o1.started_at) as last_changed_at
+           FROM ordered o1
+           JOIN ordered o2 ON o1.skill_id = o2.skill_id AND o1.rn = o2.rn - 1
+           WHERE o1.covered_bool != o2.covered_bool
+           GROUP BY o1.skill_id
+         )
+         SELECT l.skill_id, l.skill_name, l.currently_covered,
+                fc.first_seen_at, ch.last_changed_at
+         FROM latest l
+         LEFT JOIN first_covered fc ON l.skill_id = fc.skill_id
+         LEFT JOIN changes ch ON l.skill_id = ch.skill_id
+         ORDER BY CAST(l.skill_id AS INTEGER)`
+      )
+      .all(heroName) as HeroSkillHistoryRow[];
+    return rows;
+  } catch (err) {
+    console.error("[wos-dashboard] getHeroSkillHistory failed:", err);
     return [];
   }
 }

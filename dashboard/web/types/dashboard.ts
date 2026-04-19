@@ -123,3 +123,20 @@ export interface HeroCoverageDelta {
   delta_skills: number;
   delta_testcases: number;
 }
+
+export interface HeroCoverageTimelinePoint {
+  run_id: string;
+  started_at: string;
+  testcase_count: number;     // total testcase_count for this hero in this run
+  skills_total: number;       // total skills for this hero
+  skills_covered: number;     // count of covered_bool=1 skills
+  coverage_pct: number;       // skills_covered / skills_total * 100
+}
+
+export interface HeroSkillHistoryRow {
+  skill_id: string;
+  skill_name: string;
+  currently_covered: number;          // 0 | 1 from latest run
+  first_seen_at: string | null;       // started_at of first run where covered_bool=1
+  last_changed_at: string | null;     // started_at of run where covered_bool last changed
+}

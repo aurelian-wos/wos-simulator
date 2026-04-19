@@ -6,8 +6,11 @@ import {
   getHeroErrorHistory,
   getLatestRunId,
   getMissingTables,
+  getHeroCoverageTimeline,
+  getHeroSkillHistory,
 } from "@/lib/db";
 import HeroTrendChart from "@/components/HeroTrendChart";
+import HeroCoverageTimelineChart from "@/components/HeroCoverageTimelineChart";
 
 export const dynamic = "force-dynamic";
 
@@ -31,6 +34,16 @@ function StatCard({ label, value }: { label: string; value: string }) {
       </span>
     </div>
   );
+}
+
+function shortDate(iso: string | null): string {
+  if (!iso) return "—";
+  try {
+    const d = new Date(iso);
+    return `${d.getMonth() + 1}/${d.getDate()}`;
+  } catch {
+    return iso;
+  }
 }
 
 interface PageProps {
@@ -88,6 +101,13 @@ export default async function HeroDetailPage({ params }: PageProps) {
     ? getHeroTestcases(heroName, latestRunId)
     : [];
   const errorHistory = getHeroErrorHistory(heroName);
+  const coverageTimeline = getHeroCoverageTimeline(heroName);
+  const skillHistory = getHeroSkillHistory(heroName);
+
+  // Get latest coverage stats from the last timeline point
+  const latestCoverage = coverageTimeline.length > 0
+    ? coverageTimeline[coverageTimeline.length - 1]
+    : null;
 
   let classes: string[] = [];
   try {
@@ -139,7 +159,32 @@ export default async function HeroDetailPage({ params }: PageProps) {
           label="History Runs"
           value={String(errorHistory.length)}
         />
+        {latestCoverage && (
+          <StatCard
+            label="Coverage"
+            value={`${latestCoverage.skills_covered}/${latestCoverage.skills_total}`}
+          />
+        )}
       </div>
+
+      {/* Coverage Timeline chart */}
+      {coverageTimeline.length > 0 && (
+        <div
+          data-testid="coverage-timeline"
+          className="rounded p-4 mb-8"
+          style={{
+            border: "1px solid var(--border-color)",
+            backgroundColor: "var(--sidebar-bg)",
+          }}
+        >
+          <h3
+            className="font-bold mb-3 text-xs uppercase tracking-wider opacity-60"
+          >
+            Coverage Timeline
+          </h3>
+          <HeroCoverageTimelineChart data={coverageTimeline} heroName={hero.name} />
+        </div>
+      )}
 
       {/* Error trend chart */}
       {errorHistory.length > 0 && (
@@ -159,7 +204,7 @@ export default async function HeroDetailPage({ params }: PageProps) {
         </div>
       )}
 
-      {/* Skill list table */}
+      {/* Enriched skill history table */}
       <div className="mb-8">
         <h3
           className="font-bold mb-3 text-sm"
@@ -167,9 +212,64 @@ export default async function HeroDetailPage({ params }: PageProps) {
         >
           Skills
         </h3>
-        {skills.length === 0 ? (
+        {skillHistory.length === 0 && skills.length === 0 ? (
           <p className="text-sm opacity-50">No skills found for {hero.name}.</p>
+        ) : skillHistory.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table
+              className="w-full text-xs border-collapse font-mono"
+              style={{ borderColor: "var(--border-color)" }}
+            >
+              <thead>
+                <tr
+                  className="text-left uppercase tracking-wider opacity-50"
+                  style={{ borderBottom: "1px solid var(--border-color)" }}
+                >
+                  <th className="pb-2 pr-4">Skill</th>
+                  <th className="pb-2 pr-4">Name</th>
+                  <th className="pb-2 pr-4">Covered</th>
+                  <th className="pb-2 pr-4">First Covered</th>
+                  <th className="pb-2">Last Changed</th>
+                </tr>
+              </thead>
+              <tbody>
+                {skillHistory.map((skill) => (
+                  <tr
+                    key={skill.skill_id}
+                    style={{ borderBottom: "1px solid var(--border-color)" }}
+                  >
+                    <td className="py-1.5 pr-4 opacity-70">{skill.skill_id}</td>
+                    <td className="py-1.5 pr-4">{skill.skill_name}</td>
+                    <td className="py-1.5 pr-4">
+                      <span
+                        className="inline-block px-1.5 py-0.5 rounded text-xs font-bold"
+                        style={{
+                          backgroundColor:
+                            skill.currently_covered === 1
+                              ? "#a6e3a1"
+                              : "rgba(243,139,168,0.25)",
+                          color:
+                            skill.currently_covered === 1
+                              ? "#1e1e2e"
+                              : "#f38ba8",
+                        }}
+                      >
+                        {skill.currently_covered === 1 ? "YES" : "NO"}
+                      </span>
+                    </td>
+                    <td className="py-1.5 pr-4 opacity-70">
+                      {shortDate(skill.first_seen_at)}
+                    </td>
+                    <td className="py-1.5 opacity-70">
+                      {shortDate(skill.last_changed_at)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         ) : (
+          /* Fall back to plain skill list if no coverage history yet */
           <div className="overflow-x-auto">
             <table
               className="w-full text-xs border-collapse font-mono"
@@ -182,7 +282,6 @@ export default async function HeroDetailPage({ params }: PageProps) {
                 >
                   <th className="pb-2 pr-4">Skill ID</th>
                   <th className="pb-2 pr-4">Name</th>
-                  <th className="pb-2">JSON Path</th>
                 </tr>
               </thead>
               <tbody>
@@ -193,7 +292,6 @@ export default async function HeroDetailPage({ params }: PageProps) {
                   >
                     <td className="py-1.5 pr-4 opacity-70">{skill.skill_id}</td>
                     <td className="py-1.5 pr-4">{skill.name}</td>
-                    <td className="py-1.5 opacity-50 text-xs">{skill.json_path}</td>
                   </tr>
                 ))}
               </tbody>
