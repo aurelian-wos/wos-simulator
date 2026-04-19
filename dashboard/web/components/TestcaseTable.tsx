@@ -22,7 +22,7 @@ export default function TestcaseTable({ testcases }: TestcaseTableProps) {
     return testcases.filter((t) => {
       if (fileFilter !== "__all__" && t.file !== fileFilter) return false;
       if (onlyFailing && t.passes !== 0) return false;
-      if (onlyBhSig && !(t.q <= 0.05)) return false;
+      if (onlyBhSig && !((t.q ?? 1) <= 0.05)) return false;
       if (!showWaived && t.waived_bool === 1) return false;
       return true;
     });
@@ -123,7 +123,7 @@ export default function TestcaseTable({ testcases }: TestcaseTableProps) {
           </thead>
           <tbody>
             {filtered.map((tc, i) => {
-              const isBhSig = tc.q <= 0.05 && tc.passes === 0;
+              const isBhSig = (tc.q ?? 1) <= 0.05 && tc.passes === 0;
               const isWaived = tc.waived_bool === 1;
               return (
                 <tr
@@ -149,7 +149,7 @@ export default function TestcaseTable({ testcases }: TestcaseTableProps) {
                     className="py-1.5 pr-3"
                     style={{
                       color:
-                        Math.abs(tc.bias_pct) > 5 ? "#f38ba8" : "inherit",
+                        Math.abs(tc.bias_pct ?? 0) > 5 ? "#f38ba8" : "inherit",
                     }}
                   >
                     {tc.bias_pct?.toFixed(2)}%
@@ -158,7 +158,7 @@ export default function TestcaseTable({ testcases }: TestcaseTableProps) {
                   <td
                     className="py-1.5 pr-3"
                     style={{
-                      color: tc.q <= 0.05 ? "#f38ba8" : "inherit",
+                      color: (tc.q ?? 1) <= 0.05 ? "#f38ba8" : "inherit",
                     }}
                   >
                     {tc.q?.toFixed(4)}

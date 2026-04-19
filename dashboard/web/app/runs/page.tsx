@@ -5,7 +5,7 @@ import RunsTrendChart from "@/components/RunsTrendChart";
 
 export const dynamic = "force-dynamic";
 
-function formatDate(iso: string): string {
+function formatDate(iso: string | null | undefined): string {
   if (!iso) return "—";
   try {
     return new Date(iso).toLocaleString();

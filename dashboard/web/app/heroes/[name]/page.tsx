@@ -217,7 +217,7 @@ export default async function HeroDetailPage({ params }: PageProps) {
               </thead>
               <tbody>
                 {testcases.map((tc, i) => {
-                  const isBhSig = tc.q <= 0.05 && tc.passes === 0;
+                  const isBhSig = (tc.q ?? 1) <= 0.05 && tc.passes === 0;
                   const isWaived = tc.waived_bool === 1;
                   return (
                     <tr
@@ -242,14 +242,14 @@ export default async function HeroDetailPage({ params }: PageProps) {
                         className="py-1.5 pr-3"
                         style={{
                           color:
-                            Math.abs(tc.bias_pct) > 5 ? "#f38ba8" : "inherit",
+                            Math.abs(tc.bias_pct ?? 0) > 5 ? "#f38ba8" : "inherit",
                         }}
                       >
                         {tc.bias_pct?.toFixed(2)}%
                       </td>
                       <td
                         className="py-1.5 pr-3"
-                        style={{ color: tc.q <= 0.05 ? "#f38ba8" : "inherit" }}
+                        style={{ color: (tc.q ?? 1) <= 0.05 ? "#f38ba8" : "inherit" }}
                       >
                         {tc.q?.toFixed(4)}
                       </td>

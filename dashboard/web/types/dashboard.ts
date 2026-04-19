@@ -7,38 +7,40 @@
 
 export interface Run {
   id: string;
-  started_at: string;
+  started_at: string | null;
   finished_at: string;
   git_sha: string;
   dirty: number; // 0 | 1
-  baseline_git_sha: string;
+  baseline_git_sha: string | null;
   cli_args_json: string;
   thresholds_json: string;
-  overall_avg_error_pct: number;
-  bh_sig_count: number;
+  overall_avg_error_pct: number | null;
+  bh_sig_count: number | null;
   summary_json: string;
   patch_blob_id: string | null;
   untracked_blob_id: string | null;
 }
 
 export interface RunTestcase {
+  id: number; // AUTOINCREMENT surrogate key
   run_id: string;
   file: string;
   testcase_id: string;
   idx: number;
   n_sim: number;
   n_game: number;
-  mu_sim: number;
-  mu_game: number;
-  bias_pct: number;
-  t: number;
-  q: number;
+  mu_sim: number | null;
+  mu_game: number | null;
+  bias_pct: number | null;
+  t: number | null;
+  q: number | null;
   passes: number; // 0 | 1
   stat_type: string;
   waived_bool: number; // 0 | 1
 }
 
 export interface RunTestcaseFile {
+  id: number; // AUTOINCREMENT surrogate key
   run_id: string;
   file_path: string;
   sha256: string;
@@ -47,7 +49,7 @@ export interface RunTestcaseFile {
 export interface Blob {
   id: string;
   kind: "patch" | "untracked_manifest";
-  contentGzip: Buffer;
+  content_gzip: Buffer; // raw column name — better-sqlite3 returns snake_case
 }
 
 export interface Hero {
