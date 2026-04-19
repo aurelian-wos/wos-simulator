@@ -60,40 +60,71 @@ function makeShortLabel(
   return label;
 }
 
-// Build `bridge` companion array that linearly interpolates over *interior*
-// null gaps in `actual`. Leading/trailing nulls stay null so the line does
-// not reach out past real data on either end.
-function interpolateBridge(actual: (number | null)[]): (number | null)[] {
+// Build TWO companion arrays (`even`, `odd`) that bridge interior null gaps.
+// Consecutive gaps alternate between the two series so that — with
+// connectNulls={false} on each — the dashed line can never cross through a
+// real-data region between two gaps (which caused the "duplicate dashed line
+// alongside solid" defect). Leading/trailing nulls stay null on both series
+// so the line does not reach past real data on either end.
+//
+// Within each gap we sample a cubic Hermite curve whose tangents at the left
+// and right anchors match the slopes of the adjacent solid-line segments.
+// When the gap is one run wide this reduces to a straight line; for longer
+// gaps the curve leaves/enters the anchor with the same gradient as the
+// solid neighbour, giving a visually smooth handoff.
+function computeBridges(
+  actual: (number | null)[],
+): { even: (number | null)[]; odd: (number | null)[] } {
   const n = actual.length;
-  const bridge: (number | null)[] = new Array(n).fill(null);
+  const even: (number | null)[] = new Array(n).fill(null);
+  const odd: (number | null)[] = new Array(n).fill(null);
+
+  const tangent = (anchorIdx: number, dir: 1 | -1): number => {
+    const anchor = actual[anchorIdx] as number;
+    let nextIdx = anchorIdx + dir;
+    while (nextIdx >= 0 && nextIdx < n && actual[nextIdx] === null) {
+      nextIdx += dir;
+    }
+    if (nextIdx < 0 || nextIdx >= n) return 0;
+    const neighbour = actual[nextIdx] as number;
+    // Slope per unit index, expressed as rise going rightward.
+    return (neighbour - anchor) / (nextIdx - anchorIdx) * dir;
+  };
+
+  let gapCount = 0;
   let i = 0;
   while (i < n) {
     if (actual[i] !== null) {
       i++;
       continue;
     }
-    // Found start of a null run at i; find [i..j-1] is null, j points past end.
     let j = i;
     while (j < n && actual[j] === null) j++;
     const leftIdx = i - 1;
     const rightIdx = j;
     if (leftIdx >= 0 && rightIdx < n) {
-      const leftVal = actual[leftIdx] as number;
-      const rightVal = actual[rightIdx] as number;
+      const target = gapCount % 2 === 0 ? even : odd;
+      const yL = actual[leftIdx] as number;
+      const yR = actual[rightIdx] as number;
       const span = rightIdx - leftIdx;
+      // Tangents from adjacent solid data (per-unit-index slopes).
+      const mL = tangent(leftIdx, -1);
+      const mR = tangent(rightIdx, +1);
+      target[leftIdx] = yL;
+      target[rightIdx] = yR;
       for (let k = i; k < j; k++) {
         const t = (k - leftIdx) / span;
-        bridge[k] = leftVal + (rightVal - leftVal) * t;
+        const h00 = 2 * t ** 3 - 3 * t ** 2 + 1;
+        const h10 = t ** 3 - 2 * t ** 2 + t;
+        const h01 = -2 * t ** 3 + 3 * t ** 2;
+        const h11 = t ** 3 - t ** 2;
+        target[k] = h00 * yL + h10 * span * mL + h01 * yR + h11 * span * mR;
       }
-      // Duplicate the endpoints so the dashed segment visually connects to
-      // the solid line's anchor points (Recharts does not draw a segment
-      // from a non-null neighbour into a connectNulls series).
-      bridge[leftIdx] = leftVal;
-      bridge[rightIdx] = rightVal;
+      gapCount++;
     }
     i = j;
   }
-  return bridge;
+  return { even, odd };
 }
 
 export default function TestcaseVarianceChart({ rows }: Props) {
@@ -154,10 +185,11 @@ export default function TestcaseVarianceChart({ rows }: Props) {
     return makeShortLabel(entry.file, entry.testcase_id, entry.idx, hasMultiIds);
   });
 
-  // Per-series value arrays aligned to the run index, plus a bridge array
-  // that linearly interpolates interior gaps only.
+  // Per-series value arrays aligned to the run index, plus two alternating
+  // bridge arrays that smoothly interpolate interior gaps only.
   const seriesActual: (number | null)[][] = [];
-  const seriesBridge: (number | null)[][] = [];
+  const seriesBridgeEven: (number | null)[][] = [];
+  const seriesBridgeOdd: (number | null)[][] = [];
   for (let s = 0; s < selected.length; s++) {
     const actual: (number | null)[] = new Array(runs.length).fill(null);
     for (const pt of selected[s].points) {
@@ -165,7 +197,9 @@ export default function TestcaseVarianceChart({ rows }: Props) {
       if (ri !== undefined) actual[ri] = pt.bias_pct;
     }
     seriesActual.push(actual);
-    seriesBridge.push(interpolateBridge(actual));
+    const { even, odd } = computeBridges(actual);
+    seriesBridgeEven.push(even);
+    seriesBridgeOdd.push(odd);
   }
 
   // Each entry = one run, equally spaced.
@@ -176,7 +210,8 @@ export default function TestcaseVarianceChart({ rows }: Props) {
     };
     for (let s = 0; s < seriesKeys.length; s++) {
       entry[`${seriesKeys[s]}_actual`] = seriesActual[s][i];
-      entry[`${seriesKeys[s]}_bridge`] = seriesBridge[s][i];
+      entry[`${seriesKeys[s]}_bridge_e`] = seriesBridgeEven[s][i];
+      entry[`${seriesKeys[s]}_bridge_o`] = seriesBridgeOdd[s][i];
     }
     return entry;
   });
@@ -244,20 +279,33 @@ export default function TestcaseVarianceChart({ rows }: Props) {
           />
           {seriesKeys.flatMap((key, i) => {
             const colour = COLOURS[i % COLOURS.length];
+            const bridgeProps = {
+              stroke: colour,
+              strokeWidth: 1,
+              strokeDasharray: "4 3",
+              opacity: 0.8,
+              dot: false,
+              isAnimationActive: false,
+              // Only connect adjacent non-null samples within a single gap's
+              // anchor-interp-anchor triple. Between two gaps the series has
+              // at least one null, so the dashed line correctly breaks and
+              // does not retrace the solid segment in between.
+              connectNulls: false,
+              legendType: "none" as const,
+              tooltipType: "none" as const,
+            };
             return [
               <Line
-                key={`${key}__bridge`}
+                key={`${key}__bridge_e`}
                 type="linear"
-                dataKey={`${key}_bridge`}
-                stroke={colour}
-                strokeWidth={1}
-                strokeDasharray="4 3"
-                opacity={0.8}
-                dot={false}
-                isAnimationActive={false}
-                connectNulls={true}
-                legendType="none"
-                tooltipType="none"
+                dataKey={`${key}_bridge_e`}
+                {...bridgeProps}
+              />,
+              <Line
+                key={`${key}__bridge_o`}
+                type="linear"
+                dataKey={`${key}_bridge_o`}
+                {...bridgeProps}
               />,
               <Line
                 key={`${key}__actual`}
