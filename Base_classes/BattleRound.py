@@ -252,11 +252,14 @@ class BattleRound():
         # This pass iterates (ut -> extra_vs) across all enemy unit types and is the
         # only place fan-out splash happens. A benefit only reaches this pass if it
         # has extra_attack=True; its benefit_vs setting controls the fan-out shape:
-        #   benefit_vs="all"    -> hits every surviving enemy type (splash)
-        #   benefit_vs="target" -> hits the primary target only
+        #   benefit_vs="all"    -> fan-out splash: hits every surviving enemy type
+        #   benefit_vs="any"    -> dynamic primary: hits whatever `ut` is currently
+        #                          attacking (self.targets[ut]) regardless of type.
+        #                          Refreshes each round/attack with the primary target.
+        #   benefit_vs="target" -> locked primary: captures the primary target type
+        #                          at benefit-creation time; only fires while the
+        #                          current primary target still matches that type.
         #   benefit_vs=<unit>   -> hits that type only
-        # `benefit_vs="any"` is only meaningful in PASS 1 (global buffs on normal
-        # attacks) and is rejected at load time on extra_attack effects.
         attack_keys = ['DamageUp', 'OppDefenseDown']
         defense_keys = ['DefenseUp', 'OppDamageDown']
 
@@ -278,6 +281,12 @@ class BattleRound():
                 for benefit in self.round_benefits:
                     if benefit.benefit_type not in attack_keys: continue
                     if not benefit.is_valid(ut, extra_vs, self.round_idx): continue
+
+                    # benefit_vs="any" on an extra_attack benefit is dynamic-primary:
+                    # the extra damage tracks `ut`'s current primary target rather
+                    # than fanning out. Skip pairs where extra_vs is not that target.
+                    if benefit.extra_attack and benefit._effect.ben_vs_unit == 'any':
+                        if extra_vs != primary_target: continue
 
                     ben_value = float(benefit.correct_value(self.round_idx))
 

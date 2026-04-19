@@ -188,17 +188,17 @@ class Effect():
         # ben_for_unit values: All, friendly, trigger (benefit only applies to unit who triggered it), inf, lanc, mark
         self.ben_vs_unit = effect_dict['benefit_types']['benefit_vs']
         # ben_vs_unit values:
-        #   all    -- fan-out splash: benefit applies against every surviving enemy troop type.
-        #             Only valid when extra_attack=True. Drives the pass-2 fan-out loop
-        #             (BattleRound.calc_extra_kills) so the extra attack hits each enemy type
-        #             that is still alive.
-        #   any    -- "whatever is being hit": benefit applies regardless of which enemy
-        #             troop type the current attack is aimed at. Use this for global buffs
-        #             (e.g. "increase damage dealt by X%") where the intent is "active all
-        #             the time", not "add extra attacks against every type". Mechanically
-        #             vs_units is populated with every UnitType, so is_valid(ut, vs, _) is
-        #             True for any vs; semantically distinct from `all` because it does NOT
-        #             imply fan-out / extra attacks.
+        #   all    -- fan-out splash: on extra_attack, the extra damage hits every
+        #             surviving enemy troop type. Only valid when extra_attack=True.
+        #             Drives the pass-2 fan-out loop (BattleRound.calc_round_kills).
+        #   any    -- "whatever my troop is currently attacking". On normal attacks
+        #             this is a simple global buff: vs_units expands to every UnitType
+        #             so is_valid(ut, vs, _) is True for any vs. On extra_attack it is
+        #             dynamic-primary: pass 2 in BattleRound.calc_round_kills narrows
+        #             it to `self.targets[ut]` (the current primary target of the
+        #             attacking unit type), regardless of that target's type, and
+        #             regardless of what type the primary was when the benefit was
+        #             created. No fan-out.
         #   target -- locked to whichever enemy troop type was the primary target at the
         #             moment this benefit was created. Stays locked for the benefit's whole
         #             lifetime even if primary targets change (use a re-triggering, non-
@@ -433,13 +433,19 @@ class Benefit:
             raise ValueError(f"Unknown value for ben_for_units ({roundEff._effect.ben_for_unit}) for hero '{roundEff._effect._skill.skill_hero}' effect '{roundEff.r_eff_id}' ")
 
         # vs_units : Unit types the benefit applies against.
-        #   "target" = locked to the primary target at creation time (e.g. Mia S2, Molly S2)
-        #   "all"    = fan-out to every enemy type (extra_attack only, e.g. Norah S2)
-        #   "any"    = active regardless of what's being hit; no fan-out implied.
-        #              Use for global buffs on normal attacks (e.g. Jessie S1 DamageUp).
+        #   "target" = locked to the primary target's unit type at benefit-creation
+        #              time (e.g. Mia S2, Molly S2). If a later round's primary target
+        #              is a different type, the benefit no longer fires.
+        #   "all"    = fan-out splash to every enemy type. extra_attack only (e.g. Norah S2).
+        #   "any"    = active regardless of the enemy type being evaluated. On normal
+        #              attacks this is a simple global buff (e.g. Jessie S1 DamageUp).
+        #              On extra_attack, BattleRound.calc_round_kills further narrows
+        #              it to the attacking unit type's CURRENT primary target — i.e.
+        #              dynamic-primary (not locked, not fan-out).
         #   specific type (e.g. "lancer") = only vs that type (e.g. Wayne S2)
-        # Note: `all` and `any` both expand to vs_units=[every UnitType] mechanically,
-        # but only `all` is allowed on extra_attack effects (see Effect.__init__ check).
+        # Note: `all` and `any` both expand vs_units to every UnitType here. That is
+        # correct for PASS 1. The PASS 2 (extra_attack) distinction between them is
+        # enforced in BattleRound.calc_round_kills, not via vs_units.
         if roundEff._effect.ben_vs_unit == 'target':
             self.vs_units = [vs]
         elif roundEff._effect.ben_vs_unit in ('all', 'any'):
