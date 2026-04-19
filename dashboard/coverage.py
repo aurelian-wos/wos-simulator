@@ -98,15 +98,16 @@ def snapshot_coverage(run_id: str, conn: sqlite3.Connection, repo_root: Path) ->
             conn.execute(
                 """
                 INSERT INTO coverage_snapshots
-                    (run_id, hero, skill_num, skill_name,
+                    (run_id, hero, skill_num, skill_name, skill_id,
                      testcase_count, battle_outcome_count, covered_bool)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     run_id,
                     hero,
                     skill_num,
                     skill_name,
+                    str(skill_num),
                     hero_tc_count[hero],
                     hero_outcome_count[hero],
                     1 if hero_skill_covered[(hero, skill_num)] else 0,

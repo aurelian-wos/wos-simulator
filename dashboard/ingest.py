@@ -32,6 +32,11 @@ try:
 except ImportError:
     _snapshot_coverage = None  # type: ignore[assignment]
 
+try:
+    from dashboard.seed_heroes import seed_heroes as _seed_heroes
+except ImportError:
+    _seed_heroes = None  # type: ignore[assignment]
+
 _REPO_ROOT = Path(__file__).parent.parent
 DB_PATH = _REPO_ROOT / "test_results" / "dashboard.sqlite"
 _MIGRATIONS_DIR = Path(__file__).parent / "migrations"
@@ -83,6 +88,8 @@ def open_db(db_path: Optional[Path | str] = None) -> sqlite3.Connection:
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
     _apply_migrations(conn)
+    if _seed_heroes is not None:
+        _seed_heroes(conn)
     return conn
 
 
