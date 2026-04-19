@@ -15,7 +15,7 @@ import Database from "better-sqlite3";
 import fs from "fs";
 import path from "path";
 import zlib from "zlib";
-import type { CoverageSnapshot, Hero, HeroSkill, Run, RunDeltaCounts, RunTestcase, RunWithDelta } from "@/types/dashboard";
+import type { CoverageSnapshot, Hero, HeroSkill, Run, RunDeltaCounts, RunTestcase, RunWithDelta, TestcaseTrendRow } from "@/types/dashboard";
 
 /**
  * Absolute path to the SQLite database file.
@@ -542,6 +542,29 @@ export function getRunsWithDelta(limit = 50): RunWithDelta[] {
     return results;
   } catch (err) {
     console.error("[wos-dashboard] getRunsWithDelta failed:", err);
+    return [];
+  }
+}
+
+/**
+ * Return per-testcase bias_pct history across the last `limit` runs.
+ * Returns flat rows; the chart component pivots and computes variance.
+ */
+export function getTestcaseBiasTrend(limit = 50): TestcaseTrendRow[] {
+  const database = getDb();
+  if (!database) return [];
+  try {
+    return database
+      .prepare(
+        `SELECT rt.file, rt.testcase_id, rt.idx, r.id as run_id, r.started_at, rt.bias_pct
+         FROM run_testcases rt
+         JOIN runs r ON rt.run_id = r.id
+         WHERE r.id IN (SELECT id FROM runs ORDER BY started_at DESC LIMIT ?)
+         ORDER BY rt.file, rt.testcase_id, rt.idx, r.started_at ASC`
+      )
+      .all(limit) as TestcaseTrendRow[];
+  } catch (err) {
+    console.error("[wos-dashboard] getTestcaseBiasTrend failed:", err);
     return [];
   }
 }

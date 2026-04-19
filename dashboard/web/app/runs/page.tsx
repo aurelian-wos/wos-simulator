@@ -1,12 +1,14 @@
-import { getRunsWithDelta, getRunTrendWithBH } from "@/lib/db";
+import { getRunsWithDelta, getRunTrendWithBH, getTestcaseBiasTrend } from "@/lib/db";
 import RunsHeadlineChart from "@/components/RunsHeadlineChart";
 import RunsAccordionTable from "@/components/RunsAccordionTable";
+import TestcaseVarianceChart from "@/components/TestcaseVarianceChart";
 
 export const dynamic = "force-dynamic";
 
 export default function RunsPage() {
   const runs = getRunsWithDelta(50);
   const trendData = getRunTrendWithBH(50);
+  const trendRows = getTestcaseBiasTrend(50);
 
   return (
     <div>
@@ -18,6 +20,8 @@ export default function RunsPage() {
       </h2>
 
       <RunsHeadlineChart data={trendData} />
+
+      <TestcaseVarianceChart rows={trendRows} />
 
       {runs.length === 0 ? (
         <div

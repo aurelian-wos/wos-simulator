@@ -89,3 +89,12 @@ export interface RunWithDelta extends Run {
   count_added: number;
   count_retired: number;
 }
+
+export interface TestcaseTrendRow {
+  file: string;
+  testcase_id: string;
+  idx: number;
+  run_id: string;
+  started_at: string;
+  bias_pct: number | null;
+}
