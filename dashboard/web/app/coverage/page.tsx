@@ -5,6 +5,7 @@ import {
   getCoverageMatrix,
   getPreviousRun,
   getRunTestcaseKeys,
+  getMissingTables,
 } from "@/lib/db";
 import type { CoverageSnapshot } from "@/types/dashboard";
 
@@ -33,6 +34,7 @@ function StatCard({ label, value }: { label: string; value: string }) {
 }
 
 export default function CoveragePage() {
+  const missingTables = getMissingTables();
   const heroes = getHeroes();
   const latestRunId = getLatestRunId();
 
@@ -45,6 +47,22 @@ export default function CoveragePage() {
         >
           Coverage (Latest Run)
         </h2>
+        {missingTables.length > 0 && (
+          <div
+            className="rounded p-3 mb-4 text-sm font-mono"
+            style={{
+              border: "1px solid #f38ba8",
+              backgroundColor: "rgba(243,139,168,0.08)",
+              color: "#f38ba8",
+            }}
+          >
+            DB misconfiguration: missing tables:{" "}
+            <strong>{missingTables.join(", ")}</strong>. Run{" "}
+            <code>python dashboard/seed_heroes.py</code> to seed the hero
+            catalogue (one-time setup, separate from{" "}
+            <code>check_testcases.py</code>).
+          </div>
+        )}
         <div
           className="rounded p-6 text-sm opacity-60"
           style={{ border: "1px solid var(--border-color)" }}
@@ -68,9 +86,16 @@ export default function CoveragePage() {
     lookup.get(row.hero)!.set(row.skill_id, row);
   }
 
-  // Summary stats
-  const totalCells = matrixRows.length;
-  const coveredCells = matrixRows.filter((r) => r.covered_bool === 1).length;
+  // Only show heroes that have at least one coverage entry AND exist in the heroes table
+  const heroesWithData = heroes.filter((h) => lookup.has(h.name));
+
+  // Coverage stats scoped to heroes present in the heroes table.
+  // This avoids a misleading % when coverage_snapshots has data but the heroes
+  // table is missing or empty (heroesWithData would be []).
+  const heroSet = new Set(heroesWithData.map((h) => h.name));
+  const filteredRows = matrixRows.filter((r) => heroSet.has(r.hero));
+  const totalCells = filteredRows.length;
+  const coveredCells = filteredRows.filter((r) => r.covered_bool === 1).length;
   const coveragePct =
     totalCells > 0 ? Math.round((coveredCells / totalCells) * 100) : null;
 
@@ -117,9 +142,6 @@ export default function CoveragePage() {
     }
   }
 
-  // Only show heroes that have at least one coverage entry
-  const heroesWithData = heroes.filter((h) => lookup.has(h.name));
-
   return (
     <div>
       <h2
@@ -128,6 +150,23 @@ export default function CoveragePage() {
       >
         Coverage (Latest Run)
       </h2>
+
+      {missingTables.length > 0 && (
+        <div
+          className="rounded p-3 mb-4 text-sm font-mono"
+          style={{
+            border: "1px solid #f38ba8",
+            backgroundColor: "rgba(243,139,168,0.08)",
+            color: "#f38ba8",
+          }}
+        >
+          DB misconfiguration: missing tables:{" "}
+          <strong>{missingTables.join(", ")}</strong>. Run{" "}
+          <code>python dashboard/seed_heroes.py</code> to seed the hero
+          catalogue (one-time setup, separate from{" "}
+          <code>check_testcases.py</code>).
+        </div>
+      )}
 
       {showGapWarning && (
         <div
@@ -206,7 +245,7 @@ export default function CoveragePage() {
                     className="pb-2 pr-2 text-left text-xs uppercase tracking-wider opacity-50"
                     style={{ minWidth: 32 }}
                   >
-                    Tier
+                    Gen
                   </th>
                   {skillIds.map((sid) => (
                     <th
@@ -245,7 +284,7 @@ export default function CoveragePage() {
                         className="py-1 pr-3 text-xs opacity-50"
                         style={{ minWidth: 32 }}
                       >
-                        {hero.tier}
+                        {hero.generation}
                       </td>
                       {skillIds.map((sid) => {
                         const snap = heroMap.get(sid);

@@ -5,6 +5,7 @@ import {
   getHeroTestcases,
   getHeroErrorHistory,
   getLatestRunId,
+  getMissingTables,
 } from "@/lib/db";
 import HeroTrendChart from "@/components/HeroTrendChart";
 
@@ -42,6 +43,7 @@ export default async function HeroDetailPage({ params }: PageProps) {
   const hero = getHero(heroName);
 
   if (!hero) {
+    const missingTables = getMissingTables();
     return (
       <div>
         <Link
@@ -51,12 +53,31 @@ export default async function HeroDetailPage({ params }: PageProps) {
         >
           &larr; Back to Heroes
         </Link>
-        <div
-          className="rounded p-6 text-sm opacity-60 mt-4"
-          style={{ border: "1px solid var(--border-color)" }}
-        >
-          Hero <code className="font-mono">{heroName}</code> not found.
-        </div>
+        {missingTables.length > 0 ? (
+          <div
+            className="rounded p-3 mt-4 text-sm font-mono"
+            style={{
+              border: "1px solid #f38ba8",
+              backgroundColor: "rgba(243,139,168,0.08)",
+              color: "#f38ba8",
+            }}
+          >
+            DB misconfiguration: missing tables:{" "}
+            <strong>{missingTables.join(", ")}</strong>. Run{" "}
+            <code>python dashboard/seed_heroes.py</code> to seed the hero
+            catalogue (one-time setup, separate from{" "}
+            <code>check_testcases.py</code>).
+          </div>
+        ) : (
+          <div
+            className="rounded p-6 text-sm opacity-60 mt-4"
+            style={{ border: "1px solid var(--border-color)" }}
+          >
+            Hero <code className="font-mono">{heroName}</code> not found in the
+            heroes table. Check that the name matches a hero in{" "}
+            <code className="font-mono">assets/hero_skills/</code>.
+          </div>
+        )}
       </div>
     );
   }
@@ -100,7 +121,7 @@ export default async function HeroDetailPage({ params }: PageProps) {
             color: "var(--sidebar-active)",
           }}
         >
-          {hero.tier ?? "—"}
+          {hero.generation ?? "—"}
         </span>
         {classes.length > 0 && (
           <span className="text-xs opacity-50">{classes.join(", ")}</span>

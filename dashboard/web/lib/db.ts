@@ -134,7 +134,12 @@ export function getHeroes(): Hero[] {
   if (!database) return [];
   try {
     return database
-      .prepare(`SELECT * FROM heroes ORDER BY tier, name`)
+      .prepare(
+        `SELECT * FROM heroes ORDER BY CASE generation
+          WHEN 'Gen 6' THEN 1 WHEN 'Gen 5' THEN 2 WHEN 'Gen 4' THEN 3
+          WHEN 'Gen 3' THEN 4 WHEN 'Gen 2' THEN 5 WHEN 'Gen 1' THEN 6
+          WHEN 'SR' THEN 7 ELSE 8 END, name`
+      )
       .all() as Hero[];
   } catch (err) {
     console.error("[wos-dashboard] getHeroes failed:", err);
@@ -143,7 +148,7 @@ export function getHeroes(): Hero[] {
 }
 
 interface CoverageRow extends CoverageSnapshot {
-  hero_tier: string | null;
+  hero_generation: string | null;
 }
 
 /**
@@ -164,11 +169,14 @@ export function getCoverageSnapshots(runId: string): CoverageRow[] {
     }
     return database
       .prepare(
-        `SELECT cs.*, h.tier as hero_tier
+        `SELECT cs.*, h.generation as hero_generation
          FROM coverage_snapshots cs
          LEFT JOIN heroes h ON cs.hero = h.name
          WHERE cs.run_id = ?
-         ORDER BY h.tier, cs.hero, cs.skill_id`
+         ORDER BY CASE h.generation
+           WHEN 'Gen 6' THEN 1 WHEN 'Gen 5' THEN 2 WHEN 'Gen 4' THEN 3
+           WHEN 'Gen 3' THEN 4 WHEN 'Gen 2' THEN 5 WHEN 'Gen 1' THEN 6
+           WHEN 'SR' THEN 7 ELSE 8 END, cs.hero, cs.skill_id`
       )
       .all(resolvedId) as CoverageRow[];
   } catch (err) {

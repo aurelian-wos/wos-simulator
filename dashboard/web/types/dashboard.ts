@@ -55,7 +55,7 @@ export interface Blob {
 export interface Hero {
   name: string;
   classes: string; // JSON array string
-  tier: string;
+  generation: string | null;
 }
 
 export interface HeroSkill {

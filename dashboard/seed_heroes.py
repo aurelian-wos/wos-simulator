@@ -6,12 +6,22 @@ import sqlite3
 from pathlib import Path
 from typing import Optional
 
-TIER_MAP = {
-    "Gwen": "1", "Hector": "1", "Norah": "1", "Mia": "1",
-    "Lynn": "1", "Logan": "1", "Reina": "1", "Greg": "1",
-    "Alonso": "1", "Philly": "1", "Flint": "1", "Jeronimo": "1",
-    "Zinman": "1", "Molly": "1",
-    "Renee": "2", "Wayne": "2", "WuMing": "2",
+GEN_MAP = {
+    # Gen 6
+    "WuMing": "Gen 6", "Renee": "Gen 6", "Wayne": "Gen 6",
+    # Gen 5
+    "Hector": "Gen 5", "Norah": "Gen 5", "Gwen": "Gen 5",
+    # Gen 4
+    "Ahmose": "Gen 4", "Reina": "Gen 4", "Lynn": "Gen 4",
+    # Gen 3
+    "Logan": "Gen 3", "Mia": "Gen 3", "Greg": "Gen 3",
+    # Gen 2
+    "Flint": "Gen 2", "Philly": "Gen 2", "Alonso": "Gen 2",
+    # Gen 1
+    "Jeronimo": "Gen 1", "Natalia": "Gen 1", "Zinman": "Gen 1", "Molly": "Gen 1",
+    # SR
+    "Patrick": "SR", "Seo-yoon": "SR", "Jasser": "SR", "Jessie": "SR",
+    "Lumak": "SR", "Bahiti": "SR", "Sergey": "SR",
 }
 
 
@@ -30,12 +40,12 @@ def seed_heroes(conn: sqlite3.Connection, repo_root: Optional[Path] = None) -> N
                 e["skill_troop_type"] for e in entries if e.get("skill_troop_type")
             ))
             classes_json = json.dumps(troop_types)
-            tier = TIER_MAP.get(hero_name)
+            generation = GEN_MAP.get(hero_name)
             json_path = f"assets/hero_skills/{json_file.name}"
 
             conn.execute(
-                "INSERT OR REPLACE INTO heroes (name, classes, tier) VALUES (?, ?, ?)",
-                (hero_name, classes_json, tier),
+                "INSERT OR REPLACE INTO heroes (name, classes, generation) VALUES (?, ?, ?)",
+                (hero_name, classes_json, generation),
             )
 
             for entry in entries:
