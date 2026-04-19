@@ -1,5 +1,9 @@
 import Link from "next/link";
-import { computeIncrementalDiff } from "@/lib/diff";
+import {
+  computeCrossShaDiff,
+  formatCrossShaBanner,
+  resolveRepoRoot,
+} from "@/lib/diff";
 import {
   getRun,
   getRunTestcases,
@@ -97,21 +101,33 @@ export default async function RunDetailPage({ params }: PageProps) {
     removedKeys = previousKeys.filter((k) => !currentSet.has(toStr(k)));
   }
 
-  // Incremental diff computation
+  // Incremental diff computation. computeCrossShaDiff handles same-SHA and
+  // different-SHA cases uniformly; when SHAs are dangling it falls back to
+  // same-baseline reconstruction and we surface a banner.
   let diffLabel = "Dirty State Patch (vs clean baseline)";
   let diffWarning: string | null = null;
   let displayPatch: string | null = patchText;
+  let rawCurrPatch: string | null = null;
 
   if (patchText && previousRun) {
     const prevPatch = getRunPatch(previousRun.id);
     if (prevPatch !== null && previousRun.dirty === 1) {
-      if (previousRun.git_sha === run.git_sha) {
-        diffLabel = "Code Changes Since Previous Run";
-        displayPatch = computeIncrementalDiff(prevPatch, patchText);
-      } else {
-        diffWarning =
-          "Previous run used a different git baseline — showing full cumulative patch instead of incremental delta.";
-      }
+      const repoRoot = resolveRepoRoot();
+      const result = computeCrossShaDiff(
+        prevPatch,
+        previousRun.git_sha ?? "",
+        patchText,
+        run.git_sha ?? "",
+        repoRoot
+      );
+      diffLabel = "Code Changes Since Previous Run";
+      displayPatch = result.patch || "";
+      diffWarning = formatCrossShaBanner(
+        result,
+        previousRun.git_sha ?? "",
+        run.git_sha ?? ""
+      );
+      rawCurrPatch = patchText;
     } else if (prevPatch === null && previousRun.dirty === 1) {
       diffWarning = "Previous run has no stored patch — showing full cumulative patch.";
     }
@@ -222,7 +238,7 @@ export default async function RunDetailPage({ params }: PageProps) {
       )}
 
       {/* Diff viewer */}
-      {displayPatch && (
+      {displayPatch !== null && (
         <div
           className="rounded p-4 mb-8 overflow-x-auto"
           style={{
@@ -245,7 +261,26 @@ export default async function RunDetailPage({ params }: PageProps) {
               {diffWarning}
             </div>
           )}
-          <DiffViewer patch={displayPatch} />
+          {displayPatch ? (
+            <DiffViewer patch={displayPatch} />
+          ) : (
+            <p className="text-xs opacity-60">
+              No code changes between this run and the previous run.
+            </p>
+          )}
+          {rawCurrPatch && (
+            <details className="mt-4">
+              <summary
+                className="text-xs uppercase tracking-wider opacity-60 cursor-pointer"
+                style={{ color: "var(--sidebar-active)" }}
+              >
+                Show Raw Dirty State Patch (vs Clean Baseline)
+              </summary>
+              <div className="mt-3">
+                <DiffViewer patch={rawCurrPatch} />
+              </div>
+            </details>
+          )}
         </div>
       )}
 

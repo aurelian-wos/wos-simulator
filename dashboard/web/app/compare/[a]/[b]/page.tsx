@@ -1,13 +1,17 @@
 import Link from "next/link";
-import { execSync } from "child_process";
-import path from "path";
+import { execFileSync } from "child_process";
 import {
   getRun,
   getRunDeltaCounts,
   getRunDeltaTable,
   getRunPatch,
 } from "@/lib/db";
-import { computeIncrementalDiff } from "@/lib/diff";
+import {
+  computeCrossShaDiff,
+  formatCrossShaBanner,
+  resolveRepoRoot,
+  isShaReachable,
+} from "@/lib/diff";
 import DiffViewer from "@/components/DiffViewer";
 import CompareTable from "@/components/CompareTable";
 
@@ -56,17 +60,60 @@ function StatCard({
   );
 }
 
-function getGitLog(shaA: string, shaB: string): string[] {
+interface GitLogResult {
+  commits: string[];
+  prevReachable: boolean;
+  currReachable: boolean;
+  error: string | null;
+}
+
+function getGitLog(
+  shaA: string,
+  shaB: string,
+  repoRoot: string | null
+): GitLogResult {
+  if (!repoRoot) {
+    return {
+      commits: [],
+      prevReachable: false,
+      currReachable: false,
+      error: "Could not locate git repo root.",
+    };
+  }
+  const prevReachable = isShaReachable(shaA, repoRoot);
+  const currReachable = isShaReachable(shaB, repoRoot);
+  if (!prevReachable || !currReachable) {
+    return {
+      commits: [],
+      prevReachable,
+      currReachable,
+      error: null,
+    };
+  }
   try {
-    const repoRoot = path.resolve(process.cwd(), "../../../../");
-    const out = execSync(`git log ${shaA}..${shaB} --oneline`, {
-      cwd: repoRoot,
-      encoding: "utf8",
-      timeout: 5000,
-    });
-    return out.trim().split("\n").filter(Boolean);
+    const out = execFileSync(
+      "git",
+      ["log", `${shaA}..${shaB}`, "--oneline"],
+      {
+        cwd: repoRoot,
+        encoding: "utf8",
+        timeout: 5000,
+        stdio: ["ignore", "pipe", "ignore"],
+      }
+    );
+    return {
+      commits: out.trim().split("\n").filter(Boolean),
+      prevReachable: true,
+      currReachable: true,
+      error: null,
+    };
   } catch {
-    return [];
+    return {
+      commits: [],
+      prevReachable: true,
+      currReachable: true,
+      error: "git log failed",
+    };
   }
 }
 
@@ -112,8 +159,11 @@ export default async function ComparePage({ params }: PageProps) {
 
   const shaA = runA.git_sha;
   const shaB = runB.git_sha;
+  const repoRoot = resolveRepoRoot();
   const gitLog =
-    shaA && shaB && shaA !== shaB ? getGitLog(shaA, shaB) : [];
+    shaA && shaB && shaA !== shaB
+      ? getGitLog(shaA, shaB, repoRoot)
+      : { commits: [], prevReachable: true, currReachable: true, error: null };
 
   const deltaError =
     runA.overall_avg_error_pct != null && runB.overall_avg_error_pct != null
@@ -129,16 +179,20 @@ export default async function ComparePage({ params }: PageProps) {
       ? "#f38ba8"
       : "var(--sidebar-active)";
 
-  let diffLabel = "Run B dirty state patch";
-  let displayPatchB: string | null = patchB;
-  if (
-    patchB &&
-    runA.dirty === 1 &&
-    patchA != null &&
-    runA.git_sha === runB.git_sha
-  ) {
-    diffLabel = "Code Changes (Run A \u2192 Run B)";
-    displayPatchB = computeIncrementalDiff(patchA, patchB);
+  const diffLabel = "Code Changes (Run A \u2192 Run B)";
+  let reconciledPatch: string | null = null;
+  let diffWarning: string | null = null;
+
+  if (patchA && patchB && runA.dirty === 1 && runB.dirty === 1) {
+    const result = computeCrossShaDiff(
+      patchA,
+      shaA ?? "",
+      patchB,
+      shaB ?? "",
+      repoRoot
+    );
+    reconciledPatch = result.patch;
+    diffWarning = formatCrossShaBanner(result, shaA ?? "", shaB ?? "");
   }
 
   return (
@@ -275,13 +329,21 @@ export default async function ComparePage({ params }: PageProps) {
             <h4 className="text-xs uppercase tracking-wider opacity-50 mb-3">
               Git Commits ({shaA.slice(0, 8)} &rarr; {shaB.slice(0, 8)})
             </h4>
-            {gitLog.length === 0 ? (
+            {!gitLog.prevReachable || !gitLog.currReachable ? (
+              <p className="text-xs" style={{ color: "#f9e2af" }}>
+                Baseline unreachable:
+                {!gitLog.prevReachable ? ` ${shaA.slice(0, 8)} (Run A)` : ""}
+                {!gitLog.prevReachable && !gitLog.currReachable ? " and" : ""}
+                {!gitLog.currReachable ? ` ${shaB.slice(0, 8)} (Run B)` : ""}{" "}
+                no longer in git history (rebased/amended away).
+              </p>
+            ) : gitLog.commits.length === 0 ? (
               <p className="text-xs opacity-50">
                 No commits between these SHAs.
               </p>
             ) : (
               <div className="font-mono text-xs space-y-1">
-                {gitLog.map((line, i) => {
+                {gitLog.commits.map((line, i) => {
                   const highlight = CODE_HIGHLIGHT_PATTERNS.some((p) =>
                     line.includes(p)
                   );
@@ -299,8 +361,70 @@ export default async function ComparePage({ params }: PageProps) {
           </div>
         )}
 
-        {/* Run A dirty patch */}
-        {patchA && runA.dirty === 1 && !(runA.git_sha === runB.git_sha && patchB) && (
+        {/* Reconciled cross-SHA diff (primary content) */}
+        {reconciledPatch !== null && (
+          <div
+            className="rounded p-4 mb-6 overflow-x-auto"
+            style={{
+              border: "1px solid var(--border-color)",
+              backgroundColor: "var(--sidebar-bg)",
+            }}
+          >
+            <h4 className="text-xs uppercase tracking-wider opacity-50 mb-3">
+              {diffLabel}
+            </h4>
+            {diffWarning && (
+              <div
+                className="rounded px-3 py-2 mb-3 text-xs"
+                style={{
+                  backgroundColor: "#3d3000",
+                  border: "1px solid #7a6000",
+                  color: "#ffd966",
+                }}
+              >
+                {diffWarning}
+              </div>
+            )}
+            {reconciledPatch ? (
+              <DiffViewer patch={reconciledPatch} />
+            ) : (
+              <p className="text-xs opacity-60">
+                No code changes between Run A and Run B.
+              </p>
+            )}
+            {(patchA || patchB) && (
+              <details className="mt-4">
+                <summary
+                  className="text-xs uppercase tracking-wider opacity-60 cursor-pointer"
+                  style={{ color: "var(--sidebar-active)" }}
+                >
+                  Show raw per-run patches
+                </summary>
+                <div className="mt-3 space-y-4">
+                  {patchA && (
+                    <div>
+                      <h5 className="text-xs uppercase tracking-wider opacity-50 mb-2">
+                        Run A dirty state patch
+                      </h5>
+                      <DiffViewer patch={patchA} />
+                    </div>
+                  )}
+                  {patchB && (
+                    <div>
+                      <h5 className="text-xs uppercase tracking-wider opacity-50 mb-2">
+                        Run B dirty state patch
+                      </h5>
+                      <DiffViewer patch={patchB} />
+                    </div>
+                  )}
+                </div>
+              </details>
+            )}
+          </div>
+        )}
+
+        {/* Single-sided dirty patches (one run dirty, the other clean) */}
+        {reconciledPatch === null && patchA && (
           <div
             className="rounded p-4 mb-6 overflow-x-auto"
             style={{
@@ -314,9 +438,7 @@ export default async function ComparePage({ params }: PageProps) {
             <DiffViewer patch={patchA} />
           </div>
         )}
-
-        {/* Run B dirty patch (or incremental diff) */}
-        {displayPatchB && (
+        {reconciledPatch === null && patchB && (
           <div
             className="rounded p-4 mb-6 overflow-x-auto"
             style={{
@@ -325,17 +447,20 @@ export default async function ComparePage({ params }: PageProps) {
             }}
           >
             <h4 className="text-xs uppercase tracking-wider opacity-50 mb-3">
-              {diffLabel}
+              Run B dirty state patch
             </h4>
-            <DiffViewer patch={displayPatchB} />
+            <DiffViewer patch={patchB} />
           </div>
         )}
 
-        {!patchA && !patchB && gitLog.length === 0 && (
-          <p className="text-xs opacity-50">
-            No code changes to display between these runs.
-          </p>
-        )}
+        {!patchA &&
+          !patchB &&
+          gitLog.commits.length === 0 &&
+          (gitLog.prevReachable && gitLog.currReachable) && (
+            <p className="text-xs opacity-50">
+              No code changes to display between these runs.
+            </p>
+          )}
       </div>
     </div>
   );
