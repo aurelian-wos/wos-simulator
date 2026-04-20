@@ -311,7 +311,7 @@ function mergeSideFromOcr(
 export default function SimulatePage() {
   const [attacker, setAttacker] = useState<SideState>(() => defaultSide());
   const [defender, setDefender] = useState<SideState>(() => defaultSide());
-  const [replicates, setReplicates] = useState<number>(100);
+  const [replicates, setReplicates] = useState<number>(1000);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<ApiResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -481,9 +481,9 @@ export default function SimulatePage() {
           <input
             type="number"
             min={1}
-            max={1000}
+            max={5000}
             value={replicates}
-            onChange={(e) => setReplicates(Math.max(1, Math.min(1000, parseInt(e.target.value || "1", 10))))}
+            onChange={(e) => setReplicates(Math.max(1, Math.min(5000, parseInt(e.target.value || "1", 10))))}
             className="w-28 rounded px-2 py-1 font-mono text-sm"
             style={{
               backgroundColor: "var(--main-bg)",
