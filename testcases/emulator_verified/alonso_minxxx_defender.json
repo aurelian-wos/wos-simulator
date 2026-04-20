@@ -4,23 +4,7 @@
     "description": "Alonso solo defender (replaces Alonso_tc daut_viper_1). WIP attacks with no heroes (1000 inf / 500 lanc / 500 mark t6), minxxx defends with Alonso. Chance-based skills \u2014 collect 8 game results. Reference: WOS-191.",
     "attacker": {
       "name": "[BBQ]XxWIPxX",
-      "heroes": {
-        "Wu Ming": {
-          "skill_1": 2,
-          "skill_2": 2,
-          "skill_3": 0
-        },
-        "Renee": {
-          "skill_1": 3,
-          "skill_2": 3,
-          "skill_3": 3
-        },
-        "Wayne": {
-          "skill_1": 2,
-          "skill_2": 2,
-          "skill_3": 3
-        }
-      },
+      "heroes": {},
       "troops": {
         "infantry_t6": 1000,
         "lancer_t6": 500,
@@ -28,22 +12,22 @@
       },
       "stats": {
         "inf": {
-          "attack": 208.4,
-          "defense": 211.0,
-          "lethality": 59.2,
-          "health": 88.7
+          "attack": 79.3,
+          "defense": 82.0,
+          "lethality": 31.1,
+          "health": 38.1
         },
         "lanc": {
-          "attack": 340.6,
-          "defense": 335.5,
-          "lethality": 78.5,
-          "health": 59.0
+          "attack": 84.3,
+          "defense": 79.2,
+          "lethality": 38.1,
+          "health": 31.3
         },
         "mark": {
-          "attack": 260.5,
-          "defense": 247.2,
-          "lethality": 99.3,
-          "health": 59.3
+          "attack": 88.8,
+          "defense": 75.5,
+          "lethality": 37.6,
+          "health": 31.9
         }
       },
       "joiner_heroes": {}
@@ -85,12 +69,12 @@
       "joiner_heroes": {}
     },
     "sim_result": {
-      "attacker": 1954,
+      "attacker": 1452,
       "defender": 0
     },
     "game_report_result": [
       {
-        "attacker": 1950,
+        "attacker": 1454,
         "defender": 0
       }
     ]

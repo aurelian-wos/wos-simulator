@@ -40,23 +40,7 @@
     },
     "defender": {
       "name": "[ARK]Piddilyminxxx",
-      "heroes": {
-        "Hector": {
-          "skill_1": 3,
-          "skill_2": 4,
-          "skill_3": 4
-        },
-        "Renee": {
-          "skill_1": 4,
-          "skill_2": 4,
-          "skill_3": 4
-        },
-        "Lynn": {
-          "skill_1": 3,
-          "skill_2": 3,
-          "skill_3": 3
-        }
-      },
+      "heroes": {},
       "troops": {
         "infantry_t6": 100,
         "lancer_t6": 50,
@@ -64,34 +48,34 @@
       },
       "stats": {
         "inf": {
-          "attack": 488.9,
-          "defense": 473.7,
-          "lethality": 148.3,
-          "health": 169.5
+          "attack": 221.0,
+          "defense": 205.8,
+          "lethality": 119.2,
+          "health": 132.5
         },
         "lanc": {
-          "attack": 503.5,
-          "defense": 499.3,
-          "lethality": 176.1,
-          "health": 166.1
+          "attack": 195.0,
+          "defense": 190.8,
+          "lethality": 121.3,
+          "health": 122.5
         },
         "mark": {
-          "attack": 387.6,
-          "defense": 382.4,
-          "lethality": 188.5,
-          "health": 157.3
+          "attack": 212.0,
+          "defense": 206.8,
+          "lethality": 124.2,
+          "health": 125.8
         }
       },
       "joiner_heroes": {}
     },
     "sim_result": {
-      "attacker": 0,
-      "defender": 156
+      "attacker": 1763,
+      "defender": 0
     },
     "game_report_result": [
       {
-        "attacker": 0,
-        "defender": 160
+        "attacker": 1770,
+        "defender": 0
       }
     ]
   }
