@@ -98,6 +98,17 @@ def _build_fighter(role_name: str, cfg: Dict[str, Any]) -> Fighter:
             continue
         registry = JsonUtil.hero_registery.get(name)
         if not registry:
+            # Dashboard catalogue uses space-less hero names derived from the
+            # asset filename (e.g. "WuMing"), but JsonUtil keys by the canonical
+            # "skill_hero" field (e.g. "Wu Ming"). Fall back to a space-stripped
+            # match so both shapes resolve.
+            stripped = name.replace(" ", "")
+            for canonical, data in JsonUtil.hero_registery.items():
+                if canonical.replace(" ", "") == stripped:
+                    registry = data
+                    name = canonical
+                    break
+        if not registry:
             continue
         levels: Dict[str, int] = {}
         for skill in registry:
