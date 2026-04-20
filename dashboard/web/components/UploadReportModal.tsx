@@ -53,9 +53,9 @@ const emptyHeroes = (): HeroSelection => ({
 });
 
 const emptySkill4 = (): Skill4LevelMap => ({
-  infantry: 0,
-  lancer: 0,
-  marksman: 0,
+  infantry: 5,
+  lancer: 5,
+  marksman: 5,
 });
 
 export default function UploadReportModal({
