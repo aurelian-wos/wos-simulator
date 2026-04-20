@@ -1,0 +1,50 @@
+# docker compose for the WOS simulator dashboard.
+#
+# Services:
+#   - app:         Next.js dashboard (better-sqlite3, read-only DB mount).
+#   - cloudflared: Cloudflare Tunnel sidecar publishing the app at
+#                  ${TUNNEL_HOSTNAME} (default: wos-sim.ratme.org).
+#
+# See docker-compose.env.example for required variables and setup steps.
+
+services:
+  app:
+    build:
+      context: ./dashboard/web
+      dockerfile: Dockerfile
+    image: wos-simulator-dashboard:latest
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      DB_PATH: /data/test_results/dashboard.sqlite
+    volumes:
+      # Mount the full test_results dir so better-sqlite3 can open the
+      # main DB file together with its -shm / -wal siblings.
+      - ./test_results:/data/test_results:ro
+    expose:
+      - "3000"
+    # Optional local access without going through the tunnel.
+    ports:
+      - "${APP_PORT:-3000}:3000"
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    depends_on:
+      - app
+    # ~/.cloudflared on the host holds the tunnel credentials JSON created by
+    # `cloudflared tunnel create <name>`. Mounted read-only — no secrets copied
+    # into the image or the compose file.
+    volumes:
+      - ${CLOUDFLARED_DIR:-~/.cloudflared}:/etc/cloudflared:ro
+    command:
+      - tunnel
+      - --no-autoupdate
+      - --loglevel
+      - info
+      - --credentials-file
+      - /etc/cloudflared/${TUNNEL_ID}.json
+      - --url
+      - http://app:3000
+      - run
+      - ${TUNNEL_ID}

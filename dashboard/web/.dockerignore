@@ -1,0 +1,12 @@
+node_modules
+.next
+.turbo
+test-results
+playwright-report
+.env
+.env.*
+!.env.example
+.DS_Store
+npm-debug.log*
+*.tsbuildinfo
+.git

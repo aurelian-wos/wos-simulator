@@ -6,3 +6,6 @@ __pycache__
 battle_specs_manual
 tmp
 test_results/runs/
+
+# docker compose secrets
+.env
