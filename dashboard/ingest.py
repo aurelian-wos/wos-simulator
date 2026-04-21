@@ -60,13 +60,22 @@ def _apply_migrations(conn: sqlite3.Connection) -> None:
     for mf in sorted(_MIGRATIONS_DIR.glob("*.sql")):
         if mf.name in applied:
             continue
-        with conn:
-            for statement in _split_sql(mf.read_text()):
-                conn.execute(statement)
-            conn.execute(
-                "INSERT INTO _migrations(name, applied_at) VALUES (?, datetime('now'))",
-                (mf.name,),
-            )
+        # Foreign keys must be OFF around migrations that rebuild referenced
+        # tables (e.g. via CREATE…INSERT…DROP…RENAME to modify CHECK). Toggling
+        # FKs inside a transaction is a no-op in SQLite, so commit first, flip,
+        # run the migration in its own transaction, then restore.
+        conn.commit()
+        conn.execute("PRAGMA foreign_keys = OFF")
+        try:
+            with conn:
+                for statement in _split_sql(mf.read_text()):
+                    conn.execute(statement)
+                conn.execute(
+                    "INSERT INTO _migrations(name, applied_at) VALUES (?, datetime('now'))",
+                    (mf.name,),
+                )
+        finally:
+            conn.execute("PRAGMA foreign_keys = ON")
 
 
 def _split_sql(sql: str) -> list[str]:
@@ -202,12 +211,21 @@ def record_run(
         with conn:
             patch_blob_id: Optional[str] = None
             untracked_blob_id: Optional[str] = None
+            snapshot_blob_id: Optional[str] = None
+            commit_subject: Optional[str] = None
+            commit_author: Optional[str] = None
+            commit_date: Optional[str] = None
 
             if dirty_state is not None:
                 patch_blob_id = dirty_state.get("patch_blob_id")
                 untracked_blob_id = dirty_state.get("untracked_blob_id")
+                snapshot_blob_id = dirty_state.get("snapshot_blob_id")
                 patch_gzip = dirty_state.get("patch_content_gzip")
                 untracked_gzip = dirty_state.get("untracked_content_gzip")
+                snapshot_gzip = dirty_state.get("snapshot_content_gzip")
+                commit_subject = dirty_state.get("commit_subject")
+                commit_author = dirty_state.get("commit_author")
+                commit_date = dirty_state.get("commit_date")
 
                 if patch_blob_id and patch_gzip:
                     conn.execute(
@@ -219,6 +237,11 @@ def record_run(
                         "INSERT OR IGNORE INTO blobs(id, kind, content_gzip) VALUES (?, ?, ?)",
                         (untracked_blob_id, "untracked_manifest", untracked_gzip),
                     )
+                if snapshot_blob_id and snapshot_gzip:
+                    conn.execute(
+                        "INSERT OR IGNORE INTO blobs(id, kind, content_gzip) VALUES (?, ?, ?)",
+                        (snapshot_blob_id, "simulator_snapshot", snapshot_gzip),
+                    )
 
             conn.execute(
                 """
@@ -226,8 +249,9 @@ def record_run(
                     id, started_at, finished_at, git_sha, dirty,
                     baseline_git_sha, cli_args_json, thresholds_json,
                     overall_avg_error_pct, bh_sig_count, summary_json,
-                    patch_blob_id, untracked_blob_id
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    patch_blob_id, untracked_blob_id, snapshot_blob_id,
+                    commit_subject, commit_author, commit_date
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     run_id,
@@ -243,6 +267,10 @@ def record_run(
                     json.dumps(summary),
                     patch_blob_id,
                     untracked_blob_id,
+                    snapshot_blob_id,
+                    commit_subject,
+                    commit_author,
+                    commit_date,
                 ),
             )
 

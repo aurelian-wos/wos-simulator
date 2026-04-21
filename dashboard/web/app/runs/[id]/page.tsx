@@ -1,6 +1,7 @@
 import Link from "next/link";
 import {
   computeCrossShaDiff,
+  computeSnapshotDiff,
   filterPatchText,
   formatCrossShaBanner,
   resolveRepoRoot,
@@ -12,6 +13,7 @@ import {
   getRunTestcaseKeys,
   getRunPatch,
 } from "@/lib/db";
+import { getRunSnapshot } from "@/lib/snapshots";
 import TestcaseTable from "@/components/TestcaseTable";
 import DiffViewer from "@/components/DiffViewer";
 import { testcaseDetailHref } from "@/lib/testcase-file";
@@ -108,35 +110,49 @@ export default async function RunDetailPage({ params }: PageProps) {
     removedKeys = previousKeys.filter((k) => !currentSet.has(toStr(k)));
   }
 
-  // Incremental diff computation. computeCrossShaDiff handles same-SHA and
-  // different-SHA cases uniformly; when SHAs are dangling it falls back to
-  // same-baseline reconstruction and we surface a banner.
+  // Incremental diff computation.
+  //
+  // Preferred path (WOS-200): both runs have simulator_snapshot blobs —
+  // diff those directly in-process, no git required. That works for any
+  // pair of runs regardless of SHA reachability.
+  //
+  // Legacy fallback: if either snapshot is missing (run was ingested
+  // before the snapshot refactor), fall back to computeCrossShaDiff which
+  // reconstructs baselines via git. That still requires git on the host.
   let diffLabel = "Dirty State Patch (vs clean baseline)";
   let diffWarning: string | null = null;
   let displayPatch: string | null = patchText;
   let rawCurrPatch: string | null = null;
 
-  if (patchText && previousRun) {
-    const prevPatch = getRunPatch(previousRun.id);
-    if (prevPatch !== null && previousRun.dirty === 1) {
-      const repoRoot = resolveRepoRoot();
-      const result = computeCrossShaDiff(
-        prevPatch,
-        previousRun.git_sha ?? "",
-        patchText,
-        run.git_sha ?? "",
-        repoRoot
-      );
+  if (previousRun) {
+    const currSnapshot = getRunSnapshot(id);
+    const prevSnapshot = getRunSnapshot(previousRun.id);
+    if (currSnapshot && prevSnapshot) {
       diffLabel = "Code Changes Since Previous Run";
-      displayPatch = result.patch || "";
-      diffWarning = formatCrossShaBanner(
-        result,
-        previousRun.git_sha ?? "",
-        run.git_sha ?? ""
-      );
+      displayPatch = computeSnapshotDiff(prevSnapshot, currSnapshot);
       rawCurrPatch = patchText;
-    } else if (prevPatch === null && previousRun.dirty === 1) {
-      diffWarning = "Previous run has no stored patch — showing full cumulative patch.";
+    } else if (patchText) {
+      const prevPatch = getRunPatch(previousRun.id);
+      if (prevPatch !== null && previousRun.dirty === 1) {
+        const repoRoot = resolveRepoRoot();
+        const result = computeCrossShaDiff(
+          prevPatch,
+          previousRun.git_sha ?? "",
+          patchText,
+          run.git_sha ?? "",
+          repoRoot
+        );
+        diffLabel = "Code Changes Since Previous Run";
+        displayPatch = result.patch || "";
+        diffWarning = formatCrossShaBanner(
+          result,
+          previousRun.git_sha ?? "",
+          run.git_sha ?? ""
+        );
+        rawCurrPatch = patchText;
+      } else if (prevPatch === null && previousRun.dirty === 1) {
+        diffWarning = "Previous run has no stored patch — showing full cumulative patch.";
+      }
     }
   }
 

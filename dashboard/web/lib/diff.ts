@@ -4,6 +4,30 @@ import fs from "fs";
 import { parsePatch, applyPatch, createTwoFilesPatch, formatPatch } from "diff";
 import { isSimulatorPath } from "./sim-paths";
 
+/**
+ * Diff two per-run simulator snapshots (decompressed Map<path, content>)
+ * and emit a unified patch. Replaces the git-backed `computeCrossShaDiff`
+ * path for runs ingested after WOS-200 — the snapshots are authoritative
+ * and no git lookup is needed at runtime.
+ */
+export function computeSnapshotDiff(
+  prev: Map<string, string>,
+  curr: Map<string, string>
+): string {
+  const names = new Set<string>();
+  for (const k of prev.keys()) if (isSimulatorPath(k)) names.add(k);
+  for (const k of curr.keys()) if (isSimulatorPath(k)) names.add(k);
+
+  const parts: string[] = [];
+  for (const name of Array.from(names).sort()) {
+    const a = prev.get(name) ?? "";
+    const b = curr.get(name) ?? "";
+    if (a === b) continue;
+    parts.push(createTwoFilesPatch(name, name, a, b, "prev run", "this run"));
+  }
+  return parts.join("\n");
+}
+
 export function normalizeName(s: string | undefined): string {
   return (s ?? "").replace(/^[ab]\//, "");
 }

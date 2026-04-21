@@ -19,6 +19,15 @@ export interface Run {
   summary_json: string;
   patch_blob_id: string | null;
   untracked_blob_id: string | null;
+  // Added by migration 006 (WOS-200). Populated on runs ingested after the
+  // snapshot refactor; NULL on legacy runs. When present, the snapshot
+  // blob is a gzipped tarball of every simulator-relevant file's content at
+  // the time of the run — the dashboard uses these to diff runs entirely
+  // in-process, with no runtime `git` dependency.
+  snapshot_blob_id: string | null;
+  commit_subject: string | null;
+  commit_author: string | null;
+  commit_date: string | null;
 }
 
 export interface RunTestcase {
@@ -49,7 +58,7 @@ export interface RunTestcaseFile {
 
 export interface Blob {
   id: string;
-  kind: "patch" | "untracked_manifest";
+  kind: "patch" | "untracked_manifest" | "simulator_snapshot";
   content_gzip: Buffer; // raw column name — better-sqlite3 returns snake_case
 }
 

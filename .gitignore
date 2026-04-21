@@ -7,5 +7,9 @@ battle_specs_manual
 tmp
 test_results/runs/
 
+# SQLite WAL/SHM sidecars — only the main .sqlite file is versioned
+test_results/*.sqlite-shm
+test_results/*.sqlite-wal
+
 # docker compose secrets
 .env

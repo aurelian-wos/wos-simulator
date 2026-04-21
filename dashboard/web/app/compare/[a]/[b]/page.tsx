@@ -1,17 +1,18 @@
 import Link from "next/link";
-import { execFileSync } from "child_process";
 import {
+  getCommitsBetweenRuns,
   getRun,
   getRunDeltaCounts,
   getRunDeltaTable,
   getRunPatch,
 } from "@/lib/db";
+import { getRunSnapshot } from "@/lib/snapshots";
 import {
   computeCrossShaDiff,
+  computeSnapshotDiff,
   filterPatchText,
   formatCrossShaBanner,
   resolveRepoRoot,
-  isShaReachable,
 } from "@/lib/diff";
 import DiffViewer from "@/components/DiffViewer";
 import CompareTable from "@/components/CompareTable";
@@ -61,69 +62,12 @@ function StatCard({
   );
 }
 
-interface GitLogResult {
-  commits: string[];
-  prevReachable: boolean;
-  currReachable: boolean;
-  error: string | null;
+interface CommitLogEntry {
+  git_sha: string;
+  commit_subject: string | null;
+  commit_author: string | null;
+  commit_date: string | null;
 }
-
-function getGitLog(
-  shaA: string,
-  shaB: string,
-  repoRoot: string | null
-): GitLogResult {
-  if (!repoRoot) {
-    return {
-      commits: [],
-      prevReachable: false,
-      currReachable: false,
-      error: "Could not locate git repo root.",
-    };
-  }
-  const prevReachable = isShaReachable(shaA, repoRoot);
-  const currReachable = isShaReachable(shaB, repoRoot);
-  if (!prevReachable || !currReachable) {
-    return {
-      commits: [],
-      prevReachable,
-      currReachable,
-      error: null,
-    };
-  }
-  try {
-    const out = execFileSync(
-      "git",
-      ["log", `${shaA}..${shaB}`, "--oneline"],
-      {
-        cwd: repoRoot,
-        encoding: "utf8",
-        timeout: 5000,
-        stdio: ["ignore", "pipe", "ignore"],
-      }
-    );
-    return {
-      commits: out.trim().split("\n").filter(Boolean),
-      prevReachable: true,
-      currReachable: true,
-      error: null,
-    };
-  } catch {
-    return {
-      commits: [],
-      prevReachable: true,
-      currReachable: true,
-      error: "git log failed",
-    };
-  }
-}
-
-const CODE_HIGHLIGHT_PATTERNS = [
-  "assets/",
-  "skills/",
-  "Base_classes/",
-  "check_testcases.py",
-];
 
 export default async function ComparePage({ params }: PageProps) {
   const { a, b } = await params;
@@ -168,11 +112,13 @@ export default async function ComparePage({ params }: PageProps) {
 
   const shaA = runA.git_sha;
   const shaB = runB.git_sha;
-  const repoRoot = resolveRepoRoot();
-  const gitLog =
-    shaA && shaB && shaA !== shaB
-      ? getGitLog(shaA, shaB, repoRoot)
-      : { commits: [], prevReachable: true, currReachable: true, error: null };
+
+  // Snapshot-first (WOS-200): when both runs have simulator_snapshot blobs
+  // we diff them directly in-process; no git required at runtime. Commit
+  // metadata is also denormalized onto the runs table during ingest, so
+  // the "git log" widget becomes a DB query.
+  const commits: CommitLogEntry[] =
+    shaA && shaB && shaA !== shaB ? getCommitsBetweenRuns(a, b) : [];
 
   const deltaError =
     runA.overall_avg_error_pct != null && runB.overall_avg_error_pct != null
@@ -192,7 +138,14 @@ export default async function ComparePage({ params }: PageProps) {
   let reconciledPatch: string | null = null;
   let diffWarning: string | null = null;
 
-  if (patchA && patchB && runA.dirty === 1 && runB.dirty === 1) {
+  const snapshotA = getRunSnapshot(a);
+  const snapshotB = getRunSnapshot(b);
+
+  if (snapshotA && snapshotB) {
+    reconciledPatch = computeSnapshotDiff(snapshotA, snapshotB);
+  } else if (patchA && patchB && runA.dirty === 1 && runB.dirty === 1) {
+    // Legacy fallback for runs ingested before snapshot capture.
+    const repoRoot = resolveRepoRoot();
     const result = computeCrossShaDiff(
       patchA,
       shaA ?? "",
@@ -269,7 +222,7 @@ export default async function ComparePage({ params }: PageProps) {
           }
         />
         <StatCard
-          label="\u0394 Avg Error"
+          label="Δ Avg Error"
           value={
             deltaError != null
               ? `${deltaError > 0 ? "+" : ""}${deltaError.toFixed(2)}%`
@@ -326,7 +279,7 @@ export default async function ComparePage({ params }: PageProps) {
           Code / Config Changes
         </h3>
 
-        {/* Git log */}
+        {/* Commits between runs (sourced from DB, not git log) */}
         {shaA && shaB && shaA !== shaB && (
           <div
             className="rounded p-4 mb-6"
@@ -336,35 +289,32 @@ export default async function ComparePage({ params }: PageProps) {
             }}
           >
             <h4 className="text-xs uppercase tracking-wider opacity-50 mb-3">
-              Git Commits ({shaA.slice(0, 8)} &rarr; {shaB.slice(0, 8)})
+              Commits ({shaA.slice(0, 8)} &rarr; {shaB.slice(0, 8)})
             </h4>
-            {!gitLog.prevReachable || !gitLog.currReachable ? (
-              <p className="text-xs" style={{ color: "#f9e2af" }}>
-                Baseline unreachable:
-                {!gitLog.prevReachable ? ` ${shaA.slice(0, 8)} (Run A)` : ""}
-                {!gitLog.prevReachable && !gitLog.currReachable ? " and" : ""}
-                {!gitLog.currReachable ? ` ${shaB.slice(0, 8)} (Run B)` : ""}{" "}
-                no longer in git history (rebased/amended away).
-              </p>
-            ) : gitLog.commits.length === 0 ? (
+            {commits.length === 0 ? (
               <p className="text-xs opacity-50">
-                No commits between these SHAs.
+                No recorded commits between these runs.
               </p>
             ) : (
               <div className="font-mono text-xs space-y-1">
-                {gitLog.commits.map((line, i) => {
-                  const highlight = CODE_HIGHLIGHT_PATTERNS.some((p) =>
-                    line.includes(p)
-                  );
-                  return (
-                    <div
-                      key={i}
-                      style={{ color: highlight ? "#f9e2af" : "inherit" }}
-                    >
-                      {line}
-                    </div>
-                  );
-                })}
+                {commits.map((c) => (
+                  <div key={c.git_sha} className="flex gap-2">
+                    <span className="opacity-60">
+                      {c.git_sha.slice(0, 8)}
+                    </span>
+                    <span className="flex-1">
+                      {c.commit_subject ?? "(no subject)"}
+                    </span>
+                    {c.commit_author && (
+                      <span className="opacity-50">{c.commit_author}</span>
+                    )}
+                    {c.commit_date && (
+                      <span className="opacity-40">
+                        {formatDate(c.commit_date)}
+                      </span>
+                    )}
+                  </div>
+                ))}
               </div>
             )}
           </div>
@@ -462,14 +412,11 @@ export default async function ComparePage({ params }: PageProps) {
           </div>
         )}
 
-        {!patchA &&
-          !patchB &&
-          gitLog.commits.length === 0 &&
-          (gitLog.prevReachable && gitLog.currReachable) && (
-            <p className="text-xs opacity-50">
-              No code changes to display between these runs.
-            </p>
-          )}
+        {!reconciledPatch && !patchA && !patchB && commits.length === 0 && (
+          <p className="text-xs opacity-50">
+            No code changes to display between these runs.
+          </p>
+        )}
       </div>
     </div>
   );

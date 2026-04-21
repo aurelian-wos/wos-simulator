@@ -1,12 +1,11 @@
 import Link from "next/link";
-import { execSync } from "child_process";
-import path from "path";
 import {
   getCoverageMatrix,
   getCoverageTrend,
   getHeroes,
   getLatestRunId,
   getPreviousRun,
+  getRecentCommits,
   getRecentFileChanges,
   getRun,
   getRunDeltaCounts,
@@ -17,31 +16,18 @@ import { testcaseDetailHref } from "@/lib/testcase-file";
 
 export const dynamic = "force-dynamic";
 
-interface RecentCommit {
-  sha: string;
-  author: string;
-  relative_age: string;
-  subject: string;
-}
-
-function getRecentSimulatorCommits(days = 7): RecentCommit[] {
-  try {
-    const repoRoot = path.resolve(process.cwd(), "../..");
-    const out = execSync(
-      `git -C "${repoRoot}" log --since="${days} days ago" --pretty="%h|%an|%ar|%s" -- assets/ skills/ Base_classes/`,
-      { encoding: "utf8" }
-    );
-    return out
-      .split("\n")
-      .filter((l) => l.trim().length > 0)
-      .map((l) => {
-        const [sha, author, relative_age, ...rest] = l.split("|");
-        return { sha, author, relative_age, subject: rest.join("|") };
-      });
-  } catch (err) {
-    console.error("[wos-dashboard] getRecentSimulatorCommits failed:", err);
-    return [];
-  }
+function formatRelativeAge(iso: string | null): string {
+  if (!iso) return "";
+  const ts = Date.parse(iso);
+  if (!Number.isFinite(ts)) return "";
+  const seconds = Math.max(0, Math.floor((Date.now() - ts) / 1000));
+  const days = Math.floor(seconds / 86400);
+  if (days >= 1) return `${days}d ago`;
+  const hours = Math.floor(seconds / 3600);
+  if (hours >= 1) return `${hours}h ago`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes >= 1) return `${minutes}m ago`;
+  return `${seconds}s ago`;
 }
 
 function formatPct(v: number | null | undefined, digits = 2): string {
@@ -168,7 +154,7 @@ export default function HomePage() {
   const topRegressions = getTopRegressions(3, 5);
   const coverageTrend = getCoverageTrend(50);
   const recentChanges = getRecentFileChanges(7);
-  const recentCommits = getRecentSimulatorCommits(7);
+  const recentCommits = getRecentCommits(7);
 
   // Tier-1 hero coverage status (Gen 5 + Gen 6)
   const heroes = getHeroes();
@@ -404,19 +390,23 @@ export default function HomePage() {
         >
           {recentCommits.length === 0 ? (
             <p className="text-xs opacity-50">
-              No commits touching <code>assets/</code>, <code>skills/</code>, or{" "}
-              <code>Base_classes/</code> in the last 7 days.
+              No recorded simulator commits in the last 7 days.
             </p>
           ) : (
             <ul className="flex flex-col gap-1 text-xs font-mono">
               {recentCommits.slice(0, 8).map((c) => (
-                <li key={c.sha} className="flex gap-2">
-                  <span className="opacity-50 w-16 shrink-0">{c.sha}</span>
-                  <span className="opacity-40 w-24 shrink-0">
-                    {c.relative_age}
+                <li key={c.git_sha} className="flex gap-2">
+                  <span className="opacity-50 w-16 shrink-0">
+                    {c.git_sha.slice(0, 8)}
                   </span>
-                  <span className="flex-1 truncate" title={c.subject}>
-                    {c.subject}
+                  <span className="opacity-40 w-24 shrink-0">
+                    {formatRelativeAge(c.commit_date)}
+                  </span>
+                  <span
+                    className="flex-1 truncate"
+                    title={c.commit_subject ?? ""}
+                  >
+                    {c.commit_subject ?? "(no subject)"}
                   </span>
                 </li>
               ))}

@@ -276,6 +276,127 @@ export function getBlob(blobId: string): { content_gzip: Buffer } | undefined {
 }
 
 /**
+ * Return the simulator-snapshot tarball (raw gzipped bytes) for a run, or
+ * null if the run has no snapshot (legacy run ingested before WOS-200).
+ * Callers unpack with {@link parseSnapshotTarball} from `lib/snapshots.ts`.
+ */
+export function getRunSnapshotBlob(runId: string): Buffer | null {
+  const database = getDb();
+  if (!database) return null;
+  try {
+    const run = database
+      .prepare(`SELECT snapshot_blob_id FROM runs WHERE id = ?`)
+      .get(runId) as { snapshot_blob_id: string | null } | undefined;
+    if (!run?.snapshot_blob_id) return null;
+    const blob = database
+      .prepare(`SELECT content_gzip FROM blobs WHERE id = ?`)
+      .get(run.snapshot_blob_id) as { content_gzip: Buffer } | undefined;
+    return blob?.content_gzip ?? null;
+  } catch (err) {
+    console.error("[wos-dashboard] getRunSnapshotBlob failed:", err);
+    return null;
+  }
+}
+
+/**
+ * Return distinct (git_sha, commit_subject, commit_author, commit_date)
+ * rows from runs within a time window, ordered newest-first. Used by the
+ * home page to show "recent simulator commits" without calling `git log`
+ * at runtime.
+ */
+export function getRecentCommits(
+  daysBack: number,
+  limit = 20
+): Array<{
+  git_sha: string;
+  commit_subject: string | null;
+  commit_author: string | null;
+  commit_date: string | null;
+  run_count: number;
+}> {
+  const database = getDb();
+  if (!database) return [];
+  try {
+    return database
+      .prepare(
+        `SELECT git_sha,
+                commit_subject,
+                commit_author,
+                MAX(commit_date) AS commit_date,
+                COUNT(*) AS run_count
+           FROM runs
+          WHERE commit_date IS NOT NULL
+            AND commit_date >= datetime('now', ? || ' days')
+          GROUP BY git_sha, commit_subject, commit_author
+          ORDER BY commit_date DESC
+          LIMIT ?`
+      )
+      .all(`-${daysBack}`, limit) as Array<{
+      git_sha: string;
+      commit_subject: string | null;
+      commit_author: string | null;
+      commit_date: string | null;
+      run_count: number;
+    }>;
+  } catch (err) {
+    console.error("[wos-dashboard] getRecentCommits failed:", err);
+    return [];
+  }
+}
+
+/**
+ * Return the commits (as distinct runs) between two run ids by timestamp.
+ * Used by the compare page to list intermediate commits without calling
+ * `git log` at runtime. Returned newest-first.
+ */
+export function getCommitsBetweenRuns(
+  olderRunId: string,
+  newerRunId: string
+): Array<{
+  git_sha: string;
+  commit_subject: string | null;
+  commit_author: string | null;
+  commit_date: string | null;
+}> {
+  const database = getDb();
+  if (!database) return [];
+  try {
+    const bounds = database
+      .prepare(
+        `SELECT
+           (SELECT started_at FROM runs WHERE id = ?) AS a,
+           (SELECT started_at FROM runs WHERE id = ?) AS b`
+      )
+      .get(olderRunId, newerRunId) as { a: string | null; b: string | null };
+    if (!bounds.a || !bounds.b) return [];
+    const lo = bounds.a < bounds.b ? bounds.a : bounds.b;
+    const hi = bounds.a < bounds.b ? bounds.b : bounds.a;
+    return database
+      .prepare(
+        `SELECT git_sha,
+                commit_subject,
+                commit_author,
+                MAX(commit_date) AS commit_date
+           FROM runs
+          WHERE started_at > ?
+            AND started_at <= ?
+            AND commit_date IS NOT NULL
+          GROUP BY git_sha, commit_subject, commit_author
+          ORDER BY commit_date DESC`
+      )
+      .all(lo, hi) as Array<{
+      git_sha: string;
+      commit_subject: string | null;
+      commit_author: string | null;
+      commit_date: string | null;
+    }>;
+  } catch (err) {
+    console.error("[wos-dashboard] getCommitsBetweenRuns failed:", err);
+    return [];
+  }
+}
+
+/**
  * Return the run immediately before the given run (by started_at).
  */
 export function getPreviousRun(currentRunId: string): Run | undefined {
@@ -451,6 +572,12 @@ export function getMissingTables(
   }
 }
 
+// A testcase counts as improved/regressed if its pass/fail status flips,
+// OR if |bias_pct| moves by more than this threshold while staying on the same
+// side of the pass boundary. Catches drift-only regressions (e.g. 1.8% → 4.5%)
+// that the flip-only definition silently hides.
+export const BIAS_MOVE_THRESHOLD_PCT = 0.5;
+
 /**
  * Compare two runs by their run_testcases and return counts of improved,
  * regressed, added, and retired testcases.
@@ -463,21 +590,24 @@ export function getRunDeltaCounts(
   const database = getDb();
   if (!database) return zero;
   try {
-    // added/retired now operate on run_testcase_files set difference (on-disk presence),
+    // added/retired operate on run_testcase_files set difference (on-disk presence),
     // NOT on executed testcase keys. skipped = files present but excluded by a filter
-    // in the current run (included = 0). improved/regressed still count per-testcase-key.
+    // in the current run (included = 0). improved/regressed count per-testcase-key on
+    // either (a) a pass/fail flip, or (b) |bias_pct| moving past BIAS_MOVE_THRESHOLD_PCT.
     const row = database
       .prepare(
         `WITH curr_exec AS (
-           SELECT file || '|' || testcase_id || '|' || CAST(idx AS TEXT) AS key, passes
+           SELECT file || '|' || testcase_id || '|' || CAST(idx AS TEXT) AS key, passes, bias_pct
            FROM run_testcases WHERE run_id = ?
          ),
          prev_exec AS (
-           SELECT file || '|' || testcase_id || '|' || CAST(idx AS TEXT) AS key, passes
+           SELECT file || '|' || testcase_id || '|' || CAST(idx AS TEXT) AS key, passes, bias_pct
            FROM run_testcases WHERE run_id = ?
          ),
          both AS (
-           SELECT c.key, c.passes AS curr_passes, p.passes AS prev_passes
+           SELECT c.key,
+                  c.passes AS curr_passes, p.passes AS prev_passes,
+                  c.bias_pct AS curr_bias, p.bias_pct AS prev_bias
            FROM curr_exec c JOIN prev_exec p ON c.key = p.key
          ),
          curr_files AS (
@@ -487,8 +617,26 @@ export function getRunDeltaCounts(
            SELECT file_path FROM run_testcase_files WHERE run_id = ?
          )
          SELECT
-           SUM(CASE WHEN prev_passes = 0 AND curr_passes = 1 THEN 1 ELSE 0 END) AS improved,
-           SUM(CASE WHEN prev_passes = 1 AND curr_passes = 0 THEN 1 ELSE 0 END) AS regressed,
+           SUM(
+             CASE
+               WHEN prev_passes = 0 AND curr_passes = 1 THEN 1
+               WHEN prev_passes = curr_passes
+                    AND prev_bias IS NOT NULL AND curr_bias IS NOT NULL
+                    AND ABS(prev_bias) - ABS(curr_bias) > ?
+                 THEN 1
+               ELSE 0
+             END
+           ) AS improved,
+           SUM(
+             CASE
+               WHEN prev_passes = 1 AND curr_passes = 0 THEN 1
+               WHEN prev_passes = curr_passes
+                    AND prev_bias IS NOT NULL AND curr_bias IS NOT NULL
+                    AND ABS(curr_bias) - ABS(prev_bias) > ?
+                 THEN 1
+               ELSE 0
+             END
+           ) AS regressed,
            (SELECT COUNT(*) FROM curr_files cf
              WHERE cf.file_path NOT IN (SELECT file_path FROM prev_files)) AS added,
            (SELECT COUNT(*) FROM prev_files pf
@@ -496,7 +644,14 @@ export function getRunDeltaCounts(
            (SELECT COUNT(*) FROM curr_files cf2 WHERE cf2.included = 0) AS skipped
          FROM both`
       )
-      .get(currRunId, prevRunId, currRunId, prevRunId) as {
+      .get(
+        currRunId,
+        prevRunId,
+        currRunId,
+        prevRunId,
+        BIAS_MOVE_THRESHOLD_PCT,
+        BIAS_MOVE_THRESHOLD_PCT
+      ) as {
       improved: number | null;
       regressed: number | null;
       added: number | null;
@@ -652,6 +807,18 @@ export function getRunDeltaTable(runIdA: string, runIdB: string): TestcaseDeltaR
       } else if (r.passes_a === 0 && r.passes_b === 1) {
         status = "improved";
       } else if (r.passes_a === 1 && r.passes_b === 0) {
+        status = "regressed";
+      } else if (
+        r.bias_a != null &&
+        r.bias_b != null &&
+        Math.abs(r.bias_a) - Math.abs(r.bias_b) > BIAS_MOVE_THRESHOLD_PCT
+      ) {
+        status = "improved";
+      } else if (
+        r.bias_a != null &&
+        r.bias_b != null &&
+        Math.abs(r.bias_b) - Math.abs(r.bias_a) > BIAS_MOVE_THRESHOLD_PCT
+      ) {
         status = "regressed";
       } else {
         status = "unchanged";
