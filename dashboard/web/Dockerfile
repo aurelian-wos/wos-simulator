@@ -14,19 +14,23 @@
 # honours WATCHPACK_POLLING / CHOKIDAR_USEPOLLING reliably. Host-side `npm run
 # dev` continues to use Turbopack for speed.
 #
-# The dashboard spawns dashboard/ocr_report.py ("Import report" flow) inside
-# the container to OCR battle-report screenshots; compose mounts the host
-# dashboard/ directory read-only at /dashboard so the route can reach it.
-# tesseract + Pillow + pytesseract are installed here into /opt/ocr-venv and
-# SIMULATOR_PYTHON points the route at that venv.
+# The dashboard spawns two Python CLIs inside the container:
+#   - dashboard/ocr_report.py  (Import report flow; needs tesseract + Pillow
+#     + pytesseract)
+#   - dashboard/simulate_battle.py  (Simulate battle page; imports the
+#     Base_classes simulator package, which depends on tabulate)
+# compose mounts the host dashboard/, Base_classes/, assets/, and
+# fighters_data/ trees read-only at the matching container paths so those
+# scripts can reach them. A dedicated /opt/sim-venv holds the Python deps
+# for both flows and SIMULATOR_PYTHON points the routes at that venv.
 
 FROM node:20-bookworm-slim
 WORKDIR /app
 
 # better-sqlite3 is a native module; node-gyp needs python + a C++ toolchain.
-# tesseract-ocr + Pillow/pytesseract are needed because the dashboard spawns
-# dashboard/ocr_report.py on "Import report" to parse screenshots in-process.
-# A dedicated /opt/ocr-venv keeps those deps out of the system Python and
+# tesseract-ocr + Pillow/pytesseract are needed for the OCR flow. tabulate is
+# imported by Base_classes.Fight, which simulate_battle.py pulls in. A
+# dedicated /opt/sim-venv keeps those deps out of the system Python and
 # avoids --break-system-packages.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
@@ -35,16 +39,16 @@ RUN apt-get update \
       tesseract-ocr \
       ca-certificates \
  && rm -rf /var/lib/apt/lists/* \
- && python3 -m venv /opt/ocr-venv \
- && /opt/ocr-venv/bin/pip install --no-cache-dir \
-      "Pillow==12.2.0" "pytesseract==0.3.13"
+ && python3 -m venv /opt/sim-venv \
+ && /opt/sim-venv/bin/pip install --no-cache-dir \
+      "Pillow==12.2.0" "pytesseract==0.3.13" "tabulate==0.9.0"
 
 COPY package.json package-lock.json ./
 RUN npm ci --no-audit --no-fund
 
 ENV NODE_ENV=development \
     NEXT_TELEMETRY_DISABLED=1 \
-    SIMULATOR_PYTHON=/opt/ocr-venv/bin/python
+    SIMULATOR_PYTHON=/opt/sim-venv/bin/python
 
 EXPOSE 3000
 CMD ["npm", "run", "dev:docker", "--", "--hostname", "0.0.0.0", "--port", "3000"]

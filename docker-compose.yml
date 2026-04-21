@@ -41,6 +41,17 @@ services:
       # inside the container (REPO_ROOT = cwd/../.. = /). Mount the host
       # dashboard/ tree read-only at /dashboard so the route can reach it.
       - ./dashboard:/dashboard:ro
+      # The /api/simulate route spawns dashboard/simulate_battle.py, which
+      # computes _REPO_ROOT = dirname(dirname(__file__)) = "/" and imports
+      # Base_classes / reads assets + fighters_data relative to that root.
+      # Mount the host simulator source tree read-only at the matching paths.
+      - ./Base_classes:/Base_classes:ro
+      - ./assets:/assets:ro
+      # fighters_data is NOT mounted :ro because JsonUtil.load_fighters_data
+      # opens these files with 'r+' (it only reads, but the fd demands write
+      # access). The simulator does not actually write here, so the host
+      # files stay unchanged in practice.
+      - ./fighters_data:/fighters_data
     expose:
       - "3000"
     # Optional local access without going through the tunnel.
