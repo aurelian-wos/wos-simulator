@@ -24,6 +24,7 @@ export interface OcrResult {
   defender: OcrSideData;
   raw_text?: string;
   warnings?: string[];
+  ocr_retried?: boolean;
 }
 
 export interface UploadReportSubmission {
