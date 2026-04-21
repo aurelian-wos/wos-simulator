@@ -227,6 +227,87 @@ test.describe('Dashboard smoke tests', () => {
     expect(errors).toHaveLength(0);
   });
 
+  test('/simulate — active skill 4 bonuses show effective stat previews', async ({ page }) => {
+    const errors: string[] = [];
+    page.on('console', msg => { if (msg.type() === 'error') errors.push(msg.text()); });
+    page.on('pageerror', err => errors.push(err.message));
+
+    const response = await page.goto('/simulate');
+    expect(response?.status()).toBe(200);
+
+    await page.getByLabel('Rally mode').first().check();
+    await page.locator('select[aria-label="marksman hero"]').first().selectOption('Alonso');
+    await expect(page.locator('select[aria-label="marksman skill 4"]').first()).toHaveValue('5');
+
+    const preview = page.locator('[data-testid="stat-preview-attacker-infantry-lethality"]');
+    await expect(preview).toBeVisible();
+    await expect(preview).toContainText('[115]');
+    await expect(preview).toContainText('+15.0%');
+
+    expect(errors).toHaveLength(0);
+  });
+
+  test('/simulate upload — selected skill 4 level carries back to main form', async ({ page }) => {
+    const errors: string[] = [];
+    page.on('console', msg => { if (msg.type() === 'error') errors.push(msg.text()); });
+    page.on('pageerror', err => errors.push(err.message));
+
+    await page.route('**/api/ocr-report', async route => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          attacker: {
+            troops: { infantry: 123, lancer: 234, marksman: 345 },
+            stats: {
+              infantry: { attack: 100, defense: 100, lethality: 100, health: 100 },
+              lancer: { attack: 100, defense: 100, lethality: 100, health: 100 },
+              marksman: { attack: 100, defense: 100, lethality: 100, health: 100 },
+            },
+          },
+          defender: {
+            troops: { infantry: 456, lancer: 567, marksman: 678 },
+            stats: {
+              infantry: { attack: 100, defense: 100, lethality: 100, health: 100 },
+              lancer: { attack: 100, defense: 100, lethality: 100, health: 100 },
+              marksman: { attack: 100, defense: 100, lethality: 100, health: 100 },
+            },
+          },
+          warnings: [],
+        }),
+      });
+    });
+
+    const response = await page.goto('/simulate');
+    expect(response?.status()).toBe(200);
+
+    await page.getByRole('button', { name: /Upload report/i }).click();
+    const dialog = page.getByRole('dialog', { name: 'Upload battle report' });
+    await expect(dialog).toBeVisible();
+
+    await dialog.getByLabel('Rally mode').check();
+    await dialog.getByLabel('Attacker heroes marksman').selectOption('Alonso');
+    await dialog.getByLabel('Attacker heroes marksman skill 4 level').selectOption('0');
+
+    await dialog.locator('input[type="file"]').setInputFiles({
+      name: 'report.png',
+      mimeType: 'image/png',
+      buffer: Buffer.from(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9WnS2GAAAAAASUVORK5CYII=',
+        'base64',
+      ),
+    });
+
+    await dialog.getByRole('button', { name: /Parse and apply/i }).click();
+    await expect(dialog).toBeHidden();
+
+    await expect(page.getByLabel('Rally mode').first()).toBeChecked();
+    await expect(page.locator('select[aria-label="marksman hero"]').first()).toHaveValue('Alonso');
+    await expect(page.locator('select[aria-label="marksman skill 4"]').first()).toHaveValue('0');
+
+    expect(errors).toHaveLength(0);
+  });
+
   test('/heroes/Alonso — renders hero detail', async ({ page }) => {
     const errors: string[] = [];
     page.on('console', msg => { if (msg.type() === 'error') errors.push(msg.text()); });

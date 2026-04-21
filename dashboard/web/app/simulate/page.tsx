@@ -190,6 +190,15 @@ function statLabel(cat: TroopCategory, stat: string): string {
   return `${prefix} ${stat[0].toUpperCase()}${stat.slice(1)}`;
 }
 
+function formatStatNumber(value: number): string {
+  const rounded = Math.round(value * 10) / 10;
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+}
+
+function effectiveStatPreview(baseValue: number, bonusPercent: number): string {
+  return formatStatNumber(baseValue * (1 + bonusPercent / 100));
+}
+
 /**
  * Sum of skill_4 bonus percents applied to a given stat on a side, from
  * the three main heroes (one per troop type). Skill_4 affects all troop
@@ -299,10 +308,11 @@ function mergeSideFromOcr(
       chosen,
       rallyMode,
     );
-    // If rally mode and user picked a skill_4 level, honor it.
+    // If rally mode, mirror the modal's selected skill_4 level exactly.
+    // Level 0 is meaningful here: it means "do not apply skill_4".
     if (rallyMode && chosenHero?.skill4 && skillSlotEnabled(chosenHero, 4, true)) {
-      const lvl = skill4Levels[cat] ?? 0;
-      if (lvl > 0) newSkills[3] = lvl;
+      const lvl = skill4Levels[cat];
+      newSkills[3] = Number.isFinite(lvl) ? Math.max(0, Math.min(5, lvl)) : 0;
     }
     nextHeroes[cat] = { name: chosen, skills: newSkills };
   }
@@ -852,36 +862,28 @@ function SidePanel({
             </span>
             {STAT_NAMES.map((stat) => {
               const bonus = sideSkill4BonusPercent(state, which, stat as Skill4Stat, rallyMode);
+              const baseValue = state.stats[cat][stat];
+              const previewValue =
+                bonus > 0 ? effectiveStatPreview(baseValue, bonus) : null;
               return (
                 <label
                   key={stat}
                   className="flex flex-col gap-0.5 text-[11px] sm:text-xs"
                 >
                   <div className="flex items-center gap-1.5 sm:gap-2">
-                    <div className="flex min-w-0 flex-1 items-center justify-between gap-1.5">
-                      <span className="opacity-60 truncate">
-                        <span className="sm:hidden font-bold">
-                          {stat[0].toUpperCase()}
-                        </span>
-                        <span className="hidden sm:inline">
-                          {stat[0].toUpperCase() + stat.slice(1)}
-                        </span>
+                    <span className="min-w-0 flex-1 opacity-60 truncate">
+                      <span className="sm:hidden font-bold">
+                        {stat[0].toUpperCase()}
                       </span>
-                      {bonus > 0 && (
-                        <span
-                          className="hidden sm:inline text-[10px] font-mono flex-shrink-0"
-                          style={{ color: "#a6e3a1" }}
-                          title={`Skill 4 will add +${bonus.toFixed(1)}% to this stat before battle.`}
-                        >
-                          +{bonus.toFixed(1)}%
-                        </span>
-                      )}
-                    </div>
+                      <span className="hidden sm:inline">
+                        {stat[0].toUpperCase() + stat.slice(1)}
+                      </span>
+                    </span>
                     <input
                       type="number"
                       step="0.1"
                       inputMode="decimal"
-                      value={state.stats[cat][stat]}
+                      value={baseValue}
                       onChange={(e) => {
                         const v = parseFloat(e.target.value);
                         setState((prev) => ({
@@ -900,16 +902,18 @@ function SidePanel({
                       }}
                       aria-label={statLabel(cat, stat)}
                     />
+                    {previewValue && (
+                      <span
+                        className="flex min-w-[3.5rem] flex-col items-end justify-center font-mono text-[9px] leading-tight sm:min-w-[4rem] sm:text-[10px]"
+                        style={{ color: "#a6e3a1" }}
+                        title={`Skill 4 will add +${bonus.toFixed(1)}% to this stat before battle, for an effective stat of ${previewValue}.`}
+                        data-testid={`stat-preview-${which}-${cat}-${stat}`}
+                      >
+                        <span>[{previewValue}]</span>
+                        <span>+{bonus.toFixed(1)}%</span>
+                      </span>
+                    )}
                   </div>
-                  {bonus > 0 && (
-                    <span
-                      className="sm:hidden text-[10px] font-mono text-right"
-                      style={{ color: "#a6e3a1" }}
-                      title={`Skill 4 will add +${bonus.toFixed(1)}% to this stat before battle.`}
-                    >
-                      +{bonus.toFixed(1)}%
-                    </span>
-                  )}
                 </label>
               );
             })}

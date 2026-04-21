@@ -54,6 +54,15 @@ test.describe("WOS-202 mobile nav + simulate layout", () => {
     await expect(page.getByRole("heading", { name: "Attacker" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Defender" })).toBeVisible();
 
+    await page.getByLabel("Rally mode").first().check();
+    await page.locator('select[aria-label="marksman hero"]').first().selectOption("Alonso");
+    const preview = page.locator(
+      '[data-testid="stat-preview-attacker-infantry-lethality"]',
+    );
+    await expect(preview).toBeVisible();
+    await expect(preview).toContainText("[115]");
+    await expect(preview).toContainText("+15.0%");
+
     // Simulate button touch-target is at least 44px tall (Apple HIG minimum).
     const simulateBtn = page.getByRole("button", { name: /^Simulate$/i });
     const box = await simulateBtn.boundingBox();
@@ -91,11 +100,21 @@ test.describe("WOS-202 mobile nav + simulate layout", () => {
     // Mobile hamburger is rendered (md:hidden) but must not be visible on desktop.
     await expect(page.getByRole("button", { name: /Open menu/i })).not.toBeVisible();
 
+    await page.getByLabel("Rally mode").first().check();
+    await page.locator('select[aria-label="marksman hero"]').first().selectOption("Alonso");
+    const preview = page.locator(
+      '[data-testid="stat-preview-attacker-infantry-lethality"]',
+    );
+    await expect(preview).toBeVisible();
+    await expect(preview).toContainText("[115]");
+    await expect(preview).toContainText("+15.0%");
+
     // Stat labels stay inline with their inputs on desktop, so the inputs
-    // don't expand to full column width for small numeric values.
+    // don't expand to full column width for small numeric values even with the
+    // stacked effective-stat preview shown.
     const infantryAttackField = page
       .locator("label")
-      .filter({ has: page.getByLabel("Infantry Attack") })
+      .filter({ has: page.getByLabel("Infantry Lethality") })
       .first();
     const statLayout = await infantryAttackField.evaluate((el) => {
       const row = el.firstElementChild as HTMLElement | null;
