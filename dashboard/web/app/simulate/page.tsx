@@ -318,15 +318,40 @@ export default function SimulatePage() {
   const [uploadOpen, setUploadOpen] = useState(false);
   const [uploadWarnings, setUploadWarnings] = useState<string[]>([]);
   const [rallyMode, setRallyMode] = useState(false);
+  // When true, the defender panel is rendered on the left. Shared with the
+  // upload modal so both views always display sides in the same order.
+  const [sidesSwapped, setSidesSwapped] = useState(false);
+
+  // Fix "I entered them wrong way round": swap the attacker and defender state
+  // AND flip the visual order, so the user's typed-in values stay visually in
+  // place while the role labels (Attacker / Defender) trade sides.
+  function swapSides() {
+    const prevAttacker = attacker;
+    const prevDefender = defender;
+    setAttacker(prevDefender);
+    setDefender(prevAttacker);
+    setSidesSwapped((v) => !v);
+  }
 
   const setSide = (side: Side) =>
     side === "attacker" ? setAttacker : setDefender;
 
   function applyUpload(submission: UploadReportSubmission) {
-    const { ocr, heroes, rallyMode: modalRally, skill4Levels } = submission;
+    const {
+      ocr,
+      heroes,
+      rallyMode: modalRally,
+      sidesSwapped: modalSwapped,
+      skill4Levels,
+    } = submission;
     // Align main-page rally toggle with the modal's choice so the user sees a
     // consistent state (main form already handles rally layout on its own).
     if (modalRally !== rallyMode) setRallyMode(modalRally);
+    // Adopt the modal's swap state so both views keep attacker/defender in
+    // the same visual order after the upload is applied. The OCR data is
+    // already transposed inside the modal when swapped, so the attacker/
+    // defender fields here are semantically correct without further swapping.
+    if (modalSwapped !== sidesSwapped) setSidesSwapped(modalSwapped);
     setAttacker((prev) =>
       mergeSideFromOcr(
         prev,
@@ -450,21 +475,53 @@ export default function SimulatePage() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 mb-4 sm:mb-6">
-        <SidePanel
-          title="Attacker"
-          which="attacker"
-          state={attacker}
-          setState={setSide("attacker") as (updater: (prev: SideState) => SideState) => void}
-          rallyMode={rallyMode}
-        />
-        <SidePanel
-          title="Defender"
-          which="defender"
-          state={defender}
-          setState={setSide("defender") as (updater: (prev: SideState) => SideState) => void}
-          rallyMode={rallyMode}
-        />
+      <div className="flex flex-col md:flex-row items-stretch gap-3 sm:gap-4 mb-4 sm:mb-6">
+        <div
+          className="flex-1 min-w-0"
+          style={{ order: sidesSwapped ? 3 : 1 }}
+        >
+          <SidePanel
+            title="Attacker"
+            which="attacker"
+            state={attacker}
+            setState={setSide("attacker") as (updater: (prev: SideState) => SideState) => void}
+            rallyMode={rallyMode}
+          />
+        </div>
+        <div
+          className="flex md:flex-col items-center justify-center"
+          style={{ order: 2 }}
+        >
+          <button
+            type="button"
+            onClick={swapSides}
+            className="text-xs px-3 py-2 rounded font-bold min-h-[36px]"
+            style={{
+              border: `1px solid ${sidesSwapped ? "var(--sidebar-active)" : "var(--border-color)"}`,
+              backgroundColor: sidesSwapped
+                ? "rgba(137, 180, 250, 0.15)"
+                : "var(--main-bg)",
+              color: sidesSwapped ? "var(--sidebar-active)" : "var(--main-text)",
+            }}
+            title="Swap attacker and defender. Use this if you entered them the wrong way round; the values you typed stay visually in place while the Attacker / Defender labels trade sides."
+            aria-label="Swap attacker and defender"
+            aria-pressed={sidesSwapped}
+          >
+            ⇆ Swap
+          </button>
+        </div>
+        <div
+          className="flex-1 min-w-0"
+          style={{ order: sidesSwapped ? 1 : 3 }}
+        >
+          <SidePanel
+            title="Defender"
+            which="defender"
+            state={defender}
+            setState={setSide("defender") as (updater: (prev: SideState) => SideState) => void}
+            rallyMode={rallyMode}
+          />
+        </div>
       </div>
 
       <div
@@ -517,6 +574,7 @@ export default function SimulatePage() {
         onClose={() => setUploadOpen(false)}
         onApply={applyUpload}
         initialRallyMode={rallyMode}
+        initialSidesSwapped={sidesSwapped}
       />
 
       {result && (

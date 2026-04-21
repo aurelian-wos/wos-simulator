@@ -33,6 +33,7 @@ export interface UploadReportSubmission {
     defender: HeroSelection;
   };
   rallyMode: boolean;
+  sidesSwapped: boolean;
   skill4Levels: {
     attacker: Skill4LevelMap;
     defender: Skill4LevelMap;
@@ -44,6 +45,7 @@ interface Props {
   onClose: () => void;
   onApply: (submission: UploadReportSubmission) => void;
   initialRallyMode?: boolean;
+  initialSidesSwapped?: boolean;
 }
 
 const emptyHeroes = (): HeroSelection => ({
@@ -63,6 +65,7 @@ export default function UploadReportModal({
   onClose,
   onApply,
   initialRallyMode = false,
+  initialSidesSwapped = false,
 }: Props) {
   const [imageDataUrl, setImageDataUrl] = useState<string | null>(null);
   const [imageBase64, setImageBase64] = useState<string | null>(null);
@@ -76,13 +79,19 @@ export default function UploadReportModal({
   const [defenderSkill4, setDefenderSkill4] = useState<Skill4LevelMap>(emptySkill4);
   // Reports always show "me" on the left. When the user is the defender, they
   // toggle this so the OCR left column is treated as defender, not attacker.
-  const [sidesSwapped, setSidesSwapped] = useState(false);
+  // Initial value is read from the parent so the modal opens in the same order
+  // as the main simulate page.
+  const [sidesSwapped, setSidesSwapped] = useState(initialSidesSwapped);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Sync rally toggle with the caller whenever the modal opens.
+  // Sync rally toggle + sides-swap with the caller whenever the modal opens,
+  // so the modal always starts in the same state as the main page.
   useEffect(() => {
-    if (open) setRallyMode(initialRallyMode);
-  }, [open, initialRallyMode]);
+    if (open) {
+      setRallyMode(initialRallyMode);
+      setSidesSwapped(initialSidesSwapped);
+    }
+  }, [open, initialRallyMode, initialSidesSwapped]);
 
   const reset = useCallback(() => {
     setImageDataUrl(null);
@@ -202,6 +211,7 @@ export default function UploadReportModal({
           defender: { ...defenderHeroes },
         },
         rallyMode,
+        sidesSwapped,
         skill4Levels: {
           attacker: { ...attackerSkill4 },
           defender: { ...defenderSkill4 },
