@@ -37,6 +37,10 @@ services:
       - wos_next_cache:/app/.next
       # Read-only DB mount (incl. -shm / -wal siblings).
       - ./test_results:/data/test_results:ro
+      # The dashboard's "Import report" route spawns dashboard/ocr_report.py
+      # inside the container (REPO_ROOT = cwd/../.. = /). Mount the host
+      # dashboard/ tree read-only at /dashboard so the route can reach it.
+      - ./dashboard:/dashboard:ro
     expose:
       - "3000"
     # Optional local access without going through the tunnel.
