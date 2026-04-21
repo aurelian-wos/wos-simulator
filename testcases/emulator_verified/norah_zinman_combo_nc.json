@@ -1,0 +1,87 @@
+[
+  {
+    "test_id": "norah_zinman_combo_nc",
+    "description": "Norah+Zinman 2-hero combo \u2014 Lanc+Mark class heroes, both NC (no chance skills), single run definitive. Norah S2 splash on lancer attacks; Zinman has attack-frequency DamageUp. WIP attacks (no hero, t6 600/600/600), minxxx defends with Norah+Zinman.",
+    "attacker": {
+      "name": "[BBQ]XxWIPxX",
+      "heroes": {},
+      "troops": {
+        "infantry_t6": 600,
+        "lancer_t6": 600,
+        "marksman_t6": 600
+      },
+      "stats": {
+        "inf": {
+          "attack": 100.4,
+          "defense": 103.6,
+          "lethality": 85.1,
+          "health": 92.1
+        },
+        "lanc": {
+          "attack": 105.4,
+          "defense": 100.8,
+          "lethality": 83.1,
+          "health": 76.3
+        },
+        "mark": {
+          "attack": 109.9,
+          "defense": 97.1,
+          "lethality": 91.6,
+          "health": 85.9
+        }
+      },
+      "joiner_heroes": {}
+    },
+    "defender": {
+      "name": "[ARK]Piddilyminxxx",
+      "heroes": {
+        "Norah": {
+          "skill_1": 1,
+          "skill_2": 1,
+          "skill_3": 0
+        },
+        "Zinman": {
+          "skill_1": 1,
+          "skill_2": 0,
+          "skill_3": 0
+        }
+      },
+      "troops": {
+        "infantry_t6": 200,
+        "lancer_t6": 200,
+        "marksman_t6": 200
+      },
+      "stats": {
+        "inf": {
+          "attack": 214.0,
+          "defense": 205.8,
+          "lethality": 124.2,
+          "health": 132.5
+        },
+        "lanc": {
+          "attack": 286.8,
+          "defense": 289.6,
+          "lethality": 126.3,
+          "health": 122.5
+        },
+        "mark": {
+          "attack": 231.2,
+          "defense": 232.0,
+          "lethality": 135.2,
+          "health": 131.8
+        }
+      },
+      "joiner_heroes": {}
+    },
+    "sim_result": {
+      "attacker": 635,
+      "defender": 0
+    },
+    "game_report_result": [
+      {
+        "attacker": 670,
+        "defender": 0
+      }
+    ]
+  }
+]

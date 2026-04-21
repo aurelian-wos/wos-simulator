@@ -1,0 +1,86 @@
+[
+  {
+    "test_id": "reina_bahiti_combo_nc",
+    "description": "Reina+Bahiti 2-hero combo \u2014 both lancer/marksman class heroes, no chance skills, single run definitive. WIP attacks (no hero, t8 inf+lanc), minxxx defends with Reina+Bahiti.",
+    "attacker": {
+      "name": "[BBQ]XxWIPxX",
+      "heroes": {},
+      "troops": {
+        "infantry_t8": 600,
+        "lancer_t8": 600,
+        "marksman_t6": 0
+      },
+      "stats": {
+        "inf": {
+          "attack": 79.3,
+          "defense": 81.9,
+          "lethality": 31.1,
+          "health": 38.1
+        },
+        "lanc": {
+          "attack": 84.3,
+          "defense": 79.1,
+          "lethality": 38.1,
+          "health": 31.3
+        },
+        "mark": {
+          "attack": 88.8,
+          "defense": 75.4,
+          "lethality": 37.6,
+          "health": 31.9
+        }
+      },
+      "joiner_heroes": {}
+    },
+    "defender": {
+      "name": "[ARK]Piddilyminxxx",
+      "heroes": {
+        "Reina": {
+          "skill_1": 2,
+          "skill_2": 2,
+          "skill_3": 0
+        },
+        "Bahiti": {
+          "skill_1": 2,
+          "skill_2": 2
+        }
+      },
+      "troops": {
+        "infantry_t6": 200,
+        "lancer_t6": 200,
+        "marksman_t6": 200
+      },
+      "stats": {
+        "inf": {
+          "attack": 221.0,
+          "defense": 192.8,
+          "lethality": 119.1,
+          "health": 132.4
+        },
+        "lanc": {
+          "attack": 271.2,
+          "defense": 254.0,
+          "lethality": 121.2,
+          "health": 122.4
+        },
+        "mark": {
+          "attack": 301.0,
+          "defense": 282.8,
+          "lethality": 128.9,
+          "health": 130.0
+        }
+      },
+      "joiner_heroes": {}
+    },
+    "sim_result": {
+      "attacker": 0,
+      "defender": 428
+    },
+    "game_report_result": [
+      {
+        "attacker": 0,
+        "defender": 502
+      }
+    ]
+  }
+]

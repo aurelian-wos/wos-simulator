@@ -1,0 +1,91 @@
+[
+  {
+    "test_id": "logan_reina_bahiti_combo_nc",
+    "description": "Logan+Reina+Bahiti 3-hero combo \u2014 Inf+Lanc+Mark classes, all NC, single run definitive. WIP attacks (no hero, t8 inf+lanc), minxxx defends with all three heroes.",
+    "attacker": {
+      "name": "[BBQ]XxWIPxX",
+      "heroes": {},
+      "troops": {
+        "infantry_t8": 800,
+        "lancer_t8": 800,
+        "marksman_t6": 0
+      },
+      "stats": {
+        "inf": {
+          "attack": 79.3,
+          "defense": 81.9,
+          "lethality": 31.1,
+          "health": 38.1
+        },
+        "lanc": {
+          "attack": 84.3,
+          "defense": 79.1,
+          "lethality": 38.1,
+          "health": 31.3
+        },
+        "mark": {
+          "attack": 88.8,
+          "defense": 75.4,
+          "lethality": 37.6,
+          "health": 31.9
+        }
+      },
+      "joiner_heroes": {}
+    },
+    "defender": {
+      "name": "[ARK]Piddilyminxxx",
+      "heroes": {
+        "Logan": {
+          "skill_1": 3,
+          "skill_2": 3,
+          "skill_3": 3
+        },
+        "Reina": {
+          "skill_1": 2,
+          "skill_2": 2,
+          "skill_3": 0
+        },
+        "Bahiti": {
+          "skill_1": 2,
+          "skill_2": 2
+        }
+      },
+      "troops": {
+        "infantry_t6": 200,
+        "lancer_t6": 200,
+        "marksman_t6": 200
+      },
+      "stats": {
+        "inf": {
+          "attack": 313.2,
+          "defense": 285.0,
+          "lethality": 119.1,
+          "health": 132.4
+        },
+        "lanc": {
+          "attack": 271.2,
+          "defense": 254.0,
+          "lethality": 121.2,
+          "health": 122.4
+        },
+        "mark": {
+          "attack": 301.0,
+          "defense": 282.8,
+          "lethality": 128.9,
+          "health": 130.0
+        }
+      },
+      "joiner_heroes": {}
+    },
+    "sim_result": {
+      "attacker": 0,
+      "defender": 501
+    },
+    "game_report_result": [
+      {
+        "attacker": 0,
+        "defender": 482
+      }
+    ]
+  }
+]

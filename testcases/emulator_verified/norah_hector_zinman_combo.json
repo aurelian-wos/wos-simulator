@@ -1,0 +1,108 @@
+[
+  {
+    "test_id": "norah_hector_zinman_combo",
+    "description": "Norah+Hector+Zinman 3-hero combo \u2014 Lanc+Inf+Mark class heroes. Norah S2 splash, Zinman has chance-based skills. RNG test, run 5 battles. WIP attacks (no hero, t6 troops), minxxx defends with all three heroes.",
+    "attacker": {
+      "name": "[BBQ]XxWIPxX",
+      "heroes": {},
+      "troops": {
+        "infantry_t6": 400,
+        "lancer_t6": 400,
+        "marksman_t6": 400
+      },
+      "stats": {
+        "inf": {
+          "attack": 79.3,
+          "defense": 81.9,
+          "lethality": 31.1,
+          "health": 38.1
+        },
+        "lanc": {
+          "attack": 84.3,
+          "defense": 79.1,
+          "lethality": 38.1,
+          "health": 31.3
+        },
+        "mark": {
+          "attack": 88.8,
+          "defense": 75.4,
+          "lethality": 37.6,
+          "health": 31.9
+        }
+      },
+      "joiner_heroes": {}
+    },
+    "defender": {
+      "name": "[ARK]Piddilyminxxx",
+      "heroes": {
+        "Hector": {
+          "skill_1": 3,
+          "skill_2": 4,
+          "skill_3": 4
+        },
+        "Norah": {
+          "skill_1": 1,
+          "skill_2": 1,
+          "skill_3": 0
+        },
+        "Zinman": {
+          "skill_1": 1,
+          "skill_2": 0,
+          "skill_3": 0
+        }
+      },
+      "troops": {
+        "infantry_t6": 100,
+        "lancer_t6": 100,
+        "marksman_t6": 100
+      },
+      "stats": {
+        "inf": {
+          "attack": 488.9,
+          "defense": 473.7,
+          "lethality": 148.2,
+          "health": 169.4
+        },
+        "lanc": {
+          "attack": 286.5,
+          "defense": 282.3,
+          "lethality": 121.2,
+          "health": 122.4
+        },
+        "mark": {
+          "attack": 237.2,
+          "defense": 232.0,
+          "lethality": 124.1,
+          "health": 125.7
+        }
+      },
+      "joiner_heroes": {}
+    },
+    "sim_result": {
+      "attacker": 0,
+      "defender": 270
+    },
+    "game_report_result": [
+      {
+        "attacker": 0,
+        "defender": 270
+      },
+      {
+        "attacker": 0,
+        "defender": 271
+      },
+      {
+        "attacker": 0,
+        "defender": 269
+      },
+      {
+        "attacker": 0,
+        "defender": 270
+      },
+      {
+        "attacker": 0,
+        "defender": 272
+      }
+    ]
+  }
+]

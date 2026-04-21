@@ -1,0 +1,87 @@
+[
+  {
+    "test_id": "gwen_norah_combo_nc",
+    "description": "Gwen (Marksman class) + Norah (Infantry class) combo defender \u2014 no chance skills, deterministic. Tests frequency-based skill stacking: Gwen fires extra marksmen attacks every 4-5 attacks, Norah fires lancer splash. WIP attacks clean; minxxx defends.",
+    "attacker": {
+      "name": "[BBQ]XxWIPxX",
+      "heroes": {},
+      "troops": {
+        "infantry_t6": 1500,
+        "lancer_t6": 1069,
+        "marksman_t6": 1500
+      },
+      "stats": {
+        "inf": {
+          "attack": 79.3,
+          "defense": 81.9,
+          "lethality": 31.1,
+          "health": 38.1
+        },
+        "lanc": {
+          "attack": 84.3,
+          "defense": 79.1,
+          "lethality": 38.1,
+          "health": 31.3
+        },
+        "mark": {
+          "attack": 88.8,
+          "defense": 75.4,
+          "lethality": 37.6,
+          "health": 31.9
+        }
+      },
+      "joiner_heroes": {}
+    },
+    "defender": {
+      "name": "[ARK]Piddilyminxxx",
+      "heroes": {
+        "Norah": {
+          "skill_1": 1,
+          "skill_2": 1,
+          "skill_3": 0
+        },
+        "Gwen": {
+          "skill_1": 1,
+          "skill_2": 1,
+          "skill_3": 0
+        }
+      },
+      "troops": {
+        "infantry_t6": 200,
+        "lancer_t6": 200,
+        "marksman_t6": 200
+      },
+      "stats": {
+        "inf": {
+          "attack": 221.0,
+          "defense": 200.8,
+          "lethality": 119.1,
+          "health": 132.4
+        },
+        "lanc": {
+          "attack": 286.5,
+          "defense": 277.3,
+          "lethality": 121.2,
+          "health": 122.4
+        },
+        "mark": {
+          "attack": 303.5,
+          "defense": 293.3,
+          "lethality": 124.1,
+          "health": 125.7
+        }
+      },
+      "joiner_heroes": {}
+    },
+    "sim_result": {
+      "attacker": 2709,
+      "defender": 0
+    },
+    "game_report_result": [
+      {
+        "attacker": 2668,
+        "defender": 0
+      }
+    ]
+  }
+]

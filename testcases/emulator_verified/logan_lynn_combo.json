@@ -1,0 +1,265 @@
+[
+  {
+    "test_id": "logan_lynn_combo",
+    "description": "Logan+Lynn 2-hero combo \u2014 Inf+Lanc class heroes. Lynn S1 has 40% chance (RNG). WIP attacks (no hero, t6 inf+lanc+mark), minxxx defends with Logan+Lynn. Run 5 battles.",
+    "attacker": {
+      "name": "[BBQ]XxWIPxX",
+      "heroes": {},
+      "troops": {
+        "infantry_t6": 600,
+        "lancer_t6": 600,
+        "marksman_t6": 600
+      },
+      "stats": {
+        "inf": {
+          "attack": 79.3,
+          "defense": 81.9,
+          "lethality": 31.1,
+          "health": 38.1
+        },
+        "lanc": {
+          "attack": 84.3,
+          "defense": 79.1,
+          "lethality": 38.1,
+          "health": 31.3
+        },
+        "mark": {
+          "attack": 88.8,
+          "defense": 75.4,
+          "lethality": 37.6,
+          "health": 31.9
+        }
+      },
+      "joiner_heroes": {}
+    },
+    "defender": {
+      "name": "[ARK]Piddilyminxxx",
+      "heroes": {
+        "Logan": {
+          "skill_1": 3,
+          "skill_2": 3,
+          "skill_3": 3
+        },
+        "Lynn": {
+          "skill_1": 3,
+          "skill_2": 3,
+          "skill_3": 3
+        }
+      },
+      "troops": {
+        "infantry_t6": 200,
+        "lancer_t6": 200,
+        "marksman_t6": 200
+      },
+      "stats": {
+        "inf": {
+          "attack": 313.2,
+          "defense": 298.0,
+          "lethality": 119.1,
+          "health": 132.4
+        },
+        "lanc": {
+          "attack": 195.0,
+          "defense": 190.8,
+          "lethality": 121.2,
+          "health": 122.4
+        },
+        "mark": {
+          "attack": 387.6,
+          "defense": 382.4,
+          "lethality": 188.4,
+          "health": 157.2
+        }
+      },
+      "joiner_heroes": {}
+    },
+    "sim_result": {
+      "attacker": 0,
+      "defender": 549
+    },
+    "game_report_result": [
+      {
+        "attacker": 0,
+        "defender": 553
+      }
+    ]
+  },
+  {
+    "test_id": "logan_lynn_combo",
+    "description": "Logan+Lynn 2-hero combo \u2014 Inf+Lanc class heroes. Lynn S1 has 40% chance (RNG). minxxx attacks with Logan+Lynn (600 troops), WIP defends (no hero, 1800 troops). 3:1 troop disadvantage for hero side. Placed as attackers so widget defense bonuses (S4) do not fire, making the fight competitive. Run 5 battles.",
+    "attacker": {
+      "name": "[ARK]Piddlyminxxx",
+      "heroes": {
+        "Logan": {
+          "skill_1": 3,
+          "skill_2": 3,
+          "skill_3": 3
+        },
+        "Lynn": {
+          "skill_1": 3,
+          "skill_2": 3,
+          "skill_3": 3
+        }
+      },
+      "troops": {
+        "infantry_t6": 200,
+        "lancer_t6": 200,
+        "marksman_t6": 200
+      },
+      "stats": {
+        "inf": {
+          "attack": 313.2,
+          "defense": 298.0,
+          "lethality": 119.1,
+          "health": 132.4
+        },
+        "lanc": {
+          "attack": 195.0,
+          "defense": 190.8,
+          "lethality": 121.2,
+          "health": 122.4
+        },
+        "mark": {
+          "attack": 387.6,
+          "defense": 382.4,
+          "lethality": 188.4,
+          "health": 157.2
+        }
+      },
+      "joiner_heroes": {}
+    },
+    "defender": {
+      "name": "[BBQ]XxWIPxX",
+      "heroes": {},
+      "troops": {
+        "infantry_t6": 600,
+        "lancer_t6": 600,
+        "marksman_t6": 600
+      },
+      "stats": {
+        "inf": {
+          "attack": 79.3,
+          "defense": 81.9,
+          "lethality": 31.1,
+          "health": 38.1
+        },
+        "lanc": {
+          "attack": 84.3,
+          "defense": 79.1,
+          "lethality": 38.1,
+          "health": 31.3
+        },
+        "mark": {
+          "attack": 88.8,
+          "defense": 75.4,
+          "lethality": 37.6,
+          "health": 31.9
+        }
+      },
+      "joiner_heroes": {}
+    },
+    "sim_result": {
+      "attacker": 0,
+      "defender": 550
+    },
+    "game_report_result": [
+      {
+        "attacker": 552,
+        "defender": 0
+      },
+      {
+        "attacker": 549,
+        "defender": 0
+      }
+    ]
+  },
+  {
+    "test_id": "logan_lynn_combo",
+    "description": "Logan+Lynn 2-hero combo \u2014 Inf+Lanc class heroes. Lynn S1 has 40% chance (RNG). minxxx attacks with Logan+Lynn (600 troops), WIP defends (no hero, 1800 troops). 3:1 troop disadvantage for hero side. Placed as attackers so widget defense bonuses (S4) do not fire, making the fight competitive. Run 5 battles.",
+    "attacker": {
+      "name": "[ARK]Piddlyminxxx",
+      "heroes": {
+        "Logan": {
+          "skill_1": 3,
+          "skill_2": 3,
+          "skill_3": 3
+        },
+        "Lynn": {
+          "skill_1": 3,
+          "skill_2": 3,
+          "skill_3": 3
+        }
+      },
+      "troops": {
+        "infantry_t6": 200,
+        "lancer_t6": 200,
+        "marksman_t6": 200
+      },
+      "stats": {
+        "inf": {
+          "attack": 313.2,
+          "defense": 298.0,
+          "lethality": 119.1,
+          "health": 132.4
+        },
+        "lanc": {
+          "attack": 195.0,
+          "defense": 190.8,
+          "lethality": 121.2,
+          "health": 122.4
+        },
+        "mark": {
+          "attack": 387.6,
+          "defense": 382.4,
+          "lethality": 188.4,
+          "health": 157.2
+        }
+      },
+      "joiner_heroes": {}
+    },
+    "defender": {
+      "name": "[BBQ]XxWIPxX",
+      "heroes": {},
+      "troops": {
+        "infantry_t6": 600,
+        "lancer_t6": 600,
+        "marksman_t6": 600
+      },
+      "stats": {
+        "inf": {
+          "attack": 79.3,
+          "defense": 81.9,
+          "lethality": 31.1,
+          "health": 38.1
+        },
+        "lanc": {
+          "attack": 84.3,
+          "defense": 79.1,
+          "lethality": 38.1,
+          "health": 31.3
+        },
+        "mark": {
+          "attack": 88.8,
+          "defense": 75.4,
+          "lethality": 37.6,
+          "health": 31.9
+        }
+      },
+      "joiner_heroes": {}
+    },
+    "sim_result": {
+      "attacker": 0,
+      "defender": 547
+    },
+    "game_report_result": [
+      {
+        "attacker": 552,
+        "defender": 0
+      },
+      {
+        "attacker": 550,
+        "defender": 0
+      }
+    ]
+  }
+]

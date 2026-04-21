@@ -1,0 +1,103 @@
+[
+  {
+    "test_id": "molly_lynn_combo",
+    "description": "Molly+Lynn 2-hero combo \u2014 Lanc+Mark class heroes. Lynn S1 has 40% chance. RNG test, run 5 battles. WIP attacks (no hero, t6 troops), minxxx defends with Molly+Lynn.",
+    "attacker": {
+      "name": "[BBQ]XxWIPxX",
+      "heroes": {},
+      "troops": {
+        "infantry_t6": 400,
+        "lancer_t6": 400,
+        "marksman_t6": 400
+      },
+      "stats": {
+        "inf": {
+          "attack": 79.3,
+          "defense": 81.9,
+          "lethality": 31.1,
+          "health": 38.1
+        },
+        "lanc": {
+          "attack": 84.3,
+          "defense": 79.1,
+          "lethality": 38.1,
+          "health": 31.3
+        },
+        "mark": {
+          "attack": 88.8,
+          "defense": 75.4,
+          "lethality": 37.6,
+          "health": 31.9
+        }
+      },
+      "joiner_heroes": {}
+    },
+    "defender": {
+      "name": "[ARK]Piddilyminxxx",
+      "heroes": {
+        "Molly": {
+          "skill_1": 2,
+          "skill_2": 2,
+          "skill_3": 1
+        },
+        "Lynn": {
+          "skill_1": 3,
+          "skill_2": 3,
+          "skill_3": 3
+        }
+      },
+      "troops": {
+        "infantry_t6": 150,
+        "lancer_t6": 150,
+        "marksman_t6": 150
+      },
+      "stats": {
+        "inf": {
+          "attack": 221.0,
+          "defense": 205.8,
+          "lethality": 119.1,
+          "health": 132.4
+        },
+        "lanc": {
+          "attack": 263.2,
+          "defense": 259.0,
+          "lethality": 126.2,
+          "health": 127.4
+        },
+        "mark": {
+          "attack": 387.6,
+          "defense": 382.4,
+          "lethality": 188.4,
+          "health": 157.2
+        }
+      },
+      "joiner_heroes": {}
+    },
+    "sim_result": {
+      "attacker": 0,
+      "defender": 401
+    },
+    "game_report_result": [
+      {
+        "attacker": 0,
+        "defender": 399
+      },
+      {
+        "attacker": 0,
+        "defender": 404
+      },
+      {
+        "attacker": 0,
+        "defender": 402
+      },
+      {
+        "attacker": 0,
+        "defender": 401
+      },
+      {
+        "attacker": 0,
+        "defender": 408
+      }
+    ]
+  }
+]
