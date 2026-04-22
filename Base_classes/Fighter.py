@@ -309,6 +309,12 @@ class Fighter:
         if benefit_for == 'all':
             return list(UnitType)
         if benefit_for == 'trigger':
+            trigger_for = effect_dict.get('trigger_types', {}).get('trigger_for')
+            if trigger_for == 'all':
+                return list(UnitType)
+            trigger_type = _to_unitx(trigger_for)
+            if trigger_type in UnitType.list():
+                return [trigger_type]
             return [_to_unitx(skill.skill_troop_type)]
         if benefit_for in [ut.name for ut in UnitType]:
             return [_to_unitx(benefit_for)]
