@@ -7,17 +7,32 @@ import {
   XAxis,
   YAxis,
   Tooltip,
-  Legend,
   ResponsiveContainer,
 } from "recharts";
 import type { TestcaseTrendRow } from "@/types/dashboard";
 import { computeDrift } from "@/lib/drift";
 
 const COLOURS = [
-  "#89b4fa","#a6e3a1","#f38ba8","#fab387","#f9e2af",
-  "#94e2d5","#cba6f7","#74c7ec","#eba0ac","#b4befe",
-  "#89dceb","#f5c2e7","#cdd6f4","#a6adc8","#bac2de",
-  "#6c7086","#9399b2","#7f849c","#585b70","#45475a",
+  "#89b4fa",
+  "#a6e3a1",
+  "#f38ba8",
+  "#fab387",
+  "#f9e2af",
+  "#94e2d5",
+  "#cba6f7",
+  "#74c7ec",
+  "#eba0ac",
+  "#b4befe",
+  "#89dceb",
+  "#f5c2e7",
+  "#cdd6f4",
+  "#a6adc8",
+  "#bac2de",
+  "#6c7086",
+  "#9399b2",
+  "#7f849c",
+  "#585b70",
+  "#45475a",
 ];
 
 interface Props {
@@ -29,6 +44,15 @@ interface TrendEntry {
   testcase_id: string;
   idx: number;
   points: { run_id: string; started_at: string; bias_pct: number | null }[];
+}
+
+interface SeriesMeta {
+  id: string;
+  dataKeyBase: string;
+  label: string;
+  drift: number;
+  colour: string;
+  rank: number;
 }
 
 function shortDate(iso: string): string {
@@ -44,7 +68,7 @@ function makeShortLabel(
   file: string,
   testcase_id: string,
   idx: number,
-  fileHasMultipleIds: boolean
+  fileHasMultipleIds: boolean,
 ): string {
   let label = file
     .replace(/^testcases\/(emulator_verified\/)?/, "")
@@ -55,8 +79,8 @@ function makeShortLabel(
 }
 
 // Build TWO companion arrays (`even`, `odd`) that bridge interior null gaps.
-// Consecutive gaps alternate between the two series so that — with
-// connectNulls={false} on each — the dashed line can never cross through a
+// Consecutive gaps alternate between the two series so that -- with
+// connectNulls={false} on each -- the dashed line can never cross through a
 // real-data region between two gaps (which caused the "duplicate dashed line
 // alongside solid" defect). Leading/trailing nulls stay null on both series
 // so the line does not reach past real data on either end.
@@ -82,7 +106,7 @@ function computeBridges(
     if (nextIdx < 0 || nextIdx >= n) return 0;
     const neighbour = actual[nextIdx] as number;
     // Slope per unit index, expressed as rise going rightward.
-    return (neighbour - anchor) / (nextIdx - anchorIdx) * dir;
+    return ((neighbour - anchor) / (nextIdx - anchorIdx)) * dir;
   };
 
   let gapCount = 0;
@@ -112,7 +136,8 @@ function computeBridges(
         const h10 = t ** 3 - 2 * t ** 2 + t;
         const h01 = -2 * t ** 3 + 3 * t ** 2;
         const h11 = t ** 3 - t ** 2;
-        target[k] = h00 * yL + h10 * span * mL + h01 * yR + h11 * span * mR;
+        target[k] =
+          h00 * yL + h10 * span * mL + h01 * yR + h11 * span * mR;
       }
       gapCount++;
     }
@@ -124,9 +149,11 @@ function computeBridges(
 export default function TestcaseDriftChart({ rows }: Props) {
   const [topN, setTopN] = useState(10);
   // Opt-in filter: substantial (non-smoke) runs only. Off by default so a
-  // diagnostic session — where lots of small configuration-iteration runs
-  // legitimately probe a high-drift testcase — remains fully visible.
+  // diagnostic session -- where lots of small configuration-iteration runs
+  // legitimately probe a high-drift testcase -- remains fully visible.
   const [hideSmokeRuns, setHideSmokeRuns] = useState(false);
+  const [hoveredSeriesId, setHoveredSeriesId] = useState<string | null>(null);
+  const [pinnedSeriesId, setPinnedSeriesId] = useState<string | null>(null);
 
   if (rows.length === 0) return null;
 
@@ -135,7 +162,12 @@ export default function TestcaseDriftChart({ rows }: Props) {
   for (const row of rows) {
     const key = `${row.file}|${row.testcase_id}|${row.idx}`;
     if (!map.has(key)) {
-      map.set(key, { file: row.file, testcase_id: row.testcase_id, idx: row.idx, points: [] });
+      map.set(key, {
+        file: row.file,
+        testcase_id: row.testcase_id,
+        idx: row.idx,
+        points: [],
+      });
     }
     map.get(key)!.points.push({
       run_id: row.run_id,
@@ -151,7 +183,7 @@ export default function TestcaseDriftChart({ rows }: Props) {
   //      dataset is plugged in (floor 5 for small DBs).
   //   2. Always: drop runs where none of the currently-selected top-N
   //      testcases have data. This is what prevents the "middle-of-chart is
-  //      all dashed" artefact — a run that nobody visible hits adds a tick
+  //      all dashed" artefact -- a run that nobody visible hits adds a tick
   //      the series cannot bridge around honestly.
   // Filter 1 only changes with the checkbox; filter 2 tracks the topN slider
   // so sliding can add/remove ticks as different testcases enter the view.
@@ -167,10 +199,7 @@ export default function TestcaseDriftChart({ rows }: Props) {
       });
     }
   }
-  const maxPerRun = Math.max(
-    0,
-    ...Array.from(rowsByRun.values()).map((v) => v.n),
-  );
+  const maxPerRun = Math.max(0, ...Array.from(rowsByRun.values()).map((v) => v.n));
   const runThreshold = Math.max(5, Math.floor(maxPerRun * 0.1));
   const candidateRunIds = new Set(
     Array.from(rowsByRun.entries())
@@ -189,7 +218,7 @@ export default function TestcaseDriftChart({ rows }: Props) {
   }
 
   // Rank testcases by drift (mean squared bias) across the candidate run set.
-  // Drift = variance-around-zero, so a constant +2% bias ranks high — which
+  // Drift = variance-around-zero, so a constant +2% bias ranks high -- which
   // is what "the simulator is wrong by 2% on this testcase" should look like.
   // Selection must be stable as the user drags the topN slider.
   const driftPoints = (entry: TrendEntry): (number | null)[] =>
@@ -197,7 +226,7 @@ export default function TestcaseDriftChart({ rows }: Props) {
       .filter((p) => candidateRunIds.has(p.run_id))
       .map((p) => p.bias_pct);
   const sorted = Array.from(map.values())
-    .filter((e) => driftPoints(e).some((v) => v !== null))
+    .filter((entry) => driftPoints(entry).some((value) => value !== null))
     .sort((a, b) => computeDrift(driftPoints(b)) - computeDrift(driftPoints(a)));
 
   const selected = sorted.slice(0, topN);
@@ -207,37 +236,45 @@ export default function TestcaseDriftChart({ rows }: Props) {
   // dashed-only stretches whenever the visible testcases happen to miss a
   // batch of runs.
   const selectedKeys = new Set(
-    selected.flatMap((e) =>
-      e.points
-        .filter((p) => p.bias_pct !== null && candidateRunIds.has(p.run_id))
-        .map((p) => p.run_id),
+    selected.flatMap((entry) =>
+      entry.points
+        .filter((point) => point.bias_pct !== null && candidateRunIds.has(point.run_id))
+        .map((point) => point.run_id),
     ),
   );
   const runs = Array.from(rowsByRun.entries())
     .filter(([id]) => candidateRunIds.has(id) && selectedKeys.has(id))
-    .map(([run_id, v]) => ({ run_id, started_at: v.started_at }))
+    .map(([run_id, value]) => ({ run_id, started_at: value.started_at }))
     .sort((a, b) => a.started_at.localeCompare(b.started_at));
   if (runs.length === 0) return null;
+
   const runIdxById = new Map<string, number>();
-  runs.forEach((r, i) => runIdxById.set(r.run_id, i));
+  runs.forEach((run, i) => runIdxById.set(run.run_id, i));
 
-  // Pre-compute each selected series' drift value so it can be shown in the
-  // legend. Seeing the number beside the label prevents the "why is this one
-  // above that one" confusion when two series look visually similar.
-  const selectedDrift = selected.map((entry) =>
-    computeDrift(driftPoints(entry)),
-  );
-
-  // Build short keys for chart series, with the drift value appended so the
-  // legend communicates the ranking directly.
-  const seriesKeys = selected.map((entry, i) => {
+  // Pre-compute each selected series' drift value so the legend can show the
+  // ranking alongside each testcase instead of forcing the user to infer it
+  // from stroke order alone.
+  const selectedDrift = selected.map((entry) => computeDrift(driftPoints(entry)));
+  const seriesMeta: SeriesMeta[] = selected.map((entry, i) => {
     const base = entry.file
       .replace(/^testcases\/(emulator_verified\/)?/, "")
       .replace(/\.json$/, "");
     const hasMultiIds = (fileBasenameToIds.get(base)?.size ?? 0) > 1;
-    const label = makeShortLabel(entry.file, entry.testcase_id, entry.idx, hasMultiIds);
-    return `${label} (${selectedDrift[i].toFixed(2)})`;
+    return {
+      id: `${entry.file}|${entry.testcase_id}|${entry.idx}`,
+      dataKeyBase: `series_${i}`,
+      label: makeShortLabel(entry.file, entry.testcase_id, entry.idx, hasMultiIds),
+      drift: selectedDrift[i],
+      colour: COLOURS[i % COLOURS.length],
+      rank: i + 1,
+    };
   });
+
+  const activeSeriesId = hoveredSeriesId ?? pinnedSeriesId;
+  const activeSeries =
+    (activeSeriesId
+      ? seriesMeta.find((series) => series.id === activeSeriesId)
+      : null) ?? null;
 
   // Per-series value arrays aligned to the run index, plus two alternating
   // bridge arrays that smoothly interpolate interior gaps only.
@@ -246,9 +283,9 @@ export default function TestcaseDriftChart({ rows }: Props) {
   const seriesBridgeOdd: (number | null)[][] = [];
   for (let s = 0; s < selected.length; s++) {
     const actual: (number | null)[] = new Array(runs.length).fill(null);
-    for (const pt of selected[s].points) {
-      const ri = runIdxById.get(pt.run_id);
-      if (ri !== undefined) actual[ri] = pt.bias_pct;
+    for (const point of selected[s].points) {
+      const runIndex = runIdxById.get(point.run_id);
+      if (runIndex !== undefined) actual[runIndex] = point.bias_pct;
     }
     seriesActual.push(actual);
     const { even, odd } = computeBridges(actual);
@@ -262,10 +299,11 @@ export default function TestcaseDriftChart({ rows }: Props) {
       idx: i,
       label: shortDate(run.started_at),
     };
-    for (let s = 0; s < seriesKeys.length; s++) {
-      entry[`${seriesKeys[s]}_actual`] = seriesActual[s][i];
-      entry[`${seriesKeys[s]}_bridge_e`] = seriesBridgeEven[s][i];
-      entry[`${seriesKeys[s]}_bridge_o`] = seriesBridgeOdd[s][i];
+    for (let s = 0; s < seriesMeta.length; s++) {
+      const key = seriesMeta[s].dataKeyBase;
+      entry[`${key}_actual`] = seriesActual[s][i];
+      entry[`${key}_bridge_e`] = seriesBridgeEven[s][i];
+      entry[`${key}_bridge_o`] = seriesBridgeOdd[s][i];
     }
     return entry;
   });
@@ -273,16 +311,13 @@ export default function TestcaseDriftChart({ rows }: Props) {
   return (
     <div className="mb-6">
       <p
-        className="text-xs uppercase tracking-wider opacity-50 mb-2"
+        className="mb-2 text-xs uppercase tracking-wider opacity-50"
         style={{ color: "var(--main-text)" }}
       >
         Per-testcase Bias % over Time
       </p>
       <div className="mb-3 flex flex-wrap items-center gap-3">
-        <label
-          className="text-xs opacity-60"
-          style={{ color: "var(--main-text)" }}
-        >
+        <label className="text-xs opacity-60" style={{ color: "var(--main-text)" }}>
           Show top {topN} testcases by simulator drift (mean squared bias)
         </label>
         <input
@@ -295,7 +330,7 @@ export default function TestcaseDriftChart({ rows }: Props) {
           className="w-32 accent-[var(--sidebar-active)]"
         />
         <label
-          className="text-xs opacity-60 flex items-center gap-1 cursor-pointer"
+          className="flex cursor-pointer items-center gap-1 text-xs opacity-60"
           style={{ color: "var(--main-text)" }}
           data-testid="hide-smoke-runs-toggle"
         >
@@ -308,6 +343,15 @@ export default function TestcaseDriftChart({ rows }: Props) {
           Hide smoke / iterate-only runs
         </label>
       </div>
+      <p
+        className="mb-2 text-[11px] opacity-60"
+        style={{ color: "var(--main-text)" }}
+        data-testid="testcase-drift-focus"
+      >
+        {activeSeries
+          ? `${pinnedSeriesId === activeSeries.id ? "Pinned" : "Focused"} series: #${activeSeries.rank} ${activeSeries.label} (drift ${activeSeries.drift.toFixed(2)}). ${pinnedSeriesId === activeSeries.id ? "Click again to clear." : "Click its legend row to pin it."}`
+          : "Hover a legend row or chart line to isolate a testcase. Click a legend row to pin it."}
+      </p>
       <ResponsiveContainer width="100%" height={300}>
         <LineChart data={chartData} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
           <XAxis
@@ -325,7 +369,7 @@ export default function TestcaseDriftChart({ rows }: Props) {
             axisLine={false}
             tickLine={false}
             width={44}
-            tickFormatter={(v: number) => `${v.toFixed(1)}%`}
+            tickFormatter={(value: number) => `${value.toFixed(1)}%`}
           />
           <Tooltip
             contentStyle={{
@@ -341,55 +385,112 @@ export default function TestcaseDriftChart({ rows }: Props) {
               name,
             ]}
           />
-          <Legend
-            wrapperStyle={{ fontSize: 10, opacity: 0.6, color: "var(--sidebar-text)" }}
-          />
-          {seriesKeys.flatMap((key, i) => {
-            const colour = COLOURS[i % COLOURS.length];
-            const bridgeProps = {
-              stroke: colour,
-              strokeWidth: 1,
-              strokeDasharray: "4 3",
-              opacity: 0.8,
-              dot: false,
-              isAnimationActive: false,
-              // Only connect adjacent non-null samples within a single gap's
-              // anchor-interp-anchor triple. Between two gaps the series has
-              // at least one null, so the dashed line correctly breaks and
-              // does not retrace the solid segment in between.
-              connectNulls: false,
-              legendType: "none" as const,
-              tooltipType: "none" as const,
+          {seriesMeta.flatMap((series) => {
+            const isActive = activeSeriesId === series.id;
+            const isMuted = activeSeriesId !== null && !isActive;
+            const sharedHandlers = {
+              onMouseEnter: () => setHoveredSeriesId(series.id),
+              onMouseLeave: () => setHoveredSeriesId(null),
+              onClick: () =>
+                setPinnedSeriesId((current) =>
+                  current === series.id ? null : series.id,
+                ),
             };
             return [
               <Line
-                key={`${key}__bridge_e`}
+                key={`${series.dataKeyBase}__bridge_e`}
                 type="linear"
-                dataKey={`${key}_bridge_e`}
-                {...bridgeProps}
-              />,
-              <Line
-                key={`${key}__bridge_o`}
-                type="linear"
-                dataKey={`${key}_bridge_o`}
-                {...bridgeProps}
-              />,
-              <Line
-                key={`${key}__actual`}
-                type="monotone"
-                name={key}
-                dataKey={`${key}_actual`}
-                stroke={colour}
-                strokeWidth={1.5}
-                opacity={0.8}
+                dataKey={`${series.dataKeyBase}_bridge_e`}
+                stroke={series.colour}
+                strokeWidth={isActive ? 1.75 : 1}
+                strokeDasharray="4 3"
+                opacity={isMuted ? 0.16 : isActive ? 0.95 : 0.8}
                 dot={false}
                 isAnimationActive={false}
                 connectNulls={false}
+                tooltipType="none"
+                {...sharedHandlers}
+              />,
+              <Line
+                key={`${series.dataKeyBase}__bridge_o`}
+                type="linear"
+                dataKey={`${series.dataKeyBase}_bridge_o`}
+                stroke={series.colour}
+                strokeWidth={isActive ? 1.75 : 1}
+                strokeDasharray="4 3"
+                opacity={isMuted ? 0.16 : isActive ? 0.95 : 0.8}
+                dot={false}
+                isAnimationActive={false}
+                connectNulls={false}
+                tooltipType="none"
+                {...sharedHandlers}
+              />,
+              <Line
+                key={`${series.dataKeyBase}__actual`}
+                type="monotone"
+                name={`#${series.rank} ${series.label} (drift ${series.drift.toFixed(2)})`}
+                dataKey={`${series.dataKeyBase}_actual`}
+                stroke={series.colour}
+                strokeWidth={isActive ? 3 : 1.5}
+                opacity={isMuted ? 0.18 : 0.86}
+                dot={false}
+                isAnimationActive={false}
+                connectNulls={false}
+                activeDot={{ r: isActive ? 5 : 4 }}
+                {...sharedHandlers}
               />,
             ];
           })}
         </LineChart>
       </ResponsiveContainer>
+      <div
+        className="mt-3 flex flex-wrap gap-2"
+        data-testid="testcase-drift-legend"
+      >
+        {seriesMeta.map((series) => {
+          const isActive = activeSeriesId === series.id;
+          const isPinned = pinnedSeriesId === series.id;
+          return (
+            <button
+              key={series.id}
+              type="button"
+              aria-pressed={isPinned}
+              data-testid={`testcase-drift-legend-item-${series.rank}`}
+              className="flex items-center gap-2 rounded px-2 py-1 text-left text-[11px]"
+              style={{
+                border: `1px solid ${isActive ? series.colour : "var(--border-color)"}`,
+                backgroundColor: isActive
+                  ? "rgba(255, 255, 255, 0.04)"
+                  : "var(--sidebar-bg)",
+                color: "var(--main-text)",
+                opacity: activeSeriesId !== null && !isActive ? 0.55 : 1,
+              }}
+              onMouseEnter={() => setHoveredSeriesId(series.id)}
+              onMouseLeave={() => setHoveredSeriesId(null)}
+              onFocus={() => setHoveredSeriesId(series.id)}
+              onBlur={() => setHoveredSeriesId(null)}
+              onClick={() =>
+                setPinnedSeriesId((current) =>
+                  current === series.id ? null : series.id,
+                )
+              }
+            >
+              <span
+                className="inline-flex h-4 min-w-4 items-center justify-center rounded-sm px-1 text-[10px] font-bold"
+                style={{
+                  backgroundColor: series.colour,
+                  color: "var(--sidebar-bg)",
+                }}
+              >
+                {series.rank}
+              </span>
+              <span className="font-mono">{series.label}</span>
+              <span className="opacity-60">drift {series.drift.toFixed(2)}</span>
+              {isPinned && <span className="opacity-60">pinned</span>}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }

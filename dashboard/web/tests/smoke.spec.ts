@@ -140,6 +140,34 @@ test.describe('Dashboard smoke tests', () => {
     expect(errors).toHaveLength(0);
   });
 
+  test('/runs — testcase drift legend can pin a series for identification', async ({ page }) => {
+    const errors: string[] = [];
+    page.on('console', msg => { if (msg.type() === 'error') errors.push(msg.text()); });
+    page.on('pageerror', err => errors.push(err.message));
+
+    const response = await page.goto('/runs');
+    expect(response?.status()).toBe(200);
+
+    await page.waitForSelector('[data-testid="testcase-drift-legend"] button', { timeout: 10_000 });
+    await page.mouse.move(0, 0);
+
+    const focus = page.locator('[data-testid="testcase-drift-focus"]');
+    await expect(focus).toBeVisible();
+
+    const firstLegendItem = page.locator('[data-testid="testcase-drift-legend"] button').first();
+    await firstLegendItem.click();
+    await expect(firstLegendItem).toHaveAttribute('aria-pressed', 'true');
+    await expect(focus).toContainText('Pinned series: #1');
+    await expect(focus).toContainText('Click again to clear.');
+
+    await firstLegendItem.click();
+    await page.mouse.move(0, 0);
+    await expect(firstLegendItem).toHaveAttribute('aria-pressed', 'false');
+    await expect(focus).toContainText('Hover a legend row or chart line to isolate a testcase');
+
+    expect(errors).toHaveLength(0);
+  });
+
   test('/runs — smoke-run toggle is off by default and prunes x-axis ticks when enabled', async ({ page }) => {
     // WOS-189 follow-up: board asked for smoke-run filtering to be opt-in,
     // with default behaviour showing every run that any visible top-N series
