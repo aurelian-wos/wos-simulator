@@ -1,12 +1,12 @@
-import { test, expect, Page } from '@playwright/test';
-import Database from 'better-sqlite3';
-import path from 'path';
+import { test, expect, Page } from "@playwright/test";
+import Database from "better-sqlite3";
+import path from "path";
 
-const DIRTY_RUN_ID = 'aea74765-66e1-4f7c-b721-3565f98319ee';
+const DIRTY_RUN_ID = "aea74765-66e1-4f7c-b721-3565f98319ee";
 
 const DB_PATH =
   process.env.DB_PATH ??
-  path.resolve(__dirname, '../../../test_results/dashboard.sqlite');
+  path.resolve(__dirname, "../../../test_results/dashboard.sqlite");
 
 function twoMostRecentRunIds(): { a: string; b: string } {
   const db = new Database(DB_PATH, { readonly: true });
@@ -28,28 +28,32 @@ function twoMostRecentRunIds(): { a: string; b: string } {
 
 async function assertNoConsoleErrors(page: Page) {
   const errors: string[] = [];
-  page.on('console', msg => {
-    if (msg.type() === 'error') errors.push(msg.text());
+  page.on("console", (msg) => {
+    if (msg.type() === "error") errors.push(msg.text());
   });
-  page.on('pageerror', err => errors.push(err.message));
+  page.on("pageerror", (err) => errors.push(err.message));
   return errors;
 }
 
-test.describe('Dashboard smoke tests', () => {
-  test('/ — home page renders all five cards with drill-down links', async ({ page }) => {
+test.describe("Dashboard smoke tests", () => {
+  test("/ — home page renders all five cards with drill-down links", async ({
+    page,
+  }) => {
     const errors: string[] = [];
-    page.on('console', msg => { if (msg.type() === 'error') errors.push(msg.text()); });
-    page.on('pageerror', err => errors.push(err.message));
+    page.on("console", (msg) => {
+      if (msg.type() === "error") errors.push(msg.text());
+    });
+    page.on("pageerror", (err) => errors.push(err.message));
 
-    const response = await page.goto('/');
+    const response = await page.goto("/");
     expect(response?.status()).toBe(200);
 
     const cardIds = [
-      'card-latest-run',
-      'card-regressions',
-      'card-coverage',
-      'card-testcase-changes',
-      'card-recent-commits',
+      "card-latest-run",
+      "card-regressions",
+      "card-coverage",
+      "card-testcase-changes",
+      "card-recent-commits",
     ];
     for (const id of cardIds) {
       await expect(page.locator(`[data-testid="${id}"]`)).toBeVisible();
@@ -61,7 +65,13 @@ test.describe('Dashboard smoke tests', () => {
 
     // Five-way headline labels (WOS-186 Skipped included)
     const latest = page.locator('[data-testid="card-latest-run"]');
-    for (const label of ['Improved', 'Regressed', 'Added', 'Retired', 'Skipped']) {
+    for (const label of [
+      "Improved",
+      "Regressed",
+      "Added",
+      "Retired",
+      "Skipped",
+    ]) {
       await expect(latest).toContainText(label);
     }
 
@@ -71,267 +81,517 @@ test.describe('Dashboard smoke tests', () => {
     expect(errors).toHaveLength(0);
   });
 
-  test('/runs — lists at least one run', async ({ page }) => {
+  test("/runs — lists at least one run", async ({ page }) => {
     const errors: string[] = [];
-    page.on('console', msg => { if (msg.type() === 'error') errors.push(msg.text()); });
-    page.on('pageerror', err => errors.push(err.message));
+    page.on("console", (msg) => {
+      if (msg.type() === "error") errors.push(msg.text());
+    });
+    page.on("pageerror", (err) => errors.push(err.message));
 
-    const response = await page.goto('/runs');
+    const response = await page.goto("/runs");
     expect(response?.status()).toBe(200);
-    expect(response?.headers()['content-length']).not.toBe('0');
+    expect(response?.headers()["content-length"]).not.toBe("0");
 
     // Wait for the table to appear (inside accordion which defaults open)
-    await page.waitForSelector('[data-testid="runs-table"] tbody tr', { timeout: 10_000 });
-    const rows = await page.locator('[data-testid="runs-table"] tbody tr').count();
+    await page.waitForSelector('[data-testid="runs-table"] tbody tr', {
+      timeout: 10_000,
+    });
+    const rows = await page
+      .locator('[data-testid="runs-table"] tbody tr')
+      .count();
     expect(rows).toBeGreaterThan(0);
 
     expect(errors).toHaveLength(0);
   });
 
-  test('/runs — check-now controls are visible and the filter expands', async ({ page }) => {
+  test("/runs — check-now controls are visible and the filter expands", async ({
+    page,
+  }) => {
     const errors: string[] = [];
-    page.on('console', msg => { if (msg.type() === 'error') errors.push(msg.text()); });
-    page.on('pageerror', err => errors.push(err.message));
+    page.on("console", (msg) => {
+      if (msg.type() === "error") errors.push(msg.text());
+    });
+    page.on("pageerror", (err) => errors.push(err.message));
 
-    const response = await page.goto('/runs');
+    const response = await page.goto("/runs");
     expect(response?.status()).toBe(200);
 
-    await expect(page.locator('[data-testid="check-now-controls"]')).toBeVisible();
-    await expect(page.locator('[data-testid="check-now-button"]')).toBeVisible();
-    await expect(page.locator('[data-testid="check-now-filter-input"]')).toHaveCount(0);
+    await expect(
+      page.locator('[data-testid="check-now-controls"]'),
+    ).toBeVisible();
+    await expect(
+      page.locator('[data-testid="check-now-button"]'),
+    ).toBeVisible();
+    await expect(
+      page.locator('[data-testid="check-now-filter-input"]'),
+    ).toHaveCount(0);
 
     await page.locator('[data-testid="check-now-filter-toggle"]').click();
     const input = page.locator('[data-testid="check-now-filter-input"]');
     await expect(input).toBeVisible();
-    await input.fill('alonso solo');
-    await expect(input).toHaveValue('alonso solo');
+    await input.fill("alonso solo");
+    await expect(input).toHaveValue("alonso solo");
 
     expect(errors).toHaveLength(0);
   });
 
-  test('/runs — testcase variance chart bridges missing middle-run data with a dashed line', async ({ page }) => {
+  test("/runs — testcase variance chart bridges missing middle-run data with a dashed line", async ({
+    page,
+  }) => {
     // WOS-189: run-index x-axis + dotted-bridge for interior coverage gaps.
     // Real fixture data includes >100 testcases missing from at least one
     // run in the last 50, so top-variance selection will reliably include
     // at least one gappy series when the chart renders.
     const errors: string[] = [];
-    page.on('console', msg => { if (msg.type() === 'error') errors.push(msg.text()); });
-    page.on('pageerror', err => errors.push(err.message));
+    page.on("console", (msg) => {
+      if (msg.type() === "error") errors.push(msg.text());
+    });
+    page.on("pageerror", (err) => errors.push(err.message));
 
-    const response = await page.goto('/runs');
+    const response = await page.goto("/runs");
     expect(response?.status()).toBe(200);
 
     // Chart SVG should render. Recharts emits <path class="recharts-line-curve">
     // for each Line — one per solid series plus one per dashed bridge.
-    await page.waitForSelector('.recharts-line-curve', { timeout: 10_000 });
+    await page.waitForSelector(".recharts-line-curve", { timeout: 10_000 });
 
     // At least one solid line (actual data) present.
     const solidPaths = await page
-      .locator('path.recharts-line-curve:not([stroke-dasharray])')
+      .locator("path.recharts-line-curve:not([stroke-dasharray])")
       .count();
     expect(solidPaths).toBeGreaterThan(0);
 
     // At least one dashed bridge path present (interpolated gap).
     const dashedPaths = await page
-      .locator('path.recharts-line-curve[stroke-dasharray]')
+      .locator("path.recharts-line-curve[stroke-dasharray]")
       .count();
     expect(dashedPaths).toBeGreaterThan(0);
 
     expect(errors).toHaveLength(0);
   });
 
-  test('/runs — testcase drift legend can pin a series for identification', async ({ page }) => {
+  test("/runs — testcase drift legend can pin a series for identification", async ({
+    page,
+  }) => {
     const errors: string[] = [];
-    page.on('console', msg => { if (msg.type() === 'error') errors.push(msg.text()); });
-    page.on('pageerror', err => errors.push(err.message));
+    page.on("console", (msg) => {
+      if (msg.type() === "error") errors.push(msg.text());
+    });
+    page.on("pageerror", (err) => errors.push(err.message));
 
-    const response = await page.goto('/runs');
+    const response = await page.goto("/runs");
     expect(response?.status()).toBe(200);
 
-    await page.waitForSelector('[data-testid="testcase-drift-legend"] button', { timeout: 10_000 });
+    await page.waitForSelector('[data-testid="testcase-drift-legend"] button', {
+      timeout: 10_000,
+    });
     await page.mouse.move(0, 0);
 
     const focus = page.locator('[data-testid="testcase-drift-focus"]');
     await expect(focus).toBeVisible();
 
-    const firstLegendItem = page.locator('[data-testid="testcase-drift-legend"] button').first();
+    const firstLegendItem = page
+      .locator('[data-testid="testcase-drift-legend"] button')
+      .first();
     await firstLegendItem.click();
-    await expect(firstLegendItem).toHaveAttribute('aria-pressed', 'true');
-    await expect(focus).toContainText('Pinned series: #1');
-    await expect(focus).toContainText('Click again to clear.');
+    await expect(firstLegendItem).toHaveAttribute("aria-pressed", "true");
+    await expect(focus).toContainText("Pinned series: #1");
+    await expect(focus).toContainText("Click again to clear.");
 
     await firstLegendItem.click();
     await page.mouse.move(0, 0);
-    await expect(firstLegendItem).toHaveAttribute('aria-pressed', 'false');
-    await expect(focus).toContainText('Hover a legend row or chart line to isolate a testcase');
+    await expect(firstLegendItem).toHaveAttribute("aria-pressed", "false");
+    await expect(focus).toContainText(
+      "Hover a legend row or chart line to isolate a testcase",
+    );
 
     expect(errors).toHaveLength(0);
   });
 
-  test('/runs — hovered testcase is emphasized inside the hover tooltip', async ({ page }) => {
+  test("/runs — hovered testcase is emphasized inside the hover tooltip", async ({
+    page,
+  }) => {
     const errors: string[] = [];
-    page.on('console', msg => { if (msg.type() === 'error') errors.push(msg.text()); });
-    page.on('pageerror', err => errors.push(err.message));
+    page.on("console", (msg) => {
+      if (msg.type() === "error") errors.push(msg.text());
+    });
+    page.on("pageerror", (err) => errors.push(err.message));
 
-    const response = await page.goto('/runs');
+    const response = await page.goto("/runs");
     expect(response?.status()).toBe(200);
 
-    await page.waitForSelector('[data-testid="testcase-drift-legend"] button', { timeout: 10_000 });
-    const firstLegendItem = page.locator('[data-testid="testcase-drift-legend"] button').first();
+    await page.waitForSelector('[data-testid="testcase-drift-legend"] button', {
+      timeout: 10_000,
+    });
+    const firstLegendItem = page
+      .locator('[data-testid="testcase-drift-legend"] button')
+      .first();
     await firstLegendItem.click();
 
     const chart = page.locator('[data-testid="testcase-drift-chart"]');
     const box = await chart.boundingBox();
     expect(box).not.toBeNull();
-    await page.mouse.move(box!.x + box!.width * 0.25, box!.y + box!.height * 0.55);
+    await page.mouse.move(
+      box!.x + box!.width * 0.25,
+      box!.y + box!.height * 0.55,
+    );
 
     const tooltip = page.locator('[data-testid="testcase-drift-tooltip"]');
     await expect(tooltip).toBeVisible();
-    const activeRow = page.locator('[data-testid="testcase-drift-tooltip-row-active"]');
+    const activeRow = page.locator(
+      '[data-testid="testcase-drift-tooltip-row-active"]',
+    );
     await expect(activeRow).toBeVisible();
-    await expect(page.locator('[data-testid="testcase-drift-focus"]')).toContainText('Focused series:');
-    await expect(page.locator('[data-testid="testcase-drift-tooltip-row-active"]')).toHaveCount(1);
+    await expect(
+      page.locator('[data-testid="testcase-drift-focus"]'),
+    ).toContainText("Focused series:");
+    await expect(
+      page.locator('[data-testid="testcase-drift-tooltip-row-active"]'),
+    ).toHaveCount(1);
 
     expect(errors).toHaveLength(0);
   });
 
-  test('/runs — smoke-run toggle is off by default and prunes x-axis ticks when enabled', async ({ page }) => {
+  test("/runs — smoke-run toggle is off by default and prunes x-axis ticks when enabled", async ({
+    page,
+  }) => {
     // WOS-189 follow-up: board asked for smoke-run filtering to be opt-in,
     // with default behaviour showing every run that any visible top-N series
     // has data in. The toggle should be unchecked on first render and
     // reduce the number of x-axis ticks when turned on (fixture data has a
     // substantial number of 1-3-testcase smoke runs in the last 50).
     const errors: string[] = [];
-    page.on('console', msg => { if (msg.type() === 'error') errors.push(msg.text()); });
-    page.on('pageerror', err => errors.push(err.message));
+    page.on("console", (msg) => {
+      if (msg.type() === "error") errors.push(msg.text());
+    });
+    page.on("pageerror", (err) => errors.push(err.message));
 
-    const response = await page.goto('/runs');
+    const response = await page.goto("/runs");
     expect(response?.status()).toBe(200);
-    await page.waitForSelector('.recharts-line-curve', { timeout: 10_000 });
+    await page.waitForSelector(".recharts-line-curve", { timeout: 10_000 });
 
-    const toggle = page.locator('[data-testid="hide-smoke-runs-toggle"] input[type="checkbox"]');
+    const toggle = page.locator(
+      '[data-testid="hide-smoke-runs-toggle"] input[type="checkbox"]',
+    );
     await expect(toggle).toBeVisible();
     await expect(toggle).not.toBeChecked();
 
-    const ticksBefore = await page.locator('.recharts-xAxis .recharts-cartesian-axis-tick').count();
+    const ticksBefore = await page
+      .locator(".recharts-xAxis .recharts-cartesian-axis-tick")
+      .count();
     expect(ticksBefore).toBeGreaterThan(0);
 
     await toggle.check();
     await expect(toggle).toBeChecked();
     // Give Recharts a tick to re-render.
     await page.waitForTimeout(250);
-    const ticksAfter = await page.locator('.recharts-xAxis .recharts-cartesian-axis-tick').count();
+    const ticksAfter = await page
+      .locator(".recharts-xAxis .recharts-cartesian-axis-tick")
+      .count();
     expect(ticksAfter).toBeLessThan(ticksBefore);
 
     expect(errors).toHaveLength(0);
   });
 
-  test('/coverage — renders without crash', async ({ page }) => {
+  test("/coverage — renders without crash", async ({ page }) => {
     const errors: string[] = [];
-    page.on('console', msg => { if (msg.type() === 'error') errors.push(msg.text()); });
-    page.on('pageerror', err => errors.push(err.message));
+    page.on("console", (msg) => {
+      if (msg.type() === "error") errors.push(msg.text());
+    });
+    page.on("pageerror", (err) => errors.push(err.message));
 
-    const response = await page.goto('/coverage');
+    const response = await page.goto("/coverage");
     expect(response?.status()).toBe(200);
 
     // Either shows data table cells OR the DB-misconfiguration warning (heroes table not yet seeded)
-    const hasCells = await page.locator('table tbody td').count() > 0;
-    const hasMisconfigWarning = await page.locator('text=DB misconfiguration').count() > 0;
+    const hasCells = (await page.locator("table tbody td").count()) > 0;
+    const hasMisconfigWarning =
+      (await page.locator("text=DB misconfiguration").count()) > 0;
     expect(hasCells || hasMisconfigWarning).toBe(true);
     if (hasCells) {
-      for (const hero of ['Bradley', 'Edith', 'Gordon', 'Ling']) {
-        await expect(page.locator('body')).toContainText(hero);
+      for (const hero of ["Bradley", "Edith", "Gordon", "Ling"]) {
+        await expect(page.locator("body")).toContainText(hero);
       }
     }
 
     expect(errors).toHaveLength(0);
   });
 
-  test('/heroes — renders without crash', async ({ page }) => {
+  test("/heroes — renders without crash", async ({ page }) => {
     const errors: string[] = [];
-    page.on('console', msg => { if (msg.type() === 'error') errors.push(msg.text()); });
-    page.on('pageerror', err => errors.push(err.message));
+    page.on("console", (msg) => {
+      if (msg.type() === "error") errors.push(msg.text());
+    });
+    page.on("pageerror", (err) => errors.push(err.message));
 
-    const response = await page.goto('/heroes');
+    const response = await page.goto("/heroes");
     expect(response?.status()).toBe(200);
 
-    const hasRows = await page.locator('tbody tr').count() > 0;
-    const hasMisconfigWarning = await page.locator('text=DB misconfiguration').count() > 0;
+    const hasRows = (await page.locator("tbody tr").count()) > 0;
+    const hasMisconfigWarning =
+      (await page.locator("text=DB misconfiguration").count()) > 0;
     expect(hasRows || hasMisconfigWarning).toBe(true);
     if (hasRows) {
-      await expect(page.locator('body')).toContainText('Gen 7');
-      for (const hero of ['Bradley', 'Edith', 'Gordon', 'Ling']) {
-        await expect(page.locator('body')).toContainText(hero);
+      await expect(page.locator("body")).toContainText("Gen 7");
+      for (const hero of ["Bradley", "Edith", "Gordon", "Ling"]) {
+        await expect(page.locator("body")).toContainText(hero);
       }
     }
 
     expect(errors).toHaveLength(0);
   });
 
-  test('/simulate — gen 7 heroes are selectable', async ({ page }) => {
+  test("/simulate — gen 7 heroes are selectable", async ({ page }) => {
     const errors: string[] = [];
-    page.on('console', msg => { if (msg.type() === 'error') errors.push(msg.text()); });
-    page.on('pageerror', err => errors.push(err.message));
+    page.on("console", (msg) => {
+      if (msg.type() === "error") errors.push(msg.text());
+    });
+    page.on("pageerror", (err) => errors.push(err.message));
 
-    const response = await page.goto('/simulate');
+    const response = await page.goto("/simulate");
     expect(response?.status()).toBe(200);
 
-    await expect(page.locator('h2')).toContainText('Simulate Battle');
+    await expect(page.locator("h2")).toContainText("Simulate Battle");
 
     const infantryOptions = await page
       .locator('select[aria-label="infantry hero"]')
       .first()
-      .locator('option')
+      .locator("option")
       .allTextContents();
-    expect(infantryOptions).toContain('Edith');
+    expect(infantryOptions).toContain("Edith");
 
     const lancerOptions = await page
       .locator('select[aria-label="lancer hero"]')
       .first()
-      .locator('option')
+      .locator("option")
       .allTextContents();
-    expect(lancerOptions).toContain('Gordon');
-    expect(lancerOptions).toContain('Ling');
+    expect(lancerOptions).toContain("Gordon");
+    expect(lancerOptions).toContain("Ling");
 
     const marksmanOptions = await page
       .locator('select[aria-label="marksman hero"]')
       .first()
-      .locator('option')
+      .locator("option")
       .allTextContents();
-    expect(marksmanOptions).toContain('Bradley');
+    expect(marksmanOptions).toContain("Bradley");
 
     expect(errors).toHaveLength(0);
   });
 
-  test('/simulate — active skill 4 bonuses show effective stat previews', async ({ page }) => {
+  test("/simulate — active skill 4 bonuses show effective stat previews", async ({
+    page,
+  }) => {
     const errors: string[] = [];
-    page.on('console', msg => { if (msg.type() === 'error') errors.push(msg.text()); });
-    page.on('pageerror', err => errors.push(err.message));
+    page.on("console", (msg) => {
+      if (msg.type() === "error") errors.push(msg.text());
+    });
+    page.on("pageerror", (err) => errors.push(err.message));
 
-    const response = await page.goto('/simulate');
+    const response = await page.goto("/simulate");
     expect(response?.status()).toBe(200);
 
-    await page.getByLabel('Rally mode').first().check();
-    await page.locator('select[aria-label="marksman hero"]').first().selectOption('Alonso');
-    await expect(page.locator('select[aria-label="marksman skill 4"]').first()).toHaveValue('5');
+    await page.getByLabel("Rally mode").first().check();
+    await page
+      .locator('select[aria-label="marksman hero"]')
+      .first()
+      .selectOption("Alonso");
+    await expect(
+      page.locator('select[aria-label="marksman skill 4"]').first(),
+    ).toHaveValue("5");
 
-    const preview = page.locator('[data-testid="stat-preview-attacker-infantry-lethality"]');
+    const preview = page.locator(
+      '[data-testid="stat-preview-attacker-infantry-lethality"]',
+    );
     await expect(preview).toBeVisible();
-    await expect(preview).toContainText('[115]');
-    await expect(preview).toContainText('+15.0%');
+    await expect(preview).toContainText("[115]");
+    await expect(preview).toContainText("+15.0%");
 
     expect(errors).toHaveLength(0);
   });
 
-  test('/simulate — optimise ratio renders results and applies the best mix', async ({ page }) => {
-    const errors: string[] = [];
-    page.on('console', msg => { if (msg.type() === 'error') errors.push(msg.text()); });
-    page.on('pageerror', err => errors.push(err.message));
+  test("/simulate — desktop troop-count tab order moves across counts first", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
 
-    await page.route('**/api/simulate/optimize-ratio', async route => {
+    const errors: string[] = [];
+    page.on("console", (msg) => {
+      if (msg.type() === "error") errors.push(msg.text());
+    });
+    page.on("pageerror", (err) => errors.push(err.message));
+
+    const response = await page.goto("/simulate");
+    expect(response?.status()).toBe(200);
+
+    const infantryCount = page
+      .locator('input[aria-label="infantry troop count"]')
+      .first();
+    const lancerCount = page
+      .locator('input[aria-label="lancer troop count"]')
+      .first();
+    const marksmanCount = page
+      .locator('input[aria-label="marksman troop count"]')
+      .first();
+
+    await infantryCount.focus();
+    await expect(infantryCount).toBeFocused();
+
+    await page.keyboard.press("Tab");
+    await expect(lancerCount).toBeFocused();
+
+    await page.keyboard.press("Tab");
+    await expect(marksmanCount).toBeFocused();
+
+    await page.keyboard.press("Shift+Tab");
+    await expect(lancerCount).toBeFocused();
+
+    expect(errors).toHaveLength(0);
+  });
+
+  test("/simulate — optimise options stay collapsed by default and replace sim results", async ({
+    page,
+  }) => {
+    const errors: string[] = [];
+    page.on("console", (msg) => {
+      if (msg.type() === "error") errors.push(msg.text());
+    });
+    page.on("pageerror", (err) => errors.push(err.message));
+
+    await page.route("**/api/simulate", async (route) => {
       await route.fulfill({
         status: 200,
-        contentType: 'application/json',
+        contentType: "application/json",
+        body: JSON.stringify({
+          replicates: 1000,
+          summary: {
+            mean: 125.4,
+            std: 31.2,
+            best: { value: 250, winner: "attacker" },
+            worst: { value: -120, winner: "defender" },
+            attacker_win_rate: 0.62,
+            avg_skill_activations: 8.2,
+            avg_skill_kills: 140.8,
+            avg_attacker_activations: 4.1,
+            avg_defender_activations: 4.1,
+            avg_attacker_kills: 81.3,
+            avg_defender_kills: 59.5,
+          },
+          outcomes: [120, 90, 140, 180],
+          per_side_skills: {
+            attacker: [],
+            defender: [],
+          },
+        }),
+      });
+    });
+
+    await page.route("**/api/simulate/optimize-ratio", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          total_troops: 3000,
+          grid_step: 100,
+          compositions_tested: 240,
+          projected_battles: 4800,
+          replicates_per_ratio: 20,
+          infantry_min_pct: 25,
+          infantry_max_pct: 75,
+          best: {
+            infantry_count: 800,
+            lancer_count: 900,
+            marksman_count: 1300,
+            infantry_pct: 26.7,
+            lancer_pct: 30.0,
+            marksman_pct: 43.3,
+            win_rate: 0.9,
+            win_rate_pct: 90.0,
+            avg_margin: 415.2,
+            avg_attacker_left: 622.1,
+            avg_defender_left: 0,
+            rank: 1,
+            is_best: true,
+          },
+          top_results: [
+            {
+              infantry_count: 800,
+              lancer_count: 900,
+              marksman_count: 1300,
+              infantry_pct: 26.7,
+              lancer_pct: 30.0,
+              marksman_pct: 43.3,
+              win_rate: 0.9,
+              win_rate_pct: 90.0,
+              avg_margin: 415.2,
+              avg_attacker_left: 622.1,
+              avg_defender_left: 0,
+              rank: 1,
+              is_best: true,
+            },
+          ],
+          points: [
+            {
+              infantry_count: 800,
+              lancer_count: 900,
+              marksman_count: 1300,
+              infantry_pct: 26.7,
+              lancer_pct: 30.0,
+              marksman_pct: 43.3,
+              win_rate: 0.9,
+              win_rate_pct: 90.0,
+              avg_margin: 415.2,
+              avg_attacker_left: 622.1,
+              avg_defender_left: 0,
+              is_best: true,
+            },
+          ],
+        }),
+      });
+    });
+
+    const response = await page.goto("/simulate");
+    expect(response?.status()).toBe(200);
+
+    await expect(
+      page.locator('[data-testid="optimize-options-panel"]'),
+    ).toHaveCount(0);
+    await page.getByTestId("optimize-options-toggle").click();
+    await expect(
+      page.locator('[data-testid="optimize-options-panel"]'),
+    ).toBeVisible();
+
+    await page.getByRole("button", { name: /^Optimise ratio$/i }).click();
+    await expect(
+      page.getByRole("heading", { name: "Ratio Optimisation" }),
+    ).toBeVisible();
+    await expect(
+      page.locator("h3").filter({ hasText: /Results \(/ }),
+    ).toHaveCount(0);
+
+    await page.getByRole("button", { name: /^Simulate$/i }).click();
+    await expect(
+      page.locator("h3").filter({ hasText: /Results \(/ }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Ratio Optimisation" }),
+    ).toHaveCount(0);
+
+    expect(errors).toHaveLength(0);
+  });
+
+  test("/simulate — optimise ratio renders results and applies the best mix", async ({
+    page,
+  }) => {
+    const errors: string[] = [];
+    page.on("console", (msg) => {
+      if (msg.type() === "error") errors.push(msg.text());
+    });
+    page.on("pageerror", (err) => errors.push(err.message));
+
+    await page.route("**/api/simulate/optimize-ratio", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
         body: JSON.stringify({
           total_troops: 3000,
           grid_step: 100,
@@ -449,47 +709,87 @@ test.describe('Dashboard smoke tests', () => {
       });
     });
 
-    const response = await page.goto('/simulate');
+    const response = await page.goto("/simulate");
     expect(response?.status()).toBe(200);
 
-    await page.getByRole('button', { name: /Optimise ratio/i }).click();
-    await expect(page.locator('body')).toContainText('Ratio Optimisation');
-    await expect(page.locator('body')).toContainText('Top 10 ratios');
-    await expect(page.locator('body')).toContainText('26.7 / 30.0 / 43.3%');
-    await expect(page.locator('body')).toContainText('25%–75%');
+    await page.getByRole("button", { name: /Optimise ratio/i }).click();
+    await expect(page.locator("body")).toContainText("Ratio Optimisation");
+    await expect(page.locator("body")).toContainText("Top 10 ratios");
+    await expect(page.locator("body")).toContainText("26.7 / 30.0 / 43.3%");
+    await expect(page.locator("body")).toContainText("25%–75%");
 
-    await page.getByRole('button', { name: /Use best ratio/i }).click();
-    await expect(page.locator('input[aria-label="infantry troop count"]').first()).toHaveValue('800');
-    await expect(page.locator('input[aria-label="lancer troop count"]').first()).toHaveValue('900');
-    await expect(page.locator('input[aria-label="marksman troop count"]').first()).toHaveValue('1300');
+    await page.getByRole("button", { name: /Use best ratio/i }).click();
+    await expect(
+      page.locator('input[aria-label="infantry troop count"]').first(),
+    ).toHaveValue("800");
+    await expect(
+      page.locator('input[aria-label="lancer troop count"]').first(),
+    ).toHaveValue("900");
+    await expect(
+      page.locator('input[aria-label="marksman troop count"]').first(),
+    ).toHaveValue("1300");
 
     expect(errors).toHaveLength(0);
   });
 
-  test('/simulate upload — selected skill 4 level carries back to main form', async ({ page }) => {
+  test("/simulate upload — selected skill 4 level carries back to main form", async ({
+    page,
+  }) => {
     const errors: string[] = [];
-    page.on('console', msg => { if (msg.type() === 'error') errors.push(msg.text()); });
-    page.on('pageerror', err => errors.push(err.message));
+    page.on("console", (msg) => {
+      if (msg.type() === "error") errors.push(msg.text());
+    });
+    page.on("pageerror", (err) => errors.push(err.message));
 
-    await page.route('**/api/ocr-report', async route => {
+    await page.route("**/api/ocr-report", async (route) => {
       await route.fulfill({
         status: 200,
-        contentType: 'application/json',
+        contentType: "application/json",
         body: JSON.stringify({
           attacker: {
             troops: { infantry: 123, lancer: 234, marksman: 345 },
             stats: {
-              infantry: { attack: 100, defense: 100, lethality: 100, health: 100 },
-              lancer: { attack: 100, defense: 100, lethality: 100, health: 100 },
-              marksman: { attack: 100, defense: 100, lethality: 100, health: 100 },
+              infantry: {
+                attack: 100,
+                defense: 100,
+                lethality: 100,
+                health: 100,
+              },
+              lancer: {
+                attack: 100,
+                defense: 100,
+                lethality: 100,
+                health: 100,
+              },
+              marksman: {
+                attack: 100,
+                defense: 100,
+                lethality: 100,
+                health: 100,
+              },
             },
           },
           defender: {
             troops: { infantry: 456, lancer: 567, marksman: 678 },
             stats: {
-              infantry: { attack: 100, defense: 100, lethality: 100, health: 100 },
-              lancer: { attack: 100, defense: 100, lethality: 100, health: 100 },
-              marksman: { attack: 100, defense: 100, lethality: 100, health: 100 },
+              infantry: {
+                attack: 100,
+                defense: 100,
+                lethality: 100,
+                health: 100,
+              },
+              lancer: {
+                attack: 100,
+                defense: 100,
+                lethality: 100,
+                health: 100,
+              },
+              marksman: {
+                attack: 100,
+                defense: 100,
+                lethality: 100,
+                health: 100,
+              },
             },
           },
           warnings: [],
@@ -497,112 +797,136 @@ test.describe('Dashboard smoke tests', () => {
       });
     });
 
-    const response = await page.goto('/simulate');
+    const response = await page.goto("/simulate");
     expect(response?.status()).toBe(200);
 
-    await page.getByRole('button', { name: /Upload report/i }).click();
-    const dialog = page.getByRole('dialog', { name: 'Upload battle report' });
+    await page.getByRole("button", { name: /Upload report/i }).click();
+    const dialog = page.getByRole("dialog", { name: "Upload battle report" });
     await expect(dialog).toBeVisible();
 
-    await dialog.getByLabel('Rally mode').check();
-    await dialog.getByLabel('Attacker heroes marksman').selectOption('Alonso');
-    await dialog.getByLabel('Attacker heroes marksman skill 4 level').selectOption('0');
+    await dialog.getByLabel("Rally mode").check();
+    await dialog.getByLabel("Attacker heroes marksman").selectOption("Alonso");
+    await dialog
+      .getByLabel("Attacker heroes marksman skill 4 level")
+      .selectOption("0");
 
     await dialog.locator('input[type="file"]').setInputFiles({
-      name: 'report.png',
-      mimeType: 'image/png',
+      name: "report.png",
+      mimeType: "image/png",
       buffer: Buffer.from(
-        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9WnS2GAAAAAASUVORK5CYII=',
-        'base64',
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9WnS2GAAAAAASUVORK5CYII=",
+        "base64",
       ),
     });
 
-    await dialog.getByRole('button', { name: /Parse and apply/i }).click();
+    await dialog.getByRole("button", { name: /Parse and apply/i }).click();
     await expect(dialog).toBeHidden();
 
-    await expect(page.getByLabel('Rally mode').first()).toBeChecked();
-    await expect(page.locator('select[aria-label="marksman hero"]').first()).toHaveValue('Alonso');
-    await expect(page.locator('select[aria-label="marksman skill 4"]').first()).toHaveValue('0');
+    await expect(page.getByLabel("Rally mode").first()).toBeChecked();
+    await expect(
+      page.locator('select[aria-label="marksman hero"]').first(),
+    ).toHaveValue("Alonso");
+    await expect(
+      page.locator('select[aria-label="marksman skill 4"]').first(),
+    ).toHaveValue("0");
 
     expect(errors).toHaveLength(0);
   });
 
-  test('/heroes/Alonso — renders hero detail', async ({ page }) => {
+  test("/heroes/Alonso — renders hero detail", async ({ page }) => {
     const errors: string[] = [];
-    page.on('console', msg => { if (msg.type() === 'error') errors.push(msg.text()); });
-    page.on('pageerror', err => errors.push(err.message));
+    page.on("console", (msg) => {
+      if (msg.type() === "error") errors.push(msg.text());
+    });
+    page.on("pageerror", (err) => errors.push(err.message));
 
-    const response = await page.goto('/heroes/Alonso');
+    const response = await page.goto("/heroes/Alonso");
     expect(response?.status()).toBe(200);
 
-    await expect(page.locator('body')).toContainText('Alonso');
+    await expect(page.locator("body")).toContainText("Alonso");
 
     expect(errors).toHaveLength(0);
   });
 
-  test('/heroes/Alonso — timeline and skill history visible', async ({ page }) => {
+  test("/heroes/Alonso — timeline and skill history visible", async ({
+    page,
+  }) => {
     const errors: string[] = [];
-    page.on('console', msg => { if (msg.type() === 'error') errors.push(msg.text()); });
-    page.on('pageerror', err => errors.push(err.message));
+    page.on("console", (msg) => {
+      if (msg.type() === "error") errors.push(msg.text());
+    });
+    page.on("pageerror", (err) => errors.push(err.message));
 
-    const response = await page.goto('/heroes/Alonso');
+    const response = await page.goto("/heroes/Alonso");
     expect(response?.status()).toBe(200);
 
     // Coverage timeline section heading
-    await expect(page.locator('h3').filter({ hasText: 'Coverage Timeline' })).toBeVisible();
+    await expect(
+      page.locator("h3").filter({ hasText: "Coverage Timeline" }),
+    ).toBeVisible();
     // Per-skill table with coverage column header
-    await expect(page.locator('body')).toContainText('Covered');
+    await expect(page.locator("body")).toContainText("Covered");
     // No console errors
     expect(errors).toHaveLength(0);
   });
 
-  test('/runs/[id] dirty — shows Dirty State Patch', async ({ page }) => {
+  test("/runs/[id] dirty — shows Dirty State Patch", async ({ page }) => {
     const errors: string[] = [];
-    page.on('console', msg => { if (msg.type() === 'error') errors.push(msg.text()); });
-    page.on('pageerror', err => errors.push(err.message));
+    page.on("console", (msg) => {
+      if (msg.type() === "error") errors.push(msg.text());
+    });
+    page.on("pageerror", (err) => errors.push(err.message));
 
     const response = await page.goto(`/runs/${DIRTY_RUN_ID}`);
     expect(response?.status()).toBe(200);
 
-    await expect(page.locator('body')).toContainText('Dirty State Patch');
+    await expect(page.locator("body")).toContainText("Dirty State Patch");
 
     expect(errors).toHaveLength(0);
   });
 
-  test('/compare/[a]/[b] — renders headline + delta sections', async ({ page }) => {
+  test("/compare/[a]/[b] — renders headline + delta sections", async ({
+    page,
+  }) => {
     const { a, b } = twoMostRecentRunIds();
 
     const errors: string[] = [];
-    page.on('console', msg => { if (msg.type() === 'error') errors.push(msg.text()); });
-    page.on('pageerror', err => errors.push(err.message));
+    page.on("console", (msg) => {
+      if (msg.type() === "error") errors.push(msg.text());
+    });
+    page.on("pageerror", (err) => errors.push(err.message));
 
     const response = await page.goto(`/compare/${a}/${b}`);
     expect(response?.status()).toBe(200);
 
     // Headline strip stat-card labels
-    await expect(page.locator('body')).toContainText('Avg Error A');
-    await expect(page.locator('body')).toContainText('Avg Error B');
+    await expect(page.locator("body")).toContainText("Avg Error A");
+    await expect(page.locator("body")).toContainText("Avg Error B");
     // Section 2 heading
-    await expect(page.locator('body')).toContainText('Testcase Delta');
+    await expect(page.locator("body")).toContainText("Testcase Delta");
 
     expect(errors).toHaveLength(0);
   });
 
-  test('/testcases/changelog — renders cross-run table', async ({ page }) => {
+  test("/testcases/changelog — renders cross-run table", async ({ page }) => {
     const errors: string[] = [];
-    page.on('console', msg => { if (msg.type() === 'error') errors.push(msg.text()); });
-    page.on('pageerror', err => errors.push(err.message));
+    page.on("console", (msg) => {
+      if (msg.type() === "error") errors.push(msg.text());
+    });
+    page.on("pageerror", (err) => errors.push(err.message));
 
-    const response = await page.goto('/testcases/changelog');
+    const response = await page.goto("/testcases/changelog");
     expect(response?.status()).toBe(200);
 
-    await expect(page.locator('body')).toContainText('Testcase Changelog');
+    await expect(page.locator("body")).toContainText("Testcase Changelog");
 
     // Table must have at least one row from real data.
     await page.waitForSelector('[data-testid="changelog-table"] tbody tr', {
       timeout: 10_000,
     });
-    const rows = await page.locator('[data-testid="changelog-table"] tbody tr').count();
+    const rows = await page
+      .locator('[data-testid="changelog-table"] tbody tr')
+      .count();
     expect(rows).toBeGreaterThan(0);
 
     // Retired filter narrows the set deterministically.
@@ -627,10 +951,14 @@ test.describe('Dashboard smoke tests', () => {
     expect(errors).toHaveLength(0);
   });
 
-  test('/runs/[id]/compare/prev — redirects to compare page', async ({ page }) => {
+  test("/runs/[id]/compare/prev — redirects to compare page", async ({
+    page,
+  }) => {
     const errors: string[] = [];
-    page.on('console', msg => { if (msg.type() === 'error') errors.push(msg.text()); });
-    page.on('pageerror', err => errors.push(err.message));
+    page.on("console", (msg) => {
+      if (msg.type() === "error") errors.push(msg.text());
+    });
+    page.on("pageerror", (err) => errors.push(err.message));
 
     // page.goto follows redirects by default; final response is the compare page.
     const response = await page.goto(`/runs/${DIRTY_RUN_ID}/compare/prev`);
@@ -640,8 +968,8 @@ test.describe('Dashboard smoke tests', () => {
     expect(page.url()).toMatch(new RegExp(`/compare/[^/]+/${DIRTY_RUN_ID}$`));
 
     // Compare page renders its headline labels
-    await expect(page.locator('body')).toContainText('Compare Runs');
-    await expect(page.locator('body')).toContainText('Testcase Delta');
+    await expect(page.locator("body")).toContainText("Compare Runs");
+    await expect(page.locator("body")).toContainText("Testcase Delta");
 
     expect(errors).toHaveLength(0);
   });

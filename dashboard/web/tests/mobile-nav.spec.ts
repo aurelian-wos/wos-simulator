@@ -15,7 +15,14 @@ test.describe("WOS-202 mobile nav + simulate layout", () => {
     });
     page.on("pageerror", (err) => errors.push(err.message));
 
-    for (const route of ["/", "/runs", "/coverage", "/heroes", "/testcases", "/simulate"]) {
+    for (const route of [
+      "/",
+      "/runs",
+      "/coverage",
+      "/heroes",
+      "/testcases",
+      "/simulate",
+    ]) {
       const response = await page.goto(route);
       expect(response?.status()).toBe(200);
 
@@ -26,7 +33,9 @@ test.describe("WOS-202 mobile nav + simulate layout", () => {
           clientWidth: doc.clientWidth,
         };
       });
-      expect(overflow.scrollWidth).toBeLessThanOrEqual(overflow.clientWidth + 1);
+      expect(overflow.scrollWidth).toBeLessThanOrEqual(
+        overflow.clientWidth + 1,
+      );
     }
 
     await page.goto("/");
@@ -36,7 +45,9 @@ test.describe("WOS-202 mobile nav + simulate layout", () => {
     expect(homeHeaderLayout).toBe("column");
 
     await page.goto("/testcases");
-    const filterInput = page.locator('[data-testid="testcases-index-path-filter"]');
+    const filterInput = page.locator(
+      '[data-testid="testcases-index-path-filter"]',
+    );
     const filterBox = await filterInput.boundingBox();
     expect(filterBox).not.toBeNull();
     expect((filterBox?.width ?? 0) + 0.5).toBeGreaterThanOrEqual(240);
@@ -44,7 +55,9 @@ test.describe("WOS-202 mobile nav + simulate layout", () => {
     expect(errors).toHaveLength(0);
   });
 
-  test("mobile viewport hides sidebar and exposes hamburger drawer", async ({ page }) => {
+  test("mobile viewport hides sidebar and exposes hamburger drawer", async ({
+    page,
+  }) => {
     await page.setViewportSize(IPHONE_SE);
 
     const errors: string[] = [];
@@ -57,7 +70,9 @@ test.describe("WOS-202 mobile nav + simulate layout", () => {
     expect(response?.status()).toBe(200);
 
     // Desktop sidebar is still in DOM (hidden md:flex) but must not be visible.
-    await expect(page.locator("nav a[href='/simulate']").first()).not.toBeVisible();
+    await expect(
+      page.locator("nav a[href='/simulate']").first(),
+    ).not.toBeVisible();
 
     // Hamburger trigger exists and is visible.
     const trigger = page.getByRole("button", { name: /Open menu/i });
@@ -77,7 +92,9 @@ test.describe("WOS-202 mobile nav + simulate layout", () => {
     expect(errors).toHaveLength(0);
   });
 
-  test("simulate page fits mobile viewport without horizontal overflow", async ({ page }) => {
+  test("simulate page fits mobile viewport without horizontal overflow", async ({
+    page,
+  }) => {
     await page.setViewportSize(IPHONE_SE);
 
     const errors: string[] = [];
@@ -99,7 +116,10 @@ test.describe("WOS-202 mobile nav + simulate layout", () => {
     ).toBeVisible();
 
     await page.getByLabel("Rally mode").first().check();
-    await page.locator('select[aria-label="marksman hero"]').first().selectOption("Alonso");
+    await page
+      .locator('select[aria-label="marksman hero"]')
+      .first()
+      .selectOption("Alonso");
     const preview = page.locator(
       '[data-testid="stat-preview-attacker-infantry-lethality"]',
     );
@@ -107,11 +127,24 @@ test.describe("WOS-202 mobile nav + simulate layout", () => {
     await expect(preview).toContainText("[115]");
     await expect(preview).toContainText("+15.0%");
 
-    // Simulate button touch-target is at least 44px tall (Apple HIG minimum).
+    await expect(page.getByTestId("optimize-options-toggle")).toBeVisible();
+    await expect(
+      page.locator('[data-testid="optimize-options-panel"]'),
+    ).toHaveCount(0);
+
     const simulateBtn = page.getByRole("button", { name: /^Simulate$/i });
-    const box = await simulateBtn.boundingBox();
-    expect(box).not.toBeNull();
-    expect((box?.height ?? 0) + 0.5).toBeGreaterThanOrEqual(44);
+    const replicateBox = await page
+      .locator('input[type="number"][max="5000"]')
+      .boundingBox();
+    const simulateBox = await simulateBtn.boundingBox();
+    expect(replicateBox).not.toBeNull();
+    expect(simulateBox).not.toBeNull();
+    expect(
+      Math.abs((replicateBox?.y ?? 0) - (simulateBox?.y ?? 0)),
+    ).toBeLessThanOrEqual(16);
+
+    // Simulate button touch-target is at least 44px tall (Apple HIG minimum).
+    expect((simulateBox?.height ?? 0) + 0.5).toBeGreaterThanOrEqual(44);
 
     // No horizontal scroll on the body.
     const overflow = await page.evaluate(() => {
@@ -126,7 +159,9 @@ test.describe("WOS-202 mobile nav + simulate layout", () => {
     expect(errors).toHaveLength(0);
   });
 
-  test("desktop viewport shows sidebar nav and no mobile trigger", async ({ page }) => {
+  test("desktop viewport shows sidebar nav and no mobile trigger", async ({
+    page,
+  }) => {
     await page.setViewportSize(DESKTOP);
 
     const errors: string[] = [];
@@ -142,10 +177,15 @@ test.describe("WOS-202 mobile nav + simulate layout", () => {
     await expect(page.locator("nav a[href='/simulate']").first()).toBeVisible();
 
     // Mobile hamburger is rendered (md:hidden) but must not be visible on desktop.
-    await expect(page.getByRole("button", { name: /Open menu/i })).not.toBeVisible();
+    await expect(
+      page.getByRole("button", { name: /Open menu/i }),
+    ).not.toBeVisible();
 
     await page.getByLabel("Rally mode").first().check();
-    await page.locator('select[aria-label="marksman hero"]').first().selectOption("Alonso");
+    await page
+      .locator('select[aria-label="marksman hero"]')
+      .first()
+      .selectOption("Alonso");
     const preview = page.locator(
       '[data-testid="stat-preview-attacker-infantry-lethality"]',
     );
@@ -153,23 +193,32 @@ test.describe("WOS-202 mobile nav + simulate layout", () => {
     await expect(preview).toContainText("[115]");
     await expect(preview).toContainText("+15.0%");
 
-    // Stat labels stay inline with their inputs on desktop, so the inputs
-    // don't expand to full column width for small numeric values even with the
-    // stacked effective-stat preview shown.
-    const infantryAttackField = page
+    // Stat cells stay compact on desktop and keep the skill-4 preview stacked
+    // under the input instead of stretching the row horizontally.
+    const infantryLethalityField = page
       .locator("label")
       .filter({ has: page.getByLabel("Infantry Lethality") })
       .first();
-    const statLayout = await infantryAttackField.evaluate((el) => {
-      const row = el.firstElementChild as HTMLElement | null;
+    const statLayout = await infantryLethalityField.evaluate((el) => {
+      const header = el.firstElementChild as HTMLElement | null;
       const input = el.querySelector("input") as HTMLInputElement | null;
+      const preview = el.querySelector(
+        '[data-testid="stat-preview-attacker-infantry-lethality"]',
+      ) as HTMLElement | null;
       return {
-        flexDirection: row ? getComputedStyle(row).flexDirection : null,
+        headerText: header?.textContent?.trim() ?? null,
         inputWidth: input?.getBoundingClientRect().width ?? 0,
+        previewTop:
+          preview && input
+            ? preview.getBoundingClientRect().top -
+              input.getBoundingClientRect().bottom
+            : null,
       };
     });
-    expect(statLayout.flexDirection).toBe("row");
-    expect(statLayout.inputWidth).toBeLessThan(120);
+    expect(statLayout.headerText).toBe("Leth");
+    expect(statLayout.inputWidth).toBeLessThan(90);
+    expect(statLayout.previewTop).not.toBeNull();
+    expect((statLayout.previewTop ?? -1) + 0.5).toBeGreaterThanOrEqual(0);
 
     expect(errors).toHaveLength(0);
   });

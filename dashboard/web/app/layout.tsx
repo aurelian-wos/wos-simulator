@@ -28,7 +28,7 @@ export default function RootLayout({
       <body className="flex min-h-screen flex-col md:flex-row">
         <SiteNav />
         <main className="min-w-0 flex-1 overflow-x-hidden">
-          <div className="mx-auto flex min-h-screen w-full max-w-[1500px] flex-col px-3 pb-8 pt-[72px] sm:px-5 md:px-6 md:pt-6">
+          <div className="mx-auto flex min-h-screen w-full max-w-[1500px] flex-col px-3 pb-8 pt-[60px] sm:px-5 md:px-6 md:pt-6">
             {children}
           </div>
         </main>

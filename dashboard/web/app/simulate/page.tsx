@@ -1,6 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEventHandler,
+} from "react";
 import OptimizeRatioScatterChart from "@/components/OptimizeRatioScatterChart";
 import SimulateOutcomeChart from "@/components/SimulateOutcomeChart";
 import UploadReportModal, {
@@ -42,6 +48,13 @@ const STAT_NAMES: ("attack" | "defense" | "lethality" | "health")[] = [
   "lethality",
   "health",
 ];
+type StatName = (typeof STAT_NAMES)[number];
+const STAT_SHORT_LABELS: Record<StatName, string> = {
+  attack: "Atk",
+  defense: "Def",
+  lethality: "Leth",
+  health: "HP",
+};
 const JOINER_COUNT = 4;
 
 interface HeroSlotState {
@@ -116,12 +129,20 @@ function toApiPayload(
       marksman: `marksman_${s.tiers.marksman}`,
     },
     heroes: {
-      infantry: { name: s.heroes.infantry.name, skills: s.heroes.infantry.skills },
+      infantry: {
+        name: s.heroes.infantry.name,
+        skills: s.heroes.infantry.skills,
+      },
       lancer: { name: s.heroes.lancer.name, skills: s.heroes.lancer.skills },
-      marksman: { name: s.heroes.marksman.name, skills: s.heroes.marksman.skills },
+      marksman: {
+        name: s.heroes.marksman.name,
+        skills: s.heroes.marksman.skills,
+      },
     },
     joiners: rallyMode
-      ? s.joiners.filter((j) => j.name).map((j) => ({ name: j.name, skill_1: 5 }))
+      ? s.joiners
+          .filter((j) => j.name)
+          .map((j) => ({ name: j.name, skill_1: 5 }))
       : [],
     stats: {
       inf: [
@@ -180,7 +201,11 @@ function deriveSkillsForHero(
   const out: [number, number, number, number] = [0, 0, 0, 0];
   for (let slot = 1; slot <= 4; slot++) {
     const idx = (slot - 1) as 0 | 1 | 2 | 3;
-    const enabledNow = skillSlotEnabled(newHero, slot as 1 | 2 | 3 | 4, rallyMode);
+    const enabledNow = skillSlotEnabled(
+      newHero,
+      slot as 1 | 2 | 3 | 4,
+      rallyMode,
+    );
     if (!enabledNow) {
       out[idx] = 0;
       continue;
@@ -202,8 +227,12 @@ function deriveSkillsForHero(
 }
 
 function statLabel(cat: TroopCategory, stat: string): string {
-  const prefix = cat === "marksman" ? "Marksman" : cat[0].toUpperCase() + cat.slice(1);
+  const prefix = troopCategoryLabel(cat);
   return `${prefix} ${stat[0].toUpperCase()}${stat.slice(1)}`;
+}
+
+function troopCategoryLabel(cat: TroopCategory): string {
+  return cat === "marksman" ? "Marksman" : cat[0].toUpperCase() + cat.slice(1);
 }
 
 function formatStatNumber(value: number): string {
@@ -326,7 +355,11 @@ function mergeSideFromOcr(
     );
     // If rally mode, mirror the modal's selected skill_4 level exactly.
     // Level 0 is meaningful here: it means "do not apply skill_4".
-    if (rallyMode && chosenHero?.skill4 && skillSlotEnabled(chosenHero, 4, true)) {
+    if (
+      rallyMode &&
+      chosenHero?.skill4 &&
+      skillSlotEnabled(chosenHero, 4, true)
+    ) {
       const lvl = skill4Levels[cat];
       newSkills[3] = Number.isFinite(lvl) ? Math.max(0, Math.min(5, lvl)) : 0;
     }
@@ -364,10 +397,14 @@ export default function SimulatePage() {
   const [uploadWarnings, setUploadWarnings] = useState<string[]>([]);
   const [rallyMode, setRallyMode] = useState(false);
   const [syncStatsOnHeroChange, setSyncStatsOnHeroChange] = useState(false);
-  const [statSyncToast, setStatSyncToast] = useState<StatSyncToast | null>(null);
+  const [statSyncToast, setStatSyncToast] = useState<StatSyncToast | null>(
+    null,
+  );
   const [optimizeLoading, setOptimizeLoading] = useState(false);
   const [optimizeError, setOptimizeError] = useState<string | null>(null);
-  const [optimizeResult, setOptimizeResult] = useState<OptimizeRatioResult | null>(null);
+  const [optimizeResult, setOptimizeResult] =
+    useState<OptimizeRatioResult | null>(null);
+  const [optimizePanelOpen, setOptimizePanelOpen] = useState(false);
   const [optimizeReplicates, setOptimizeReplicates] = useState<number>(
     DEFAULT_OPTIMIZE_REPLICATES,
   );
@@ -494,6 +531,8 @@ export default function SimulatePage() {
     setLoading(true);
     setError(null);
     setResult(null);
+    setOptimizeError(null);
+    setOptimizeResult(null);
     try {
       const payload = toApiPayload(attacker, defender, replicates, rallyMode);
       const res = await fetch("/api/simulate", {
@@ -516,6 +555,8 @@ export default function SimulatePage() {
 
   async function runOptimizeRatio() {
     setOptimizeLoading(true);
+    setError(null);
+    setResult(null);
     setOptimizeError(null);
     setOptimizeResult(null);
     try {
@@ -566,11 +607,20 @@ export default function SimulatePage() {
     return [
       { label: "Mean survivors", value: signedSurvivors(s.mean) },
       { label: "Std dev", value: compactNumber(s.std) },
-      { label: "Attacker winrate", value: `${(s.attacker_win_rate * 100).toFixed(1)}%` },
+      {
+        label: "Attacker winrate",
+        value: `${(s.attacker_win_rate * 100).toFixed(1)}%`,
+      },
       { label: "Best outcome", value: signedSurvivors(s.best.value) },
       { label: "Worst outcome", value: signedSurvivors(s.worst.value) },
-      { label: "Avg activations / battle", value: s.avg_skill_activations.toFixed(1) },
-      { label: "Avg skill kills / battle", value: s.avg_skill_kills.toFixed(1) },
+      {
+        label: "Avg activations / battle",
+        value: s.avg_skill_activations.toFixed(1),
+      },
+      {
+        label: "Avg skill kills / battle",
+        value: s.avg_skill_kills.toFixed(1),
+      },
     ];
   }, [result]);
 
@@ -615,16 +665,22 @@ export default function SimulatePage() {
 
   return (
     <div>
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 sm:mb-6 gap-3">
-        <h2
-          className="text-lg font-bold"
-          style={{ color: "var(--sidebar-active)" }}
-        >
-          Simulate Battle
-        </h2>
-        <div className="flex items-center gap-2 flex-wrap">
+      <div className="mb-4 flex flex-col gap-3 sm:mb-6 lg:flex-row lg:items-start lg:justify-between">
+        <div className="space-y-1">
+          <h2
+            className="text-lg font-bold"
+            style={{ color: "var(--sidebar-active)" }}
+          >
+            Simulate Battle
+          </h2>
+          <p className="max-w-2xl text-xs opacity-60">
+            Enter each side&apos;s troops, heroes, and stat bonuses, then
+            simulate or search attacker mixes without hiding regressions.
+          </p>
+        </div>
+        <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:justify-end">
           <label
-            className="flex items-center gap-2 text-xs px-3 py-2 rounded cursor-pointer font-bold min-h-[44px]"
+            className="flex items-center justify-center gap-2 rounded px-3 py-2 text-xs font-bold min-h-[44px] cursor-pointer"
             style={{
               border: `1px solid ${rallyMode ? "var(--sidebar-active)" : "var(--border-color)"}`,
               backgroundColor: rallyMode
@@ -640,10 +696,10 @@ export default function SimulatePage() {
               onChange={(e) => setRallyMode(e.target.checked)}
               aria-label="Rally mode"
             />
-            Rally mode
+            Rally
           </label>
           <label
-            className="flex items-center gap-2 text-xs px-3 py-2 rounded cursor-pointer font-bold min-h-[44px]"
+            className="flex items-center justify-center gap-2 rounded px-3 py-2 text-xs font-bold min-h-[44px] cursor-pointer"
             style={{
               border: `1px solid ${syncStatsOnHeroChange ? "var(--sidebar-active)" : "var(--border-color)"}`,
               backgroundColor: syncStatsOnHeroChange
@@ -664,12 +720,12 @@ export default function SimulatePage() {
               }}
               aria-label="Update stats on hero change"
             />
-            Update stats on hero change
+            Sync hero stats
           </label>
           <button
             type="button"
             onClick={() => setUploadOpen(true)}
-            className="text-xs px-3 py-2 rounded font-bold min-h-[44px]"
+            className="col-span-2 rounded px-3 py-2 text-xs font-bold min-h-[44px] sm:col-span-1"
             style={{
               border: "1px solid var(--border-color)",
               backgroundColor: "var(--sidebar-bg)",
@@ -713,15 +769,16 @@ export default function SimulatePage() {
       )}
 
       <div className="flex flex-col md:flex-row items-stretch gap-3 sm:gap-4 mb-4 sm:mb-6">
-        <div
-          className="flex-1 min-w-0"
-          style={{ order: sidesSwapped ? 3 : 1 }}
-        >
+        <div className="flex-1 min-w-0" style={{ order: sidesSwapped ? 3 : 1 }}>
           <SidePanel
             title="Attacker"
             which="attacker"
             state={attacker}
-            setState={setSide("attacker") as (updater: (prev: SideState) => SideState) => void}
+            setState={
+              setSide("attacker") as (
+                updater: (prev: SideState) => SideState,
+              ) => void
+            }
             rallyMode={rallyMode}
             syncStatsOnHeroChange={syncStatsOnHeroChange}
             onStatSync={handleStatSync}
@@ -740,7 +797,9 @@ export default function SimulatePage() {
               backgroundColor: sidesSwapped
                 ? "rgba(137, 180, 250, 0.15)"
                 : "var(--main-bg)",
-              color: sidesSwapped ? "var(--sidebar-active)" : "var(--main-text)",
+              color: sidesSwapped
+                ? "var(--sidebar-active)"
+                : "var(--main-text)",
             }}
             title="Swap attacker and defender. Use this if you entered them the wrong way round; the values you typed stay visually in place while the Attacker / Defender labels trade sides."
             aria-label="Swap attacker and defender"
@@ -749,15 +808,16 @@ export default function SimulatePage() {
             ⇆ Swap
           </button>
         </div>
-        <div
-          className="flex-1 min-w-0"
-          style={{ order: sidesSwapped ? 1 : 3 }}
-        >
+        <div className="flex-1 min-w-0" style={{ order: sidesSwapped ? 1 : 3 }}>
           <SidePanel
             title="Defender"
             which="defender"
             state={defender}
-            setState={setSide("defender") as (updater: (prev: SideState) => SideState) => void}
+            setState={
+              setSide("defender") as (
+                updater: (prev: SideState) => SideState,
+              ) => void
+            }
             rallyMode={rallyMode}
             syncStatsOnHeroChange={syncStatsOnHeroChange}
             onStatSync={handleStatSync}
@@ -783,7 +843,7 @@ export default function SimulatePage() {
             <h3 className="mb-3 text-xs uppercase tracking-wider opacity-60 font-bold">
               Run battle
             </h3>
-            <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+            <div className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-3">
               <label className="flex flex-col gap-1">
                 <span className="text-xs uppercase tracking-wider opacity-60">
                   Replicates
@@ -823,7 +883,10 @@ export default function SimulatePage() {
                 {loading ? "Simulating…" : "Simulate"}
               </button>
               {error && (
-                <span className="text-xs sm:col-span-2" style={{ color: "#f38ba8" }}>
+                <span
+                  className="col-span-2 text-xs"
+                  style={{ color: "#f38ba8" }}
+                >
                   {error}
                 </span>
               )}
@@ -840,148 +903,189 @@ export default function SimulatePage() {
             <h3 className="mb-3 text-xs uppercase tracking-wider opacity-60 font-bold">
               Optimise attacker ratio
             </h3>
-            <div className="grid gap-3 md:grid-cols-2 2xl:grid-cols-5 2xl:items-end">
-              <label className="flex flex-col gap-1">
-                <span className="text-xs uppercase tracking-wider opacity-60">
-                  Ratio reps
-                </span>
-                <input
-                  type="number"
-                  min={1}
-                  max={500}
-                  value={optimizeReplicates}
-                  onChange={(e) =>
-                    setOptimizeReplicates(
-                      Math.max(1, Math.min(500, parseInt(e.target.value || "1", 10))),
-                    )
-                  }
-                  className="rounded px-3 py-2 font-mono text-sm min-h-[42px] text-right tabular-nums"
-                  style={{
-                    backgroundColor: "var(--sidebar-bg)",
-                    border: "1px solid var(--border-color)",
-                    color: "var(--main-text)",
-                  }}
-                />
-              </label>
-              <label className="flex flex-col gap-1">
-                <span className="text-xs uppercase tracking-wider opacity-60">
-                  Grid step
-                </span>
-                <input
-                  type="number"
-                  min={1}
-                  inputMode="numeric"
-                  value={optimizeStepInput}
-                  onChange={(e) => setOptimizeStepInput(e.target.value)}
-                  placeholder={String(recommendedOptimizeStep(attackerTotalTroops))}
-                  className="rounded px-3 py-2 font-mono text-sm min-h-[42px] text-right tabular-nums"
-                  style={{
-                    backgroundColor: "var(--sidebar-bg)",
-                    border: "1px solid var(--border-color)",
-                    color: "var(--main-text)",
-                  }}
-                />
-                <span className="text-[10px] font-mono opacity-50">
-                  {optimizeStepInput.trim()
-                    ? `Using ${resolvedOptimizeStep.toLocaleString()} troops`
-                    : `Auto = ${resolvedOptimizeStep.toLocaleString()} troops`}
-                </span>
-              </label>
-              <label className="flex flex-col gap-1">
-                <span className="text-xs uppercase tracking-wider opacity-60">
-                  Inf min %
-                </span>
-                <input
-                  type="number"
-                  min={0}
-                  max={100}
-                  value={optimizeInfantryMinPct}
-                  onChange={(e) =>
-                    setOptimizeInfantryMinPct(parseFloat(e.target.value || "0"))
-                  }
-                  className="rounded px-3 py-2 font-mono text-sm min-h-[42px] text-right tabular-nums"
-                  style={{
-                    backgroundColor: "var(--sidebar-bg)",
-                    border: "1px solid var(--border-color)",
-                    color: "var(--main-text)",
-                  }}
-                />
-              </label>
-              <label className="flex flex-col gap-1">
-                <span className="text-xs uppercase tracking-wider opacity-60">
-                  Inf max %
-                </span>
-                <input
-                  type="number"
-                  min={0}
-                  max={100}
-                  value={optimizeInfantryMaxPct}
-                  onChange={(e) =>
-                    setOptimizeInfantryMaxPct(parseFloat(e.target.value || "0"))
-                  }
-                  className="rounded px-3 py-2 font-mono text-sm min-h-[42px] text-right tabular-nums"
-                  style={{
-                    backgroundColor: "var(--sidebar-bg)",
-                    border: "1px solid var(--border-color)",
-                    color: "var(--main-text)",
-                  }}
-                />
-              </label>
-              <button
-                type="button"
-                onClick={runOptimizeRatio}
-                disabled={
-                  optimizeLoading ||
-                  optimizeBudgetTooLarge ||
-                  attackerTotalTroops <= 0 ||
-                  !optimizeInputsValid
-                }
-                className="w-full px-4 py-2 rounded font-bold text-sm min-h-[42px] 2xl:self-end"
-                style={{
-                  backgroundColor:
-                    optimizeBudgetTooLarge || !optimizeInputsValid
-                      ? "var(--sidebar-bg)"
-                      : "#a6e3a1",
-                  border: `1px solid ${
-                    optimizeBudgetTooLarge || !optimizeInputsValid
-                      ? "var(--border-color)"
-                      : "#a6e3a1"
-                  }`,
-                  color:
-                    optimizeBudgetTooLarge || !optimizeInputsValid
-                      ? "var(--sidebar-text)"
-                      : "#11111b",
-                  opacity: optimizeLoading ? 0.65 : 1,
-                  cursor:
+            <div className="flex flex-col gap-3">
+              <p className="text-xs opacity-60">
+                Keeps attacker total troops (
+                {attackerTotalTroops.toLocaleString()}), tiers, heroes, stats,
+                and the full defender setup fixed; only the attacker troop mix
+                changes.
+              </p>
+              <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+                <button
+                  type="button"
+                  onClick={runOptimizeRatio}
+                  disabled={
                     optimizeLoading ||
                     optimizeBudgetTooLarge ||
                     attackerTotalTroops <= 0 ||
                     !optimizeInputsValid
-                      ? "not-allowed"
-                      : "pointer",
-                }}
-                title={
-                  !optimizeInputsValid
-                    ? "Infantry max % must be greater than or equal to infantry min %."
-                    : optimizeBudgetTooLarge
-                      ? "Increase the grid step or lower ratio reps before running the search."
-                      : "Search attacker troop compositions while keeping total troops, heroes, tiers, and stats fixed."
-                }
-              >
-                {optimizeLoading ? "Optimising…" : "Optimise ratio"}
-              </button>
-
-              <p className="text-xs opacity-60 md:col-span-2 2xl:col-span-5">
-                Keeps attacker total troops ({attackerTotalTroops.toLocaleString()}),
-                tiers, heroes, stats, and the full defender setup fixed; only the
-                attacker troop mix changes.
-              </p>
-              <p className="text-xs opacity-60 md:col-span-2 2xl:col-span-5">
+                  }
+                  className="rounded px-4 py-2 text-sm font-bold min-h-[42px]"
+                  style={{
+                    backgroundColor:
+                      optimizeBudgetTooLarge || !optimizeInputsValid
+                        ? "var(--sidebar-bg)"
+                        : "#a6e3a1",
+                    border: `1px solid ${
+                      optimizeBudgetTooLarge || !optimizeInputsValid
+                        ? "var(--border-color)"
+                        : "#a6e3a1"
+                    }`,
+                    color:
+                      optimizeBudgetTooLarge || !optimizeInputsValid
+                        ? "var(--sidebar-text)"
+                        : "#11111b",
+                    opacity: optimizeLoading ? 0.65 : 1,
+                    cursor:
+                      optimizeLoading ||
+                      optimizeBudgetTooLarge ||
+                      attackerTotalTroops <= 0 ||
+                      !optimizeInputsValid
+                        ? "not-allowed"
+                        : "pointer",
+                  }}
+                  title={
+                    !optimizeInputsValid
+                      ? "Infantry max % must be greater than or equal to infantry min %."
+                      : optimizeBudgetTooLarge
+                        ? "Increase the grid step or lower ratio reps before running the search."
+                        : "Search attacker troop compositions while keeping total troops, heroes, tiers, and stats fixed."
+                  }
+                >
+                  {optimizeLoading ? "Optimising…" : "Optimise ratio"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setOptimizePanelOpen((open) => !open)}
+                  aria-expanded={optimizePanelOpen}
+                  aria-controls="optimize-options-panel"
+                  className="rounded px-3 py-2 text-xs font-bold min-h-[42px]"
+                  style={{
+                    border: "1px solid var(--border-color)",
+                    backgroundColor: "transparent",
+                    color: "var(--main-text)",
+                  }}
+                  data-testid="optimize-options-toggle"
+                >
+                  {optimizePanelOpen ? "Hide options" : "Show options"}
+                </button>
+                <span className="text-xs font-mono opacity-60">
+                  {estimatedOptimizeCompositions.toLocaleString()} comps ·{" "}
+                  {optimizeReplicates.toLocaleString()} reps ·{" "}
+                  {estimatedOptimizeBattles.toLocaleString()} battles
+                </span>
+              </div>
+              <p className="text-xs opacity-60">
                 Infantry search band: {resolvedInfantryBounds.minPct}% to{" "}
                 {resolvedInfantryBounds.maxPct}%.
+                {optimizeStepInput.trim()
+                  ? ` Step ${resolvedOptimizeStep.toLocaleString()} troops.`
+                  : ` Auto step ${resolvedOptimizeStep.toLocaleString()} troops.`}
               </p>
+              {optimizePanelOpen && (
+                <div
+                  id="optimize-options-panel"
+                  className="grid gap-3 rounded border p-3 md:grid-cols-2 2xl:grid-cols-4"
+                  style={{
+                    borderColor: "var(--border-color)",
+                    backgroundColor: "rgba(255,255,255,0.02)",
+                  }}
+                  data-testid="optimize-options-panel"
+                >
+                  <label className="flex flex-col gap-1">
+                    <span className="text-xs uppercase tracking-wider opacity-60">
+                      Ratio reps
+                    </span>
+                    <input
+                      type="number"
+                      min={1}
+                      max={500}
+                      value={optimizeReplicates}
+                      onChange={(e) =>
+                        setOptimizeReplicates(
+                          Math.max(
+                            1,
+                            Math.min(500, parseInt(e.target.value || "1", 10)),
+                          ),
+                        )
+                      }
+                      className="rounded px-3 py-2 font-mono text-sm min-h-[42px] text-right tabular-nums"
+                      style={{
+                        backgroundColor: "var(--sidebar-bg)",
+                        border: "1px solid var(--border-color)",
+                        color: "var(--main-text)",
+                      }}
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1">
+                    <span className="text-xs uppercase tracking-wider opacity-60">
+                      Grid step
+                    </span>
+                    <input
+                      type="number"
+                      min={1}
+                      inputMode="numeric"
+                      value={optimizeStepInput}
+                      onChange={(e) => setOptimizeStepInput(e.target.value)}
+                      placeholder={String(
+                        recommendedOptimizeStep(attackerTotalTroops),
+                      )}
+                      className="rounded px-3 py-2 font-mono text-sm min-h-[42px] text-right tabular-nums"
+                      style={{
+                        backgroundColor: "var(--sidebar-bg)",
+                        border: "1px solid var(--border-color)",
+                        color: "var(--main-text)",
+                      }}
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1">
+                    <span className="text-xs uppercase tracking-wider opacity-60">
+                      Inf min %
+                    </span>
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      value={optimizeInfantryMinPct}
+                      onChange={(e) =>
+                        setOptimizeInfantryMinPct(
+                          parseFloat(e.target.value || "0"),
+                        )
+                      }
+                      className="rounded px-3 py-2 font-mono text-sm min-h-[42px] text-right tabular-nums"
+                      style={{
+                        backgroundColor: "var(--sidebar-bg)",
+                        border: "1px solid var(--border-color)",
+                        color: "var(--main-text)",
+                      }}
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1">
+                    <span className="text-xs uppercase tracking-wider opacity-60">
+                      Inf max %
+                    </span>
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      value={optimizeInfantryMaxPct}
+                      onChange={(e) =>
+                        setOptimizeInfantryMaxPct(
+                          parseFloat(e.target.value || "0"),
+                        )
+                      }
+                      className="rounded px-3 py-2 font-mono text-sm min-h-[42px] text-right tabular-nums"
+                      style={{
+                        backgroundColor: "var(--sidebar-bg)",
+                        border: "1px solid var(--border-color)",
+                        color: "var(--main-text)",
+                      }}
+                    />
+                  </label>
+                </div>
+              )}
               <p
-                className="text-xs font-mono md:col-span-2 2xl:col-span-5"
+                className="text-xs font-mono"
                 style={{
                   color:
                     optimizeBudgetTooLarge || !optimizeInputsValid
@@ -990,17 +1094,14 @@ export default function SimulatePage() {
                   opacity: 0.8,
                 }}
               >
-                {estimatedOptimizeCompositions.toLocaleString()} compositions ×{" "}
-                {optimizeReplicates.toLocaleString()} reps ={" "}
-                {estimatedOptimizeBattles.toLocaleString()} projected battles
                 {!optimizeInputsValid
-                  ? " — fix the infantry bounds."
+                  ? "Fix the infantry bounds before optimising."
                   : optimizeBudgetTooLarge
-                    ? " — increase the grid step or lower ratio reps."
-                    : ""}
+                    ? "Projected search is too large. Increase the grid step or lower ratio reps."
+                    : "Current defaults are within the allowed optimise budget."}
               </p>
               {optimizeError && (
-                <span className="text-xs md:col-span-2 2xl:col-span-5" style={{ color: "#f38ba8" }}>
+                <span className="text-xs" style={{ color: "#f38ba8" }}>
                   {optimizeError}
                 </span>
               )}
@@ -1054,12 +1155,19 @@ export default function SimulatePage() {
             Survivor distribution
           </h4>
           <p className="text-xs opacity-60 mb-2">
-            Positive = attacker wins with that many survivors; negative = defender wins.
+            Positive = attacker wins with that many survivors; negative =
+            defender wins.
           </p>
           <SimulateOutcomeChart outcomes={result.outcomes} />
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-            <SkillUseTable title="Attacker skills" entries={result.per_side_skills.attacker} />
-            <SkillUseTable title="Defender skills" entries={result.per_side_skills.defender} />
+            <SkillUseTable
+              title="Attacker skills"
+              entries={result.per_side_skills.attacker}
+            />
+            <SkillUseTable
+              title="Defender skills"
+              entries={result.per_side_skills.defender}
+            />
           </div>
         </div>
       )}
@@ -1079,10 +1187,12 @@ export default function SimulatePage() {
               </h3>
               <p className="mt-1 text-xs opacity-60">
                 Tested {optimizeResult.compositions_tested.toLocaleString()}{" "}
-                compositions at a {optimizeResult.grid_step.toLocaleString()} troop
-                step, with {optimizeResult.replicates_per_ratio.toLocaleString()}{" "}
+                compositions at a {optimizeResult.grid_step.toLocaleString()}{" "}
+                troop step, with{" "}
+                {optimizeResult.replicates_per_ratio.toLocaleString()}{" "}
                 replicates per composition. Infantry was constrained to{" "}
-                {optimizeResult.infantry_min_pct}%–{optimizeResult.infantry_max_pct}%.
+                {optimizeResult.infantry_min_pct}%–
+                {optimizeResult.infantry_max_pct}%.
               </p>
             </div>
             <button
@@ -1172,9 +1282,15 @@ export default function SimulatePage() {
                             : "transparent",
                         }}
                       >
-                        <td className="py-1 pr-2 font-bold whitespace-nowrap">{row.rank}</td>
-                        <td className="py-1 pr-2 whitespace-nowrap">{formatComposition(row)}</td>
-                        <td className="py-1 pr-2 whitespace-nowrap">{formatCounts(row)}</td>
+                        <td className="py-1 pr-2 font-bold whitespace-nowrap">
+                          {row.rank}
+                        </td>
+                        <td className="py-1 pr-2 whitespace-nowrap">
+                          {formatComposition(row)}
+                        </td>
+                        <td className="py-1 pr-2 whitespace-nowrap">
+                          {formatCounts(row)}
+                        </td>
                         <td className="py-1 pr-2 text-right whitespace-nowrap">
                           {row.win_rate_pct.toFixed(1)}%
                         </td>
@@ -1245,6 +1361,34 @@ function SidePanel({
   syncStatsOnHeroChange: boolean;
   onStatSync: StatSyncHandler;
 }) {
+  const troopCountRefs = useRef<Record<TroopCategory, HTMLInputElement | null>>(
+    {
+      infantry: null,
+      lancer: null,
+      marksman: null,
+    },
+  );
+
+  const handleTroopCountTab =
+    (cat: TroopCategory): KeyboardEventHandler<HTMLInputElement> =>
+    (event) => {
+      if (
+        event.key !== "Tab" ||
+        event.altKey ||
+        event.ctrlKey ||
+        event.metaKey ||
+        (typeof window !== "undefined" &&
+          !window.matchMedia("(min-width: 640px)").matches)
+      ) {
+        return;
+      }
+      const currentIndex = CATEGORIES.indexOf(cat);
+      const nextCat = CATEGORIES[currentIndex + (event.shiftKey ? -1 : 1)];
+      if (!nextCat) return;
+      event.preventDefault();
+      troopCountRefs.current[nextCat]?.focus();
+    };
+
   return (
     <div
       className="rounded p-3 sm:p-4 min-w-0"
@@ -1271,6 +1415,10 @@ function SidePanel({
             rallyMode={rallyMode}
             syncStatsOnHeroChange={syncStatsOnHeroChange}
             onStatSync={onStatSync}
+            countInputRef={(node) => {
+              troopCountRefs.current[cat] = node;
+            }}
+            onCountKeyDown={handleTroopCountTab(cat)}
           />
         ))}
       </div>
@@ -1321,28 +1469,38 @@ function SidePanel({
       </h4>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         {CATEGORIES.map((cat) => (
-          <div key={cat} className="flex flex-col gap-1 min-w-0">
-            <span className="text-xs opacity-60 truncate">
-              {cat === "marksman" ? "Marksman" : cat[0].toUpperCase() + cat.slice(1)}
+          <div
+            key={cat}
+            className="min-w-0 rounded border p-2.5"
+            style={{
+              borderColor: "var(--border-color)",
+              backgroundColor: "var(--main-bg)",
+            }}
+          >
+            <span className="mb-2 block text-[11px] uppercase tracking-wider opacity-60">
+              {troopCategoryLabel(cat)}
             </span>
-            {STAT_NAMES.map((stat) => {
-              const bonus = sideSkill4BonusPercent(state, which, stat as Skill4Stat, rallyMode);
-              const baseValue = state.stats[cat][stat];
-              const previewValue =
-                bonus > 0 ? effectiveStatPreview(baseValue, bonus) : null;
-              return (
-                <label
-                  key={stat}
-                  className="flex flex-col gap-0.5 text-[11px] sm:text-xs"
-                >
-                  <div className="flex items-center gap-1.5 sm:gap-2">
-                    <span className="min-w-0 flex-1 opacity-60 truncate">
-                      <span className="sm:hidden font-bold">
-                        {stat[0].toUpperCase()}
-                      </span>
-                      <span className="hidden sm:inline">
-                        {stat[0].toUpperCase() + stat.slice(1)}
-                      </span>
+            <div className="grid grid-cols-4 gap-1.5 sm:gap-2">
+              {STAT_NAMES.map((stat) => {
+                const bonus = sideSkill4BonusPercent(
+                  state,
+                  which,
+                  stat as Skill4Stat,
+                  rallyMode,
+                );
+                const baseValue = state.stats[cat][stat];
+                const previewValue =
+                  bonus > 0 ? effectiveStatPreview(baseValue, bonus) : null;
+                return (
+                  <label
+                    key={stat}
+                    className="flex min-w-0 flex-col gap-1 text-[10px]"
+                  >
+                    <span
+                      className="truncate text-center font-mono uppercase opacity-60"
+                      title={statLabel(cat, stat)}
+                    >
+                      {STAT_SHORT_LABELS[stat]}
                     </span>
                     <input
                       type="number"
@@ -1355,33 +1513,43 @@ function SidePanel({
                           ...prev,
                           stats: {
                             ...prev.stats,
-                            [cat]: { ...prev.stats[cat], [stat]: isNaN(v) ? 0 : v },
+                            [cat]: {
+                              ...prev.stats[cat],
+                              [stat]: isNaN(v) ? 0 : v,
+                            },
                           },
                         }));
                       }}
-                      className="min-w-0 flex-1 rounded px-1.5 py-1 font-mono text-xs text-right tabular-nums min-h-[32px] sm:w-20 sm:flex-none"
+                      className="w-full min-w-0 rounded px-1 py-1.5 font-mono text-[11px] text-center tabular-nums min-h-[34px]"
                       style={{
-                        backgroundColor: "var(--main-bg)",
+                        backgroundColor: "var(--sidebar-bg)",
                         border: "1px solid var(--border-color)",
                         color: "var(--main-text)",
                       }}
                       aria-label={statLabel(cat, stat)}
                     />
-                    {previewValue && (
-                      <span
-                        className="flex min-w-[3.5rem] flex-col items-end justify-center font-mono text-[9px] leading-tight sm:min-w-[4rem] sm:text-[10px]"
-                        style={{ color: "#a6e3a1" }}
-                        title={`Skill 4 will add +${bonus.toFixed(1)}% to this stat before battle, for an effective stat of ${previewValue}.`}
-                        data-testid={`stat-preview-${which}-${cat}-${stat}`}
-                      >
-                        <span>[{previewValue}]</span>
-                        <span>+{bonus.toFixed(1)}%</span>
-                      </span>
-                    )}
-                  </div>
-                </label>
-              );
-            })}
+                    <span
+                      className="flex min-h-[1.8rem] flex-col items-center justify-start text-center font-mono text-[9px] leading-tight sm:text-[10px]"
+                      style={{
+                        color: previewValue ? "#a6e3a1" : "var(--sidebar-text)",
+                      }}
+                    >
+                      {previewValue ? (
+                        <span
+                          title={`Skill 4 will add +${bonus.toFixed(1)}% to this stat before battle, for an effective stat of ${previewValue}.`}
+                          data-testid={`stat-preview-${which}-${cat}-${stat}`}
+                        >
+                          <span>[{previewValue}]</span>
+                          <span>+{bonus.toFixed(1)}%</span>
+                        </span>
+                      ) : (
+                        <span aria-hidden="true">&nbsp;</span>
+                      )}
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
           </div>
         ))}
       </div>
@@ -1397,6 +1565,8 @@ function TroopColumn({
   rallyMode,
   syncStatsOnHeroChange,
   onStatSync,
+  countInputRef,
+  onCountKeyDown,
 }: {
   cat: TroopCategory;
   which: Side;
@@ -1405,6 +1575,8 @@ function TroopColumn({
   rallyMode: boolean;
   syncStatsOnHeroChange: boolean;
   onStatSync: StatSyncHandler;
+  countInputRef?: (node: HTMLInputElement | null) => void;
+  onCountKeyDown?: KeyboardEventHandler<HTMLInputElement>;
 }) {
   const heroSlot = state.heroes[cat];
   const hero = getHero(heroSlot.name);
@@ -1415,148 +1587,185 @@ function TroopColumn({
   const skill4Pct = skill4Active ? skill4PercentAt(skill4Level) : 0;
 
   return (
-    <div className="flex flex-col gap-1.5 min-w-0">
-      <span className="text-xs uppercase tracking-wider opacity-70 font-mono truncate">
-        {cat === "marksman" ? "Marksman" : cat[0].toUpperCase() + cat.slice(1)}
+    <div
+      className="flex min-w-0 flex-col gap-2 rounded border p-2.5"
+      style={{
+        borderColor: "var(--border-color)",
+        backgroundColor: "var(--main-bg)",
+      }}
+    >
+      <span className="text-[11px] uppercase tracking-wider opacity-70 font-mono truncate">
+        {troopCategoryLabel(cat)}
       </span>
-      <input
-        type="number"
-        min={0}
-        inputMode="numeric"
-        value={state.troops[cat]}
-        onChange={(e) => {
-          const v = parseInt(e.target.value || "0", 10);
-          setState((prev) => ({
-            ...prev,
-            troops: { ...prev.troops, [cat]: isNaN(v) ? 0 : Math.max(0, v) },
-          }));
-        }}
-        className="w-full min-w-0 rounded px-2 py-2 font-mono text-sm text-right tabular-nums min-h-[36px]"
-        style={{
-          backgroundColor: "var(--main-bg)",
-          border: "1px solid var(--border-color)",
-          color: "var(--main-text)",
-        }}
-        aria-label={`${cat} troop count`}
-      />
-      <select
-        value={state.tiers[cat]}
-        onChange={(e) => {
-          const v = e.target.value;
-          setState((prev) => ({
-            ...prev,
-            tiers: { ...prev.tiers, [cat]: v },
-          }));
-        }}
-        className="w-full min-w-0 rounded px-2 py-2 font-mono text-xs min-h-[36px]"
-        style={{
-          backgroundColor: "var(--main-bg)",
-          border: "1px solid var(--border-color)",
-          color: "var(--main-text)",
-        }}
-        aria-label={`${cat} troop tier`}
-      >
-        {TROOP_TIERS.map((t) => (
-          <option key={t} value={t}>
-            {t}
-          </option>
-        ))}
-      </select>
-      <select
-        value={heroSlot.name ?? ""}
-        onChange={(e) => {
-          const newName = e.target.value || null;
-          const prevHeroName = state.heroes[cat].name;
+      <div className="grid grid-cols-[minmax(0,1fr)_4.75rem] gap-2">
+        <label className="flex min-w-0 flex-col gap-1">
+          <span className="text-[10px] uppercase tracking-wider opacity-50">
+            Troops
+          </span>
+          <input
+            ref={countInputRef}
+            type="number"
+            min={0}
+            inputMode="numeric"
+            value={state.troops[cat]}
+            onKeyDown={onCountKeyDown}
+            onChange={(e) => {
+              const v = parseInt(e.target.value || "0", 10);
+              setState((prev) => ({
+                ...prev,
+                troops: {
+                  ...prev.troops,
+                  [cat]: isNaN(v) ? 0 : Math.max(0, v),
+                },
+              }));
+            }}
+            className="w-full min-w-0 rounded px-2 py-2 font-mono text-sm text-right tabular-nums min-h-[36px]"
+            style={{
+              backgroundColor: "var(--sidebar-bg)",
+              border: "1px solid var(--border-color)",
+              color: "var(--main-text)",
+            }}
+            aria-label={`${cat} troop count`}
+          />
+        </label>
+        <label className="flex min-w-0 flex-col gap-1">
+          <span className="text-[10px] uppercase tracking-wider opacity-50">
+            Tier
+          </span>
+          <select
+            value={state.tiers[cat]}
+            onChange={(e) => {
+              const v = e.target.value;
+              setState((prev) => ({
+                ...prev,
+                tiers: { ...prev.tiers, [cat]: v },
+              }));
+            }}
+            className="w-full min-w-0 rounded px-2 py-2 font-mono text-xs min-h-[36px]"
+            style={{
+              backgroundColor: "var(--sidebar-bg)",
+              border: "1px solid var(--border-color)",
+              color: "var(--main-text)",
+            }}
+            aria-label={`${cat} troop tier`}
+          >
+            {TROOP_TIERS.map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+      <label className="flex flex-col gap-1">
+        <span className="text-[10px] uppercase tracking-wider opacity-50">
+          Hero
+        </span>
+        <select
+          value={heroSlot.name ?? ""}
+          onChange={(e) => {
+            const newName = e.target.value || null;
+            const prevHeroName = state.heroes[cat].name;
 
-          // Pre-compute the stat delta + snapshot outside setState so TS
-          // flow analysis can see it, and so we can emit the toast payload
-          // after the state update without a closure-narrowing workaround.
-          let statSnapshot: Record<string, number> | null = null;
-          let deltas: HeroBaseStats | null = null;
-          if (syncStatsOnHeroChange && prevHeroName !== newName) {
-            const oldBase = heroBaseStats(prevHeroName);
-            const newBase = heroBaseStats(newName);
-            const computed: HeroBaseStats = {
-              attack: newBase.attack - oldBase.attack,
-              defense: newBase.defense - oldBase.defense,
-              lethality: newBase.lethality - oldBase.lethality,
-              health: newBase.health - oldBase.health,
-            };
-            const anyDelta = STAT_NAMES_ORDERED.some(
-              (k) => Math.abs(computed[k]) > 1e-9,
-            );
-            if (anyDelta) {
-              statSnapshot = { ...state.stats[cat] };
-              deltas = computed;
-            }
-          }
-
-          setState((prev) => {
-            const newSkills = deriveSkillsForHero(
-              prev.heroes[cat].name,
-              prev.heroes[cat].skills,
-              newName,
-              rallyMode,
-            );
-            let nextStats = prev.stats;
-            if (deltas) {
-              const prevCatStats = prev.stats[cat];
-              const nextCatStats: Record<string, number> = { ...prevCatStats };
-              for (const k of STAT_NAMES_ORDERED) {
-                const curr = prevCatStats[k] ?? 0;
-                // Round to 2 decimals to match source JSON precision and
-                // avoid long floating-point trails in the input field.
-                nextCatStats[k] = Math.round((curr + deltas[k]) * 100) / 100;
+            // Pre-compute the stat delta + snapshot outside setState so TS
+            // flow analysis can see it, and so we can emit the toast payload
+            // after the state update without a closure-narrowing workaround.
+            let statSnapshot: Record<string, number> | null = null;
+            let deltas: HeroBaseStats | null = null;
+            if (syncStatsOnHeroChange && prevHeroName !== newName) {
+              const oldBase = heroBaseStats(prevHeroName);
+              const newBase = heroBaseStats(newName);
+              const computed: HeroBaseStats = {
+                attack: newBase.attack - oldBase.attack,
+                defense: newBase.defense - oldBase.defense,
+                lethality: newBase.lethality - oldBase.lethality,
+                health: newBase.health - oldBase.health,
+              };
+              const anyDelta = STAT_NAMES_ORDERED.some(
+                (k) => Math.abs(computed[k]) > 1e-9,
+              );
+              if (anyDelta) {
+                statSnapshot = { ...state.stats[cat] };
+                deltas = computed;
               }
-              nextStats = { ...prev.stats, [cat]: nextCatStats };
             }
-            return {
-              ...prev,
-              heroes: {
-                ...prev.heroes,
-                [cat]: { name: newName, skills: newSkills },
-              },
-              stats: nextStats,
-            };
-          });
 
-          if (statSnapshot && deltas) {
-            onStatSync({
-              which,
-              cat,
-              oldHeroName: prevHeroName,
-              newHeroName: newName,
-              prevStats: statSnapshot,
-              deltas,
+            setState((prev) => {
+              const newSkills = deriveSkillsForHero(
+                prev.heroes[cat].name,
+                prev.heroes[cat].skills,
+                newName,
+                rallyMode,
+              );
+              let nextStats = prev.stats;
+              if (deltas) {
+                const prevCatStats = prev.stats[cat];
+                const nextCatStats: Record<string, number> = {
+                  ...prevCatStats,
+                };
+                for (const k of STAT_NAMES_ORDERED) {
+                  const curr = prevCatStats[k] ?? 0;
+                  // Round to 2 decimals to match source JSON precision and
+                  // avoid long floating-point trails in the input field.
+                  nextCatStats[k] = Math.round((curr + deltas[k]) * 100) / 100;
+                }
+                nextStats = { ...prev.stats, [cat]: nextCatStats };
+              }
+              return {
+                ...prev,
+                heroes: {
+                  ...prev.heroes,
+                  [cat]: { name: newName, skills: newSkills },
+                },
+                stats: nextStats,
+              };
             });
-          }
-        }}
-        className="w-full min-w-0 rounded px-2 py-2 font-mono text-xs min-h-[36px]"
-        style={{
-          backgroundColor: "var(--main-bg)",
-          border: "1px solid var(--border-color)",
-          color: "var(--main-text)",
-        }}
-        aria-label={`${cat} hero`}
-      >
-        <option value="">— None —</option>
-        {heroOptions.map((h) => (
-          <option key={h.name} value={h.name}>
-            {h.name}
-          </option>
-        ))}
-      </select>
 
-      <div className="flex flex-col gap-0.5 mt-1">
+            if (statSnapshot && deltas) {
+              onStatSync({
+                which,
+                cat,
+                oldHeroName: prevHeroName,
+                newHeroName: newName,
+                prevStats: statSnapshot,
+                deltas,
+              });
+            }
+          }}
+          className="w-full min-w-0 rounded px-2 py-2 font-mono text-xs min-h-[36px]"
+          style={{
+            backgroundColor: "var(--sidebar-bg)",
+            border: "1px solid var(--border-color)",
+            color: "var(--main-text)",
+          }}
+          aria-label={`${cat} hero`}
+        >
+          <option value="">— None —</option>
+          {heroOptions.map((h) => (
+            <option key={h.name} value={h.name}>
+              {h.name}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <div className="mt-0.5 flex flex-col gap-1">
         <span className="text-[10px] uppercase tracking-wider opacity-50">
           Skills
         </span>
-        {[1, 2, 3, 4].map((slot) => {
-          const enabled = skillSlotEnabled(hero, slot as 1 | 2 | 3 | 4, rallyMode);
-          return (
-            <div key={slot} className="flex flex-col">
-              <label className="flex items-center justify-between gap-1 text-[11px]">
-                <span className="opacity-60 truncate">Skill {slot}</span>
+        <div className="grid grid-cols-4 gap-1.5">
+          {[1, 2, 3, 4].map((slot) => {
+            const enabled = skillSlotEnabled(
+              hero,
+              slot as 1 | 2 | 3 | 4,
+              rallyMode,
+            );
+            return (
+              <label
+                key={slot}
+                className="flex min-w-0 flex-col gap-1 text-[11px]"
+              >
+                <span className="text-center font-mono opacity-60">{slot}</span>
                 <select
                   value={heroSlot.skills[slot - 1]}
                   disabled={!enabled}
@@ -1579,9 +1788,9 @@ function TroopColumn({
                       };
                     });
                   }}
-                  className="rounded px-1.5 py-1 font-mono text-[11px] w-12 sm:w-14 flex-shrink-0 min-h-[32px]"
+                  className="w-full rounded px-1 py-1.5 font-mono text-[11px] min-h-[32px]"
                   style={{
-                    backgroundColor: "var(--main-bg)",
+                    backgroundColor: "var(--sidebar-bg)",
                     border: "1px solid var(--border-color)",
                     color: "var(--main-text)",
                     opacity: enabled ? 1 : 0.4,
@@ -1595,27 +1804,27 @@ function TroopColumn({
                   ))}
                 </select>
               </label>
-              {slot === 4 && rallyMode && skill4 && (
-                <span
-                  className="text-[10px] font-mono text-right mt-0.5 truncate"
-                  style={{
-                    color: skill4Active ? "#a6e3a1" : "#6c7086",
-                    opacity: skill4Active ? 1 : 0.6,
-                  }}
-                  title={
-                    skill4Active
-                      ? `Active: skill 4 grants +${skill4Pct.toFixed(1)}% ${skill4.stat} to all troops.`
-                      : `Inactive on this side: this hero's skill 4 only works on ${skill4.role}.`
-                  }
-                >
-                  {skill4Active
-                    ? `+${skill4Pct.toFixed(1)}% ${skill4.stat}`
-                    : `(${skill4.role}-only)`}
-                </span>
-              )}
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
+        {rallyMode && skill4 && (
+          <span
+            className="text-[10px] font-mono text-right truncate"
+            style={{
+              color: skill4Active ? "#a6e3a1" : "#6c7086",
+              opacity: skill4Active ? 1 : 0.6,
+            }}
+            title={
+              skill4Active
+                ? `Active: skill 4 grants +${skill4Pct.toFixed(1)}% ${skill4.stat} to all troops.`
+                : `Inactive on this side: this hero's skill 4 only works on ${skill4.role}.`
+            }
+          >
+            {skill4Active
+              ? `Skill 4: +${skill4Pct.toFixed(1)}% ${skill4.stat}`
+              : `Skill 4 (${skill4.role}-only)`}
+          </span>
+        )}
       </div>
     </div>
   );
@@ -1663,85 +1872,88 @@ function StatSyncToastBanner({
     <div
       role="status"
       aria-live="polite"
-      className="rounded px-3 py-2 mb-4 text-xs flex flex-wrap items-center gap-x-3 gap-y-2"
+      className="fixed inset-x-3 top-16 z-50 rounded px-3 py-2 text-xs shadow-lg sm:left-auto sm:right-5 sm:top-5 sm:w-[min(34rem,calc(100vw-2.5rem))]"
       style={{
         border: "1px solid var(--sidebar-active)",
         backgroundColor: "rgba(137, 180, 250, 0.12)",
         color: "var(--main-text)",
       }}
     >
-      {toast.showDisablePrompt ? (
-        <>
-          <span className="font-bold">Stats reverted.</span>
-          <span className="opacity-80">
-            Disable &ldquo;Update stats on hero change&rdquo; so this
-            doesn&rsquo;t happen again?
-          </span>
-          <span className="ml-auto flex items-center gap-2">
-            <button
-              type="button"
-              onClick={onDisable}
-              className="px-2 py-1 rounded font-bold"
-              style={{
-                border: "1px solid var(--sidebar-active)",
-                color: "var(--sidebar-active)",
-                backgroundColor: "transparent",
-              }}
-            >
-              Disable sync
-            </button>
-            <button
-              type="button"
-              onClick={onKeepEnabled}
-              className="px-2 py-1 rounded"
-              style={{
-                border: "1px solid var(--border-color)",
-                color: "var(--main-text)",
-                backgroundColor: "transparent",
-              }}
-            >
-              Keep enabled
-            </button>
-          </span>
-        </>
-      ) : (
-        <>
-          <span className="font-bold">
-            {sideLabel} {catLabel} stats updated
-          </span>
-          <span className="opacity-80 font-mono">
-            {formatHeroName(toast.oldHeroName)} →{" "}
-            {formatHeroName(toast.newHeroName)} ({deltaBits.join(", ") || "no change"})
-          </span>
-          <span className="ml-auto flex items-center gap-2">
-            <button
-              type="button"
-              onClick={onUndo}
-              className="px-2 py-1 rounded font-bold"
-              style={{
-                border: "1px solid var(--sidebar-active)",
-                color: "var(--sidebar-active)",
-                backgroundColor: "transparent",
-              }}
-            >
-              Undo stat change
-            </button>
-            <button
-              type="button"
-              onClick={onDismiss}
-              className="px-2 py-1 rounded opacity-70"
-              style={{
-                border: "1px solid var(--border-color)",
-                color: "var(--main-text)",
-                backgroundColor: "transparent",
-              }}
-              aria-label="Dismiss"
-            >
-              ×
-            </button>
-          </span>
-        </>
-      )}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        {toast.showDisablePrompt ? (
+          <>
+            <span className="font-bold">Stats reverted.</span>
+            <span className="opacity-80">
+              Disable &ldquo;Update stats on hero change&rdquo; so this
+              doesn&rsquo;t happen again?
+            </span>
+            <span className="ml-auto flex items-center gap-2">
+              <button
+                type="button"
+                onClick={onDisable}
+                className="px-2 py-1 rounded font-bold"
+                style={{
+                  border: "1px solid var(--sidebar-active)",
+                  color: "var(--sidebar-active)",
+                  backgroundColor: "transparent",
+                }}
+              >
+                Disable sync
+              </button>
+              <button
+                type="button"
+                onClick={onKeepEnabled}
+                className="px-2 py-1 rounded"
+                style={{
+                  border: "1px solid var(--border-color)",
+                  color: "var(--main-text)",
+                  backgroundColor: "transparent",
+                }}
+              >
+                Keep enabled
+              </button>
+            </span>
+          </>
+        ) : (
+          <>
+            <span className="font-bold">
+              {sideLabel} {catLabel} stats updated
+            </span>
+            <span className="opacity-80 font-mono">
+              {formatHeroName(toast.oldHeroName)} →{" "}
+              {formatHeroName(toast.newHeroName)} (
+              {deltaBits.join(", ") || "no change"})
+            </span>
+            <span className="ml-auto flex items-center gap-2">
+              <button
+                type="button"
+                onClick={onUndo}
+                className="px-2 py-1 rounded font-bold"
+                style={{
+                  border: "1px solid var(--sidebar-active)",
+                  color: "var(--sidebar-active)",
+                  backgroundColor: "transparent",
+                }}
+              >
+                Undo stat change
+              </button>
+              <button
+                type="button"
+                onClick={onDismiss}
+                className="px-2 py-1 rounded opacity-70"
+                style={{
+                  border: "1px solid var(--border-color)",
+                  color: "var(--main-text)",
+                  backgroundColor: "transparent",
+                }}
+                aria-label="Dismiss"
+              >
+                ×
+              </button>
+            </span>
+          </>
+        )}
+      </div>
     </div>
   );
 }
@@ -1786,7 +1998,9 @@ function SkillUseTable({
               style={{ borderBottom: "1px solid var(--border-color)" }}
             >
               <td className="py-1 pr-2 opacity-80">{e.name}</td>
-              <td className="py-1 pr-2 text-right">{e.avg_activations.toFixed(1)}</td>
+              <td className="py-1 pr-2 text-right">
+                {e.avg_activations.toFixed(1)}
+              </td>
               <td className="py-1 text-right">{e.avg_kills.toFixed(1)}</td>
             </tr>
           ))}

@@ -49,28 +49,23 @@ export default function SiteNav() {
     <>
       {/* Mobile top bar */}
       <header
-        className="md:hidden fixed top-0 inset-x-0 z-40 flex items-center justify-between px-4 h-14"
+        className="md:hidden fixed top-0 inset-x-0 z-40 flex items-center justify-between px-4 h-12"
         style={{
           backgroundColor: "var(--sidebar-bg)",
           color: "var(--sidebar-text)",
           borderBottom: "1px solid var(--border-color)",
         }}
       >
-        <div className="flex flex-col">
-          <span className="text-xs font-bold uppercase tracking-widest opacity-80">
-            WOS Sim
-          </span>
-          <span className="text-[10px] opacity-40 leading-tight">
-            Accuracy Dashboard
-          </span>
-        </div>
+        <span className="text-sm font-bold uppercase tracking-widest opacity-80">
+          WOS Sim
+        </span>
         <button
           type="button"
           onClick={() => setOpen((v) => !v)}
           aria-label={open ? "Close menu" : "Open menu"}
           aria-expanded={open}
           aria-controls="site-nav-drawer"
-          className="inline-flex items-center justify-center w-11 h-11 rounded"
+          className="inline-flex items-center justify-center w-10 h-10 rounded"
           style={{
             border: "1px solid var(--border-color)",
             color: "var(--sidebar-text)",
