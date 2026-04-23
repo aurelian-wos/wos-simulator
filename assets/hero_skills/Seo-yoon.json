@@ -25,11 +25,11 @@
                 "effect_is_chance": false,
                 "effect_num": "Rallying Beat/1",
                 "trigger_types": {
-                    "trigger_for": "all",
+                    "trigger_for": "once",
                     "trigger_vs": "all"
                 },
                 "benefit_types": {
-                    "benefit_for": "trigger",
+                    "benefit_for": "all",
                     "benefit_vs": "any"
                 },
                 "effect_duration": {

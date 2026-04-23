@@ -25,12 +25,12 @@
                 "effect_is_chance": false,
                 "effect_num": "Veteran's Might/1",
                 "trigger_types": {
-                    "trigger_for": "all",
+                    "trigger_for": "once",
                     "trigger_vs": "all"
                 },
                 "benefit_types": {
-                    "benefit_for": "trigger",
-                    "benefit_vs": "target"
+                    "benefit_for": "all",
+                    "benefit_vs": "any"
                 },
                 "effect_duration": {
                     "duration_type": "turn",
@@ -75,11 +75,11 @@
                 "effect_is_chance": false,
                 "effect_num": "Power Shot/1",
                 "trigger_types": {
-                    "trigger_for": "all",
+                    "trigger_for": "once",
                     "trigger_vs": "all"
                 },
                 "benefit_types": {
-                    "benefit_for": "trigger",
+                    "benefit_for": "all",
                     "benefit_vs": "lancer"
                 },
                 "effect_duration": {
@@ -105,11 +105,11 @@
                 "effect_is_chance": false,
                 "effect_num": "Power Shot/2",
                 "trigger_types": {
-                    "trigger_for": "all",
+                    "trigger_for": "once",
                     "trigger_vs": "all"
                 },
                 "benefit_types": {
-                    "benefit_for": "trigger",
+                    "benefit_for": "all",
                     "benefit_vs": "infantry"
                 },
                 "effect_duration": {
@@ -155,12 +155,12 @@
                 "effect_is_chance": false,
                 "effect_num": "Tactical Assistance/1",
                 "trigger_types": {
-                    "trigger_for": "all",
+                    "trigger_for": "once",
                     "trigger_vs": "all"
                 },
                 "benefit_types": {
-                    "benefit_for": "trigger",
-                    "benefit_vs": "target"
+                    "benefit_for": "all",
+                    "benefit_vs": "any"
                 },
                 "effect_duration": {
                     "duration_type": "turn",

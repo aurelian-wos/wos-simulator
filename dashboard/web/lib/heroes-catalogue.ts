@@ -1,5 +1,5 @@
 export type TroopCategory = "infantry" | "lancer" | "marksman";
-export type Skill4Role = "attack" | "defense" | "rally";
+export type Skill4Role = "attack" | "defense";
 export type Skill4Stat = "attack" | "defense" | "lethality" | "health";
 
 export interface Skill4Info {
@@ -41,22 +41,22 @@ export const HEROES: HeroEntry[] = [
   { name: "Lynn", categories: ["marksman"], skillCount: 4, skillNums: [1, 2, 3, 4], skill4: { role: "defense", stat: "lethality" } },
   { name: "Mia", categories: ["lancer"], skillCount: 4, skillNums: [1, 2, 3, 4], skill4: { role: "attack", stat: "attack" } },
   { name: "Molly", categories: ["lancer", "marksman"], skillCount: 4, skillNums: [1, 2, 3, 4], skill4: { role: "defense", stat: "lethality" } },
-  { name: "Natalia", categories: ["infantry"], skillCount: 3, skillNums: [1, 2, 3] },
+  { name: "Natalia", categories: ["infantry"], skillCount: 4, skillNums: [1, 2, 3, 4], skill4: { role: "attack", stat: "lethality" } },
   { name: "Norah", categories: ["lancer"], skillCount: 4, skillNums: [1, 2, 3, 4], skill4: { role: "defense", stat: "defense" } },
   { name: "Patrick", categories: ["lancer"], skillCount: 2, skillNums: [1, 2] },
   { name: "Philly", categories: ["lancer"], skillCount: 4, skillNums: [1, 2, 3, 4], skill4: { role: "defense", stat: "health" } },
   { name: "Reina", categories: ["lancer"], skillCount: 4, skillNums: [1, 2, 3, 4], skill4: { role: "attack", stat: "lethality" } },
-  { name: "Renee", categories: ["lancer"], skillCount: 4, skillNums: [1, 2, 3, 4], skill4: { role: "rally", stat: "lethality" } },
+  { name: "Renee", categories: ["lancer"], skillCount: 4, skillNums: [1, 2, 3, 4], skill4: { role: "attack", stat: "lethality" } },
   { name: "Seo-yoon", categories: ["marksman"], skillCount: 2, skillNums: [1, 2] },
   { name: "Sergey", categories: ["infantry"], skillCount: 2, skillNums: [1, 2] },
   { name: "Wayne", categories: ["marksman"], skillCount: 4, skillNums: [1, 2, 3, 4], skill4: { role: "defense", stat: "lethality" } },
   { name: "WuMing", categories: ["infantry"], skillCount: 4, skillNums: [1, 2, 3, 4], skill4: { role: "defense", stat: "defense" } },
-  { name: "Zinman", categories: ["marksman"], skillCount: 2, skillNums: [1, 3] },
+  { name: "Zinman", categories: ["marksman"], skillCount: 4, skillNums: [1, 2, 3, 4] , skill4: { role: "defense", stat: "attack" } },
 ];
 
 /**
  * Whether a hero's skill_4 (if present) is active for a given side in rally mode.
- * - Attacker (rally leader): role "attack" and "rally" are both active.
+ * - Attacker (rally leader): role "attack" skills active.
  * - Defender: only "defense" is active.
  * Heroes without a skill_4 always return false.
  */
@@ -66,7 +66,7 @@ export function skill4ActiveForSide(
 ): boolean {
   if (!hero?.skill4) return false;
   const role = hero.skill4.role;
-  if (side === "attacker") return role === "attack" || role === "rally";
+  if (side === "attacker") return role === "attack";
   return role === "defense";
 }
 
