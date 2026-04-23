@@ -39,6 +39,14 @@ Override via the `DB_PATH` environment variable if needed:
 DB_PATH=/absolute/path/to/dashboard.sqlite npm run dev
 ```
 
+Saved `/simulate` share links are stored outside git. By default the app writes
+JSON snapshots to `../../tmp/simulate-runs`; override with `SIM_RUNS_DIR` when
+you want a different host path or a mounted Docker volume:
+
+```bash
+SIM_RUNS_DIR=/absolute/path/to/simulate-runs npm run dev
+```
+
 **The DB does not need to exist for the app to start.** If missing, `/healthz` returns `{ runs: 0, warning: "DB not found" }` and all pages show an empty state.
 
 ## How the DB gets populated

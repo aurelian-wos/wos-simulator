@@ -1,12 +1,14 @@
 "use client";
 
 import {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
   type KeyboardEventHandler,
 } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import OptimizeRatioScatterChart from "@/components/OptimizeRatioScatterChart";
 import SimulateOutcomeChart from "@/components/SimulateOutcomeChart";
 import UploadReportModal, {
@@ -39,6 +41,15 @@ import {
   resolveInfantryBounds,
   totalTroopsForCounts,
 } from "@/lib/optimize-ratio";
+import type {
+  OptimizeRatioApiResponse,
+  OptimizeRatioRequestPayload,
+  SavedSimulationKind,
+  SavedSimulationRunResponse,
+  SimulateApiResponse,
+  SimulateRequestPayload,
+  SimulateSidePayload,
+} from "@/lib/simulate-run";
 
 type Side = "attacker" | "defender";
 const CATEGORIES: TroopCategory[] = ["infantry", "lancer", "marksman"];
@@ -75,26 +86,18 @@ interface SideState {
   stats: Record<TroopCategory, Record<string, number>>;
 }
 
-interface ApiResult {
-  replicates: number;
-  summary: {
-    mean: number;
-    std: number;
-    best: { value: number; winner: "attacker" | "defender" | "draw" };
-    worst: { value: number; winner: "attacker" | "defender" | "draw" };
-    attacker_win_rate: number;
-    avg_skill_activations: number;
-    avg_skill_kills: number;
-    avg_attacker_activations: number;
-    avg_defender_activations: number;
-    avg_attacker_kills: number;
-    avg_defender_kills: number;
-  };
-  outcomes: number[];
-  per_side_skills: {
-    attacker: { name: string; avg_activations: number; avg_kills: number }[];
-    defender: { name: string; avg_activations: number; avg_kills: number }[];
-  };
+interface SavedRunMeta {
+  id: string;
+  kind: SavedSimulationKind;
+  createdAt: string;
+  shareUrl: string;
+}
+
+interface SaveMetaPayload {
+  saved_run_id?: string;
+  saved_at?: string;
+  saved_kind?: SavedSimulationKind;
+  share_url?: string;
 }
 
 function defaultSide(): SideState {
@@ -120,8 +123,8 @@ function toApiPayload(
   defender: SideState,
   replicates: number,
   rallyMode: boolean,
-) {
-  const mkSide = (s: SideState) => ({
+): SimulateRequestPayload {
+  const mkSide = (s: SideState): SimulateSidePayload => ({
     troops: s.troops,
     troop_types: {
       infantry: `infantry_${s.tiers.infantry}`,
@@ -140,9 +143,9 @@ function toApiPayload(
       },
     },
     joiners: rallyMode
-      ? s.joiners
-          .filter((j) => j.name)
-          .map((j) => ({ name: j.name, skill_1: 5 }))
+      ? s.joiners.flatMap((j) =>
+          j.name ? [{ name: j.name, skill_1: 5 }] : [],
+        )
       : [],
     stats: {
       inf: [
@@ -150,19 +153,19 @@ function toApiPayload(
         s.stats.infantry.defense,
         s.stats.infantry.lethality,
         s.stats.infantry.health,
-      ],
+      ] as [number, number, number, number],
       lanc: [
         s.stats.lancer.attack,
         s.stats.lancer.defense,
         s.stats.lancer.lethality,
         s.stats.lancer.health,
-      ],
+      ] as [number, number, number, number],
       mark: [
         s.stats.marksman.attack,
         s.stats.marksman.defense,
         s.stats.marksman.lethality,
         s.stats.marksman.health,
-      ],
+      ] as [number, number, number, number],
     },
   });
   return {
@@ -170,6 +173,80 @@ function toApiPayload(
     defender: mkSide(defender),
     replicates,
     rally_mode: rallyMode,
+  };
+}
+
+function clampValue(value: number, fallback: number): number {
+  return Number.isFinite(value) ? value : fallback;
+}
+
+function normalizeSkills(
+  value: number[] | undefined,
+): [number, number, number, number] {
+  return [
+    clampValue(value?.[0] ?? 0, 0),
+    clampValue(value?.[1] ?? 0, 0),
+    clampValue(value?.[2] ?? 0, 0),
+    clampValue(value?.[3] ?? 0, 0),
+  ];
+}
+
+function parseTier(
+  category: TroopCategory,
+  troopType: string | undefined,
+): string {
+  const prefix = `${category}_`;
+  if (troopType?.startsWith(prefix)) {
+    return troopType.slice(prefix.length);
+  }
+  return TROOP_TIERS[0] ?? "t1";
+}
+
+function parseStatTuple(
+  value: number[] | undefined,
+): Record<StatName, number> {
+  return {
+    attack: clampValue(value?.[0] ?? 100, 100),
+    defense: clampValue(value?.[1] ?? 100, 100),
+    lethality: clampValue(value?.[2] ?? 100, 100),
+    health: clampValue(value?.[3] ?? 100, 100),
+  };
+}
+
+function sideFromPayload(side: SimulateSidePayload): SideState {
+  return {
+    troops: {
+      infantry: clampValue(side.troops?.infantry ?? 0, 0),
+      lancer: clampValue(side.troops?.lancer ?? 0, 0),
+      marksman: clampValue(side.troops?.marksman ?? 0, 0),
+    },
+    tiers: {
+      infantry: parseTier("infantry", side.troop_types?.infantry),
+      lancer: parseTier("lancer", side.troop_types?.lancer),
+      marksman: parseTier("marksman", side.troop_types?.marksman),
+    },
+    heroes: {
+      infantry: {
+        name: side.heroes?.infantry?.name ?? null,
+        skills: normalizeSkills(side.heroes?.infantry?.skills),
+      },
+      lancer: {
+        name: side.heroes?.lancer?.name ?? null,
+        skills: normalizeSkills(side.heroes?.lancer?.skills),
+      },
+      marksman: {
+        name: side.heroes?.marksman?.name ?? null,
+        skills: normalizeSkills(side.heroes?.marksman?.skills),
+      },
+    },
+    joiners: Array.from({ length: JOINER_COUNT }, (_, index) => ({
+      name: side.joiners?.[index]?.name ?? null,
+    })),
+    stats: {
+      infantry: parseStatTuple(side.stats?.inf),
+      lancer: parseStatTuple(side.stats?.lanc),
+      marksman: parseStatTuple(side.stats?.mark),
+    },
   };
 }
 
@@ -387,11 +464,14 @@ const STAT_NAMES_ORDERED: (keyof HeroBaseStats)[] = [
 ];
 
 export default function SimulatePage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const runIdFromUrl = searchParams?.get("run") ?? null;
   const [attacker, setAttacker] = useState<SideState>(() => defaultSide());
   const [defender, setDefender] = useState<SideState>(() => defaultSide());
   const [replicates, setReplicates] = useState<number>(1000);
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<ApiResult | null>(null);
+  const [result, setResult] = useState<SimulateApiResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [uploadWarnings, setUploadWarnings] = useState<string[]>([]);
@@ -403,7 +483,7 @@ export default function SimulatePage() {
   const [optimizeLoading, setOptimizeLoading] = useState(false);
   const [optimizeError, setOptimizeError] = useState<string | null>(null);
   const [optimizeResult, setOptimizeResult] =
-    useState<OptimizeRatioResult | null>(null);
+    useState<OptimizeRatioApiResponse | null>(null);
   const [optimizePanelOpen, setOptimizePanelOpen] = useState(false);
   const [optimizeReplicates, setOptimizeReplicates] = useState<number>(
     DEFAULT_OPTIMIZE_REPLICATES,
@@ -415,8 +495,12 @@ export default function SimulatePage() {
   const [optimizeInfantryMaxPct, setOptimizeInfantryMaxPct] = useState(
     DEFAULT_INFANTRY_MAX_PCT,
   );
+  const [savedRunMeta, setSavedRunMeta] = useState<SavedRunMeta | null>(null);
+  const [savedRunError, setSavedRunError] = useState<string | null>(null);
+  const [loadingSavedRun, setLoadingSavedRun] = useState(Boolean(runIdFromUrl));
   const toastIdRef = useRef(0);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const loadedRunIdRef = useRef<string | null>(null);
   // When true, the defender panel is rendered on the left. Shared with the
   // upload modal so both views always display sides in the same order.
   const [sidesSwapped, setSidesSwapped] = useState(false);
@@ -426,6 +510,148 @@ export default function SimulatePage() {
       if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     };
   }, []);
+
+  const storeSavedRunMeta = useCallback((meta: SavedRunMeta) => {
+    loadedRunIdRef.current = meta.id;
+    setSavedRunMeta(meta);
+    setSavedRunError(null);
+  }, []);
+
+  const applySavedRun = useCallback((saved: SavedSimulationRunResponse) => {
+    const request = saved.request as SimulateRequestPayload;
+    setAttacker(sideFromPayload(request.attacker));
+    setDefender(sideFromPayload(request.defender));
+    setReplicates(
+      Math.max(1, Math.min(5000, clampValue(request.replicates, 1000))),
+    );
+    setRallyMode(Boolean(request.rally_mode));
+    setUploadWarnings([]);
+    setError(null);
+    setOptimizeError(null);
+
+    if (saved.kind === "simulate") {
+      setResult({
+        ...(saved.result as SimulateApiResponse),
+        saved_run_id: saved.id,
+        saved_at: saved.created_at,
+        saved_kind: saved.kind,
+        share_url: saved.share_url,
+      });
+      setOptimizeResult(null);
+    } else {
+      const optimizeRequest = saved.request as OptimizeRatioRequestPayload;
+      setOptimizeReplicates(
+        Math.max(
+          1,
+          Math.min(
+            500,
+            clampValue(
+              optimizeRequest.search_replicates,
+              DEFAULT_OPTIMIZE_REPLICATES,
+            ),
+          ),
+        ),
+      );
+      setOptimizeStepInput(
+        Number.isFinite(optimizeRequest.grid_step)
+          ? String(optimizeRequest.grid_step)
+          : "",
+      );
+      setOptimizeInfantryMinPct(
+        clampValue(optimizeRequest.infantry_min_pct, DEFAULT_INFANTRY_MIN_PCT),
+      );
+      setOptimizeInfantryMaxPct(
+        clampValue(optimizeRequest.infantry_max_pct, DEFAULT_INFANTRY_MAX_PCT),
+      );
+      setResult(null);
+      setOptimizeResult({
+        ...(saved.result as OptimizeRatioResult),
+        saved_run_id: saved.id,
+        saved_at: saved.created_at,
+        saved_kind: saved.kind,
+        share_url: saved.share_url,
+      });
+    }
+
+    storeSavedRunMeta({
+      id: saved.id,
+      kind: saved.kind,
+      createdAt: saved.created_at,
+      shareUrl: saved.share_url,
+    });
+  }, [storeSavedRunMeta]);
+
+  function maybeActivateSavedRun(meta: SaveMetaPayload) {
+    if (
+      typeof meta.saved_run_id !== "string" ||
+      typeof meta.saved_at !== "string" ||
+      typeof meta.share_url !== "string" ||
+      (meta.saved_kind !== "simulate" &&
+        meta.saved_kind !== "optimize_ratio")
+    ) {
+      return;
+    }
+    storeSavedRunMeta({
+      id: meta.saved_run_id,
+      kind: meta.saved_kind,
+      createdAt: meta.saved_at,
+      shareUrl: meta.share_url,
+    });
+    router.replace(meta.share_url, { scroll: false });
+  }
+
+  useEffect(() => {
+    if (!runIdFromUrl) {
+      setLoadingSavedRun(false);
+      setSavedRunMeta(null);
+      setSavedRunError(null);
+      loadedRunIdRef.current = null;
+      return;
+    }
+    if (loadedRunIdRef.current === runIdFromUrl) {
+      setLoadingSavedRun(false);
+      return;
+    }
+
+    let cancelled = false;
+    setLoadingSavedRun(true);
+    setSavedRunError(null);
+
+    void (async () => {
+      try {
+        const res = await fetch(
+          `/api/simulate/runs/${encodeURIComponent(runIdFromUrl)}`,
+          {
+            cache: "no-store",
+          },
+        );
+        const data = (await res.json()) as
+          | SavedSimulationRunResponse
+          | { error?: string };
+        if (!res.ok) {
+          throw new Error(
+            ("error" in data && data.error) ||
+              `Saved run request failed with ${res.status}`,
+          );
+        }
+        if (cancelled) return;
+        applySavedRun(data as SavedSimulationRunResponse);
+      } catch (err) {
+        if (cancelled) return;
+        setSavedRunError(
+          err instanceof Error ? err.message : "Failed to load saved run",
+        );
+      } finally {
+        if (!cancelled) {
+          setLoadingSavedRun(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [applySavedRun, runIdFromUrl]);
 
   function dismissToast() {
     if (toastTimerRef.current) {
@@ -533,6 +759,7 @@ export default function SimulatePage() {
     setResult(null);
     setOptimizeError(null);
     setOptimizeResult(null);
+    setSavedRunError(null);
     try {
       const payload = toApiPayload(attacker, defender, replicates, rallyMode);
       const res = await fetch("/api/simulate", {
@@ -544,7 +771,9 @@ export default function SimulatePage() {
       if (!res.ok) {
         setError(data.error || `Request failed with ${res.status}`);
       } else {
-        setResult(data as ApiResult);
+        const saved = data as SimulateApiResponse;
+        setResult(saved);
+        maybeActivateSavedRun(saved);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -559,6 +788,7 @@ export default function SimulatePage() {
     setResult(null);
     setOptimizeError(null);
     setOptimizeResult(null);
+    setSavedRunError(null);
     try {
       const payload = {
         ...toApiPayload(attacker, defender, replicates, rallyMode),
@@ -579,7 +809,9 @@ export default function SimulatePage() {
           data.stderr || data.error || `Request failed with ${res.status}`,
         );
       } else {
-        setOptimizeResult(data as OptimizeRatioResult);
+        const saved = data as OptimizeRatioApiResponse;
+        setOptimizeResult(saved);
+        maybeActivateSavedRun(saved);
       }
     } catch (err) {
       setOptimizeError(err instanceof Error ? err.message : String(err));
@@ -765,6 +997,36 @@ export default function SimulatePage() {
               <li key={i}>{w}</li>
             ))}
           </ul>
+        </div>
+      )}
+
+      {(loadingSavedRun || savedRunMeta || savedRunError) && (
+        <div
+          className="mb-4 rounded px-3 py-2 text-xs"
+          style={{
+            border: `1px solid ${
+              savedRunError ? "#f38ba8" : "var(--border-color)"
+            }`,
+            backgroundColor: "var(--sidebar-bg)",
+            color: savedRunError ? "#f38ba8" : "var(--main-text)",
+          }}
+          data-testid="saved-run-banner"
+        >
+          {loadingSavedRun ? (
+            <span>Loading saved simulation run…</span>
+          ) : savedRunError ? (
+            <span>Saved run load failed: {savedRunError}</span>
+          ) : savedRunMeta ? (
+            <span>
+              Loaded saved{" "}
+              {savedRunMeta.kind === "simulate"
+                ? "simulation run"
+                : "ratio search"}{" "}
+              <code className="font-mono">{savedRunMeta.id}</code> from{" "}
+              {new Date(savedRunMeta.createdAt).toLocaleString()}. The current
+              URL points at this saved snapshot.
+            </span>
+          ) : null}
         </div>
       )}
 

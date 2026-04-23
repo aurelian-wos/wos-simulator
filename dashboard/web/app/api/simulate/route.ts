@@ -3,6 +3,12 @@ import { spawn } from "child_process";
 import fs from "fs";
 import path from "path";
 
+import { saveSimulationRun } from "@/lib/simulation-store";
+import type {
+  SimulateApiResult,
+  SimulateRequestPayload,
+} from "@/lib/simulate-run";
+
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
@@ -79,8 +85,31 @@ export async function POST(req: NextRequest) {
         return;
       }
       try {
-        const parsed = JSON.parse(stdout);
-        resolve(NextResponse.json(parsed));
+        const parsed = JSON.parse(stdout) as SimulateApiResult;
+        void saveSimulationRun("simulate", body as SimulateRequestPayload, parsed)
+          .then((saved) => {
+            resolve(
+              NextResponse.json({
+                ...parsed,
+                saved_run_id: saved.id,
+                saved_at: saved.created_at,
+                saved_kind: saved.kind,
+                share_url: saved.share_url,
+              }),
+            );
+          })
+          .catch((err) => {
+            resolve(
+              NextResponse.json(
+                {
+                  error: "Simulation completed but failed to save the result",
+                  saveError:
+                    err instanceof Error ? err.message : String(err),
+                },
+                { status: 500 },
+              ),
+            );
+          });
       } catch (err) {
         resolve(
           NextResponse.json(

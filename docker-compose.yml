@@ -23,6 +23,7 @@ services:
     environment:
       NODE_ENV: development
       DB_PATH: /data/test_results/dashboard.sqlite
+      SIM_RUNS_DIR: /data/simulations
       # Polling watchers — needed on WSL2/SMB/NFS-backed mounts, harmless on
       # native Linux. Override to false in .env if inotify works natively.
       WATCHPACK_POLLING: ${WATCHPACK_POLLING:-true}
@@ -35,6 +36,7 @@ services:
       # Turbopack/Next cache out of the host tree.
       - wos_node_modules:/app/node_modules
       - wos_next_cache:/app/.next
+      - wos_simulate_runs:/data/simulations
       # Read-only DB mount (incl. -shm / -wal siblings).
       - ./test_results:/data/test_results:ro
       # The dashboard's "Import report" route spawns dashboard/ocr_report.py
@@ -75,3 +77,4 @@ services:
 volumes:
   wos_node_modules:
   wos_next_cache:
+  wos_simulate_runs:

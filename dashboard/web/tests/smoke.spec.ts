@@ -35,6 +35,72 @@ async function assertNoConsoleErrors(page: Page) {
   return errors;
 }
 
+const SAVED_SIMULATION_ID = "run-share-123";
+const SAVED_SIMULATION_REQUEST = {
+  attacker: {
+    troops: { infantry: 1111, lancer: 222, marksman: 333 },
+    troop_types: {
+      infantry: "infantry_t7",
+      lancer: "lancer_t8",
+      marksman: "marksman_t9",
+    },
+    heroes: {
+      infantry: { name: "Logan", skills: [5, 5, 5, 5] },
+      lancer: { name: "Mia", skills: [5, 4, 3, 0] },
+      marksman: { name: "Alonso", skills: [5, 5, 5, 5] },
+    },
+    joiners: [{ name: "Jessie", skill_1: 5 }],
+    stats: {
+      inf: [110, 111, 112, 113],
+      lanc: [120, 121, 122, 123],
+      mark: [130, 131, 132, 133],
+    },
+  },
+  defender: {
+    troops: { infantry: 444, lancer: 555, marksman: 666 },
+    troop_types: {
+      infantry: "infantry_t6",
+      lancer: "lancer_t6",
+      marksman: "marksman_t6",
+    },
+    heroes: {
+      infantry: { name: "Flint", skills: [5, 5, 5, 5] },
+      lancer: { name: "Philly", skills: [5, 5, 5, 0] },
+      marksman: { name: "Wayne", skills: [5, 5, 5, 0] },
+    },
+    joiners: [{ name: "Patrick", skill_1: 5 }],
+    stats: {
+      inf: [140, 141, 142, 143],
+      lanc: [150, 151, 152, 153],
+      mark: [160, 161, 162, 163],
+    },
+  },
+  replicates: 222,
+  rally_mode: true,
+} as const;
+
+const SAVED_SIMULATION_RESULT = {
+  replicates: 222,
+  summary: {
+    mean: 81.5,
+    std: 21.4,
+    best: { value: 140, winner: "attacker" },
+    worst: { value: -45, winner: "defender" },
+    attacker_win_rate: 0.71,
+    avg_skill_activations: 8.6,
+    avg_skill_kills: 133.2,
+    avg_attacker_activations: 4.7,
+    avg_defender_activations: 3.9,
+    avg_attacker_kills: 77.1,
+    avg_defender_kills: 56.1,
+  },
+  outcomes: [120, 75, 90, -10],
+  per_side_skills: {
+    attacker: [{ name: "Battle Cry", avg_activations: 2.1, avg_kills: 19.4 }],
+    defender: [{ name: "Shield Wall", avg_activations: 1.4, avg_kills: 11.2 }],
+  },
+} as const;
+
 test.describe("Dashboard smoke tests", () => {
   test("/ — home page renders all five cards with drill-down links", async ({
     page,
@@ -374,6 +440,95 @@ test.describe("Dashboard smoke tests", () => {
       .locator("option")
       .allTextContents();
     expect(marksmanOptions).toContain("Bradley");
+
+    expect(errors).toHaveLength(0);
+  });
+
+  test("/simulate — successful runs update the URL to the saved share link", async ({
+    page,
+  }) => {
+    const errors: string[] = [];
+    page.on("console", (msg) => {
+      if (msg.type() === "error") errors.push(msg.text());
+    });
+    page.on("pageerror", (err) => errors.push(err.message));
+
+    await page.route("**/api/simulate", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          ...SAVED_SIMULATION_RESULT,
+          saved_run_id: SAVED_SIMULATION_ID,
+          saved_at: "2026-04-23T08:30:00.000Z",
+          saved_kind: "simulate",
+          share_url: `/simulate?run=${SAVED_SIMULATION_ID}`,
+        }),
+      });
+    });
+
+    const response = await page.goto("/simulate");
+    expect(response?.status()).toBe(200);
+
+    await page.getByRole("button", { name: /^Simulate$/i }).click();
+    await expect(
+      page.locator("h3").filter({ hasText: /Results \(222 replicates\)/ }),
+    ).toBeVisible();
+    await expect(page).toHaveURL(
+      new RegExp(`/simulate\\?run=${SAVED_SIMULATION_ID}$`),
+    );
+    await expect(page.getByTestId("saved-run-banner")).toContainText(
+      "Loaded saved simulation run",
+    );
+    await expect(page.getByTestId("saved-run-banner")).toContainText(
+      SAVED_SIMULATION_ID,
+    );
+
+    expect(errors).toHaveLength(0);
+  });
+
+  test("/simulate — visiting a saved run URL hydrates inputs and results", async ({
+    page,
+  }) => {
+    const errors: string[] = [];
+    page.on("console", (msg) => {
+      if (msg.type() === "error") errors.push(msg.text());
+    });
+    page.on("pageerror", (err) => errors.push(err.message));
+
+    await page.route(`**/api/simulate/runs/${SAVED_SIMULATION_ID}`, async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          version: 1,
+          id: SAVED_SIMULATION_ID,
+          kind: "simulate",
+          created_at: "2026-04-23T08:30:00.000Z",
+          share_url: `/simulate?run=${SAVED_SIMULATION_ID}`,
+          request: SAVED_SIMULATION_REQUEST,
+          result: SAVED_SIMULATION_RESULT,
+        }),
+      });
+    });
+
+    const response = await page.goto(`/simulate?run=${SAVED_SIMULATION_ID}`);
+    expect(response?.status()).toBe(200);
+
+    await expect(page.getByTestId("saved-run-banner")).toContainText(
+      "Loaded saved simulation run",
+    );
+    await expect(
+      page.locator('input[aria-label="infantry troop count"]').first(),
+    ).toHaveValue("1111");
+    await expect(page.getByLabel("Rally mode").first()).toBeChecked();
+    await expect(
+      page.locator('select[aria-label="infantry hero"]').first(),
+    ).toHaveValue("Logan");
+    await expect(
+      page.locator("h3").filter({ hasText: /Results \(222 replicates\)/ }),
+    ).toBeVisible();
+    await expect(page.locator("body")).toContainText("82 (attacker)");
 
     expect(errors).toHaveLength(0);
   });

@@ -15,6 +15,8 @@ Use this guide for three common setups:
 - The web app lives in `dashboard/web`.
 - The default SQLite DB lives at `test_results/dashboard.sqlite`.
 - The `/simulate` route spawns `dashboard/simulate_battle.py`.
+- Saved `/simulate` share links live outside git. Host mode defaults to
+  `tmp/simulate-runs/`; Docker mounts a named volume at `/data/simulations`.
 - The `/api/ocr-report` route spawns `dashboard/ocr_report.py`.
 
 That means:
@@ -99,6 +101,7 @@ The app redirects `/` to `/runs`.
 By default the app looks for:
 
 - `DB_PATH=../../test_results/dashboard.sqlite`
+- `SIM_RUNS_DIR=../../tmp/simulate-runs`
 - `SIMULATOR_PYTHON=../../.venv/bin/python` if that venv exists, otherwise `python3`
 
 Override either path like this:
@@ -106,6 +109,7 @@ Override either path like this:
 ```bash
 cd /home/paul/projects_wsl/wos/battle_sim/lib/wos-simulator/dashboard/web
 DB_PATH=/absolute/path/to/dashboard.sqlite \
+SIM_RUNS_DIR=/absolute/path/to/simulate-runs \
 SIMULATOR_PYTHON=/absolute/path/to/python \
 npm run dev
 ```
@@ -221,6 +225,8 @@ docker compose rm -sf app
 - The container also mounts `dashboard/`, `Base_classes/`, `assets/`, and
   `fighters_data/` so the simulate and OCR routes can call back into the
   simulator code.
+- Saved `/simulate` runs are written to the named Docker volume
+  `wos_simulate_runs`, not to the git-tracked repo tree.
 - The Docker image installs Python, `tabulate`, `Pillow`, `pytesseract`, and
   `tesseract-ocr`, so the dashboard's helper routes work inside the container
   without using the host Python environment.
