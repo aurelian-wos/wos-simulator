@@ -27,8 +27,10 @@ export default function RootLayout({
     <html lang="en">
       <body className="flex min-h-screen flex-col md:flex-row">
         <SiteNav />
-        <main className="flex-1 min-w-0 overflow-auto px-3 sm:px-6 pb-6 pt-[72px] md:pt-6">
-          {children}
+        <main className="min-w-0 flex-1 overflow-x-hidden">
+          <div className="mx-auto flex min-h-screen w-full max-w-[1500px] flex-col px-3 pb-8 pt-[72px] sm:px-5 md:px-6 md:pt-6">
+            {children}
+          </div>
         </main>
       </body>
     </html>

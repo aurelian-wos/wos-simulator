@@ -9,7 +9,7 @@ export default function TestcasesIndexPage() {
 
   return (
     <div>
-      <div className="flex items-baseline justify-between mb-2">
+      <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-baseline sm:justify-between">
         <h2
           className="text-lg font-bold"
           style={{ color: "var(--sidebar-active)" }}
@@ -18,7 +18,7 @@ export default function TestcasesIndexPage() {
         </h2>
         <Link
           href="/testcases/changelog"
-          className="text-xs underline hover:opacity-80"
+          className="inline-flex items-center whitespace-nowrap text-xs underline hover:opacity-80"
           style={{ color: "var(--sidebar-active)" }}
         >
           Changelog →

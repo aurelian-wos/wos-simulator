@@ -16,6 +16,7 @@ import {
 import { getRunSnapshot } from "@/lib/snapshots";
 import TestcaseTable from "@/components/TestcaseTable";
 import DiffViewer from "@/components/DiffViewer";
+import MetricCard from "@/components/MetricCard";
 import { testcaseDetailHref } from "@/lib/testcase-file";
 
 export const dynamic = "force-dynamic";
@@ -27,28 +28,6 @@ function formatDate(iso: string | null | undefined): string {
   } catch {
     return iso;
   }
-}
-
-function StatCard({ label, value }: { label: string; value: string }) {
-  return (
-    <div
-      className="rounded p-4 flex flex-col gap-1 min-w-28"
-      style={{
-        border: "1px solid var(--border-color)",
-        backgroundColor: "var(--sidebar-bg)",
-      }}
-    >
-      <span className="text-xs uppercase tracking-wider opacity-50">
-        {label}
-      </span>
-      <span
-        className="text-xl font-bold font-mono"
-        style={{ color: "var(--sidebar-active)" }}
-      >
-        {value}
-      </span>
-    </div>
-  );
 }
 
 interface PageProps {
@@ -175,17 +154,21 @@ export default async function RunDetailPage({ params }: PageProps) {
       <p className="text-xs font-mono opacity-40 mb-6">{run.id}</p>
 
       {/* Stat cards */}
-      <div className="flex flex-wrap gap-4 mb-8">
-        <StatCard label="Started" value={formatDate(run.started_at)} />
-        <StatCard
+      <div className="mb-8 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <MetricCard
+          label="Started"
+          value={formatDate(run.started_at)}
+          valueClassName="text-base sm:text-lg"
+        />
+        <MetricCard
           label="Git SHA"
           value={run.git_sha?.slice(0, 8) ?? "—"}
         />
-        <StatCard
+        <MetricCard
           label="State"
           value={run.dirty === 1 ? "dirty" : "clean"}
         />
-        <StatCard
+        <MetricCard
           label="Avg Error %"
           value={
             run.overall_avg_error_pct != null
@@ -193,12 +176,12 @@ export default async function RunDetailPage({ params }: PageProps) {
               : "—"
           }
         />
-        <StatCard
+        <MetricCard
           label="BH Sig Count"
           value={String(run.bh_sig_count ?? "—")}
         />
-        <StatCard label="Total Cases" value={String(totalTestcases)} />
-        <StatCard label="Passing" value={String(passingTestcases)} />
+        <MetricCard label="Total Cases" value={String(totalTestcases)} />
+        <MetricCard label="Passing" value={String(passingTestcases)} />
       </div>
 
       {/* Testcase set diff vs previous run */}

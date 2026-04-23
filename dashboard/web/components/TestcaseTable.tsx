@@ -39,15 +39,15 @@ export default function TestcaseTable({ testcases }: TestcaseTableProps) {
   return (
     <div>
       {/* Filter controls */}
-      <div className="flex flex-wrap gap-4 mb-4 items-center text-sm">
-        <div className="flex items-center gap-2">
+      <div className="mb-4 flex flex-wrap items-start gap-x-4 gap-y-3 text-sm">
+        <div className="flex w-full min-w-0 flex-col gap-1 sm:w-auto sm:flex-row sm:items-center sm:gap-2">
           <label className="opacity-60 text-xs uppercase tracking-wider">
             File
           </label>
           <select
             value={fileFilter}
             onChange={(e) => setFileFilter(e.target.value)}
-            className="rounded px-2 py-1 text-xs font-mono"
+            className="w-full min-w-0 rounded px-2 py-1 text-xs font-mono sm:min-w-[16rem]"
             style={{
               backgroundColor: "var(--sidebar-bg)",
               border: "1px solid var(--border-color)",
@@ -93,7 +93,7 @@ export default function TestcaseTable({ testcases }: TestcaseTableProps) {
           <span className="text-xs">Show waived</span>
         </label>
 
-        <span className="text-xs opacity-40">
+        <span className="text-xs opacity-40 sm:ml-auto">
           {filtered.length} / {testcases.length}
         </span>
       </div>

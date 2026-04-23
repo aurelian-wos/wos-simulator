@@ -4,6 +4,46 @@ const IPHONE_SE = { width: 375, height: 667 };
 const DESKTOP = { width: 1280, height: 800 };
 
 test.describe("WOS-202 mobile nav + simulate layout", () => {
+  test("primary routes stay within the mobile viewport and keep key controls readable", async ({
+    page,
+  }) => {
+    await page.setViewportSize(IPHONE_SE);
+
+    const errors: string[] = [];
+    page.on("console", (msg) => {
+      if (msg.type() === "error") errors.push(msg.text());
+    });
+    page.on("pageerror", (err) => errors.push(err.message));
+
+    for (const route of ["/", "/runs", "/coverage", "/heroes", "/testcases", "/simulate"]) {
+      const response = await page.goto(route);
+      expect(response?.status()).toBe(200);
+
+      const overflow = await page.evaluate(() => {
+        const doc = document.documentElement;
+        return {
+          scrollWidth: doc.scrollWidth,
+          clientWidth: doc.clientWidth,
+        };
+      });
+      expect(overflow.scrollWidth).toBeLessThanOrEqual(overflow.clientWidth + 1);
+    }
+
+    await page.goto("/");
+    const homeHeaderLayout = await page
+      .locator('[data-testid="card-regressions"] header')
+      .evaluate((el) => getComputedStyle(el).flexDirection);
+    expect(homeHeaderLayout).toBe("column");
+
+    await page.goto("/testcases");
+    const filterInput = page.locator('[data-testid="testcases-index-path-filter"]');
+    const filterBox = await filterInput.boundingBox();
+    expect(filterBox).not.toBeNull();
+    expect((filterBox?.width ?? 0) + 0.5).toBeGreaterThanOrEqual(240);
+
+    expect(errors).toHaveLength(0);
+  });
+
   test("mobile viewport hides sidebar and exposes hamburger drawer", async ({ page }) => {
     await page.setViewportSize(IPHONE_SE);
 
@@ -51,8 +91,12 @@ test.describe("WOS-202 mobile nav + simulate layout", () => {
 
     // Title + both side panel titles rendered.
     await expect(page.locator("h2")).toContainText("Simulate Battle");
-    await expect(page.getByRole("heading", { name: "Attacker" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Defender" })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Attacker", exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Defender", exact: true }),
+    ).toBeVisible();
 
     await page.getByLabel("Rally mode").first().check();
     await page.locator('select[aria-label="marksman hero"]').first().selectOption("Alonso");

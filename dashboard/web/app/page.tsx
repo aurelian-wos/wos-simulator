@@ -54,15 +54,15 @@ function Card({
   return (
     <section
       data-testid={testid}
-      className="rounded p-5 flex flex-col gap-3"
+      className="flex flex-col gap-3 rounded p-4 sm:p-5"
       style={{
         border: "1px solid var(--border-color)",
         backgroundColor: "var(--sidebar-bg)",
       }}
     >
-      <header className="flex items-baseline justify-between gap-3">
+      <header className="flex flex-col items-start gap-2 sm:flex-row sm:items-baseline sm:justify-between">
         <h3
-          className="text-sm font-bold uppercase tracking-wider"
+          className="max-w-full text-sm font-bold uppercase tracking-wider leading-6 sm:leading-normal"
           style={{ color: "var(--sidebar-active)" }}
         >
           {title}
@@ -70,7 +70,7 @@ function Card({
         {href && (
           <Link
             href={href}
-            className="text-xs opacity-60 hover:opacity-100 underline"
+            className="inline-flex items-center whitespace-nowrap text-xs opacity-60 underline hover:opacity-100"
           >
             View →
           </Link>
@@ -99,11 +99,14 @@ function Stat({
       ? "#f9e2af"
       : "var(--sidebar-active)";
   return (
-    <div className="flex flex-col gap-0.5 min-w-20">
+    <div className="flex min-w-[7.5rem] flex-col gap-0.5 sm:min-w-20">
       <span className="text-[10px] uppercase tracking-wider opacity-50">
         {label}
       </span>
-      <span className="text-xl font-bold font-mono" style={{ color }}>
+      <span
+        className="text-lg font-bold font-mono leading-tight sm:text-xl"
+        style={{ color }}
+      >
         {value}
       </span>
     </div>
@@ -245,9 +248,9 @@ export default function HomePage() {
                 return (
                   <li
                     key={`${r.file}|${r.testcase_id}|${r.idx}`}
-                    className="flex items-center justify-between gap-3"
+                    className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between"
                   >
-                    <span className="truncate flex-1">
+                    <span className="min-w-0 flex-1 break-words text-[11px] leading-5 sm:text-xs sm:leading-normal">
                       {passFail && (
                         <span
                           className="px-1 mr-1.5 rounded text-[9px] uppercase"
@@ -269,7 +272,7 @@ export default function HomePage() {
                       </Link>{" "}
                       · {r.testcase_id}[{r.idx}]
                     </span>
-                    <span className="opacity-70 tabular-nums whitespace-nowrap">
+                    <span className="self-start whitespace-nowrap opacity-70 tabular-nums sm:self-auto">
                       {r.bias_old != null ? formatPct(r.bias_old, 1) : "—"}{" "}
                       →{" "}
                       <span style={{ color: "#f38ba8" }}>
@@ -398,15 +401,20 @@ export default function HomePage() {
           ) : (
             <ul className="flex flex-col gap-1 text-xs font-mono">
               {recentCommits.slice(0, 8).map((c) => (
-                <li key={c.git_sha} className="flex gap-2">
-                  <span className="opacity-50 w-16 shrink-0">
-                    {c.git_sha.slice(0, 8)}
-                  </span>
-                  <span className="opacity-40 w-24 shrink-0">
-                    {formatRelativeAge(c.commit_date)}
-                  </span>
+                <li
+                  key={c.git_sha}
+                  className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:gap-2"
+                >
+                  <div className="flex items-center gap-2 text-[11px] sm:text-xs">
+                    <span className="w-16 shrink-0 opacity-50">
+                      {c.git_sha.slice(0, 8)}
+                    </span>
+                    <span className="shrink-0 opacity-40">
+                      {formatRelativeAge(c.commit_date)}
+                    </span>
+                  </div>
                   <span
-                    className="flex-1 truncate"
+                    className="min-w-0 flex-1 break-words leading-5 sm:truncate sm:leading-normal"
                     title={c.commit_subject ?? ""}
                   >
                     {c.commit_subject ?? "(no subject)"}

@@ -10,34 +10,13 @@ import {
 } from "@/lib/testcase-file";
 import type { TestcaseFileHistoryRow } from "@/types/dashboard";
 import TestcaseHistoryChart from "@/components/TestcaseHistoryChart";
+import MetricCard from "@/components/MetricCard";
 
 export const dynamic = "force-dynamic";
 
 interface PageProps {
   params: Promise<{ path: string[] }>;
   searchParams: Promise<{ tc?: string }>;
-}
-
-function StatCard({ label, value }: { label: string; value: string }) {
-  return (
-    <div
-      className="rounded p-4 flex flex-col gap-1 min-w-28"
-      style={{
-        border: "1px solid var(--border-color)",
-        backgroundColor: "var(--sidebar-bg)",
-      }}
-    >
-      <span className="text-xs uppercase tracking-wider opacity-50">
-        {label}
-      </span>
-      <span
-        className="text-xl font-bold font-mono"
-        style={{ color: "var(--sidebar-active)" }}
-      >
-        {value}
-      </span>
-    </div>
-  );
 }
 
 function shortDate(iso: string | null | undefined): string {
@@ -375,7 +354,7 @@ export default async function TestcaseDetailPage({
         &larr; Back to Testcases
       </Link>
 
-      <div className="flex items-center gap-3 mb-1">
+      <div className="mb-1 flex flex-wrap items-center gap-2 sm:gap-3">
         <h2
           className="text-lg font-bold"
           style={{ color: "var(--sidebar-active)" }}
@@ -399,11 +378,11 @@ export default async function TestcaseDetailPage({
       </div>
       <p className="text-xs font-mono opacity-40 mb-6">{file}</p>
 
-      <div className="flex flex-wrap gap-4 mb-8">
-        <StatCard label="Testcases" value={String(tabs.length)} />
-        <StatCard label="Runs Seen" value={String(totalRunsSeen)} />
-        <StatCard label="First Seen" value={shortDate(meta?.first_seen_at)} />
-        <StatCard label="Last Seen" value={shortDate(meta?.last_seen_at)} />
+      <div className="mb-8 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <MetricCard label="Testcases" value={String(tabs.length)} />
+        <MetricCard label="Runs Seen" value={String(totalRunsSeen)} />
+        <MetricCard label="First Seen" value={shortDate(meta?.first_seen_at)} />
+        <MetricCard label="Last Seen" value={shortDate(meta?.last_seen_at)} />
       </div>
 
       {/* Tabs — only render when file has more than one testcase */}
@@ -456,21 +435,21 @@ export default async function TestcaseDetailPage({
         Latest-Run Stats
       </h3>
       {active.latest ? (
-        <div className="flex flex-wrap gap-4 mb-8">
-          <StatCard
+        <div className="mb-8 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <MetricCard
             label="Pass"
             value={active.latest.passes === 1 ? "P" : "F"}
           />
-          <StatCard label="Test" value={active.latest.stat_type || "—"} />
-          <StatCard
+          <MetricCard label="Test" value={active.latest.stat_type || "—"} />
+          <MetricCard
             label="μ sim"
             value={active.latest.mu_sim?.toFixed(4) ?? "—"}
           />
-          <StatCard
+          <MetricCard
             label="μ game"
             value={active.latest.mu_game?.toFixed(4) ?? "—"}
           />
-          <StatCard
+          <MetricCard
             label="bias %"
             value={
               active.latest.bias_pct != null
@@ -478,20 +457,20 @@ export default async function TestcaseDetailPage({
                 : "—"
             }
           />
-          <StatCard label="n sim" value={String(active.latest.n_sim ?? "—")} />
-          <StatCard
+          <MetricCard label="n sim" value={String(active.latest.n_sim ?? "—")} />
+          <MetricCard
             label="n game"
             value={String(active.latest.n_game ?? "—")}
           />
-          <StatCard
+          <MetricCard
             label="t"
             value={active.latest.t != null ? active.latest.t.toFixed(3) : "—"}
           />
-          <StatCard
+          <MetricCard
             label="q"
             value={active.latest.q != null ? active.latest.q.toFixed(4) : "—"}
           />
-          <StatCard
+          <MetricCard
             label="Waived"
             value={active.latest.waived_bool === 1 ? "yes" : "no"}
           />

@@ -624,7 +624,7 @@ export default function SimulatePage() {
         </h2>
         <div className="flex items-center gap-2 flex-wrap">
           <label
-            className="flex items-center gap-2 text-xs px-3 py-2 rounded cursor-pointer font-bold min-h-[40px]"
+            className="flex items-center gap-2 text-xs px-3 py-2 rounded cursor-pointer font-bold min-h-[44px]"
             style={{
               border: `1px solid ${rallyMode ? "var(--sidebar-active)" : "var(--border-color)"}`,
               backgroundColor: rallyMode
@@ -643,7 +643,7 @@ export default function SimulatePage() {
             Rally mode
           </label>
           <label
-            className="flex items-center gap-2 text-xs px-3 py-2 rounded cursor-pointer font-bold min-h-[40px]"
+            className="flex items-center gap-2 text-xs px-3 py-2 rounded cursor-pointer font-bold min-h-[44px]"
             style={{
               border: `1px solid ${syncStatsOnHeroChange ? "var(--sidebar-active)" : "var(--border-color)"}`,
               backgroundColor: syncStatsOnHeroChange
@@ -669,7 +669,7 @@ export default function SimulatePage() {
           <button
             type="button"
             onClick={() => setUploadOpen(true)}
-            className="text-xs px-3 py-2 rounded font-bold min-h-[40px]"
+            className="text-xs px-3 py-2 rounded font-bold min-h-[44px]"
             style={{
               border: "1px solid var(--border-color)",
               backgroundColor: "var(--sidebar-bg)",
@@ -734,7 +734,7 @@ export default function SimulatePage() {
           <button
             type="button"
             onClick={swapSides}
-            className="text-xs px-3 py-2 rounded font-bold min-h-[36px]"
+            className="text-xs px-3 py-2 rounded font-bold min-h-[44px]"
             style={{
               border: `1px solid ${sidesSwapped ? "var(--sidebar-active)" : "var(--border-color)"}`,
               backgroundColor: sidesSwapped
@@ -801,7 +801,7 @@ export default function SimulatePage() {
                       ),
                     )
                   }
-                  className="rounded px-3 py-2 font-mono text-sm min-h-[42px] text-right tabular-nums"
+                  className="rounded px-3 py-2 font-mono text-sm min-h-[44px] text-right tabular-nums"
                   style={{
                     backgroundColor: "var(--sidebar-bg)",
                     border: "1px solid var(--border-color)",
@@ -812,7 +812,7 @@ export default function SimulatePage() {
               <button
                 onClick={runSimulation}
                 disabled={loading}
-                className="px-4 py-2 rounded font-bold text-sm min-h-[42px]"
+                className="px-4 py-2 rounded font-bold text-sm min-h-[44px]"
                 style={{
                   backgroundColor: "var(--sidebar-active)",
                   color: "#1e1e2e",

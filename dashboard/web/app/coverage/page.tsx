@@ -11,30 +11,9 @@ import {
 } from "@/lib/db";
 import type { CoverageSnapshot } from "@/types/dashboard";
 import CoverageTrendChart from "@/components/CoverageTrendChart";
+import MetricCard from "@/components/MetricCard";
 
 export const dynamic = "force-dynamic";
-
-function StatCard({ label, value }: { label: string; value: string }) {
-  return (
-    <div
-      className="rounded p-4 flex flex-col gap-1 min-w-28"
-      style={{
-        border: "1px solid var(--border-color)",
-        backgroundColor: "var(--sidebar-bg)",
-      }}
-    >
-      <span className="text-xs uppercase tracking-wider opacity-50">
-        {label}
-      </span>
-      <span
-        className="text-2xl font-bold font-mono"
-        style={{ color: "var(--sidebar-active)" }}
-      >
-        {value}
-      </span>
-    </div>
-  );
-}
 
 export default function CoveragePage() {
   const missingTables = getMissingTables();
@@ -203,14 +182,27 @@ export default function CoveragePage() {
         </div>
       ) : (
         <>
-          <div className="mb-6 flex flex-wrap gap-4">
-            <StatCard label="Total Skills" value={String(skillIds.length)} />
-            <StatCard label="Covered" value={String(coveredCells)} />
-            <StatCard
+          <div className="mb-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <MetricCard
+              label="Total Skills"
+              value={String(skillIds.length)}
+              valueClassName="text-xl sm:text-2xl"
+            />
+            <MetricCard
+              label="Covered"
+              value={String(coveredCells)}
+              valueClassName="text-xl sm:text-2xl"
+            />
+            <MetricCard
               label="Coverage"
               value={coveragePct != null ? `${coveragePct}%` : "—"}
+              valueClassName="text-xl sm:text-2xl"
             />
-            <StatCard label="Heroes" value={String(heroesWithData.length)} />
+            <MetricCard
+              label="Heroes"
+              value={String(heroesWithData.length)}
+              valueClassName="text-xl sm:text-2xl"
+            />
           </div>
 
           {/* Legend */}

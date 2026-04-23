@@ -59,7 +59,7 @@ export default function CompareTable({ rows }: Props) {
 
   return (
     <div>
-      <div className="flex flex-wrap gap-2 mb-4">
+      <div className="mb-4 flex flex-wrap items-center gap-2">
         {chips.map((c) => (
           <button
             key={c.mode}
@@ -75,7 +75,7 @@ export default function CompareTable({ rows }: Props) {
             {c.label}
           </button>
         ))}
-        <span className="text-xs opacity-40 self-center ml-2">
+        <span className="basis-full text-xs opacity-40 sm:ml-auto sm:basis-auto">
           {filtered.length} / {rows.length}
         </span>
       </div>

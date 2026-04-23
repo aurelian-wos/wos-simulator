@@ -85,8 +85,8 @@ export default function TestcaseChangelogTable({ rows }: Props) {
 
   return (
     <div>
-      <div className="flex flex-wrap gap-4 mb-4 items-center text-sm">
-        <div className="flex items-center gap-2">
+      <div className="mb-4 flex flex-wrap items-start gap-x-4 gap-y-3 text-sm">
+        <div className="flex w-full min-w-0 flex-col gap-1 sm:w-auto sm:flex-row sm:items-center sm:gap-2">
           <label className="opacity-60 text-xs uppercase tracking-wider">
             Path contains
           </label>
@@ -95,7 +95,7 @@ export default function TestcaseChangelogTable({ rows }: Props) {
             value={pathFilter}
             onChange={(e) => setPathFilter(e.target.value)}
             placeholder="e.g. alonso"
-            className="rounded px-2 py-1 text-xs font-mono"
+            className="w-full min-w-0 rounded px-2 py-1 text-xs font-mono sm:min-w-[14rem]"
             style={{
               backgroundColor: "var(--sidebar-bg)",
               border: "1px solid var(--border-color)",
@@ -138,7 +138,10 @@ export default function TestcaseChangelogTable({ rows }: Props) {
           <span className="text-xs">Modified in last 7 days</span>
         </label>
 
-        <span className="text-xs opacity-40" data-testid="changelog-count">
+        <span
+          className="text-xs opacity-40 sm:ml-auto"
+          data-testid="changelog-count"
+        >
           {sorted.length} / {rows.length}
         </span>
       </div>

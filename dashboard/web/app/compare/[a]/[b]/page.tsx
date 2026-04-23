@@ -16,6 +16,7 @@ import {
 } from "@/lib/diff";
 import DiffViewer from "@/components/DiffViewer";
 import CompareTable from "@/components/CompareTable";
+import MetricCard from "@/components/MetricCard";
 
 export const dynamic = "force-dynamic";
 
@@ -30,36 +31,6 @@ function formatDate(iso: string | null | undefined): string {
   } catch {
     return iso;
   }
-}
-
-function StatCard({
-  label,
-  value,
-  color,
-}: {
-  label: string;
-  value: string;
-  color?: string;
-}) {
-  return (
-    <div
-      className="rounded p-4 flex flex-col gap-1 min-w-28"
-      style={{
-        border: "1px solid var(--border-color)",
-        backgroundColor: "var(--sidebar-bg)",
-      }}
-    >
-      <span className="text-xs uppercase tracking-wider opacity-50">
-        {label}
-      </span>
-      <span
-        className="text-xl font-bold font-mono"
-        style={{ color: color ?? "var(--sidebar-active)" }}
-      >
-        {value}
-      </span>
-    </div>
-  );
 }
 
 interface CommitLogEntry {
@@ -174,38 +145,60 @@ export default async function ComparePage({ params }: PageProps) {
         Compare Runs
       </h2>
 
-      <div className="flex flex-wrap gap-6 mb-6 text-xs font-mono opacity-60">
-        <div>
-          <span className="opacity-70 mr-1">A (baseline):</span>
-          <Link
-            href={`/runs/${a}`}
-            style={{ color: "var(--sidebar-active)" }}
-            className="hover:opacity-80"
-          >
-            {a.slice(0, 12)}
-          </Link>
-          <span className="ml-2 opacity-50">
-            {shaA?.slice(0, 8) ?? "—"} &middot; {formatDate(runA.started_at)}
-          </span>
+      <div className="mb-6 grid gap-3 md:grid-cols-2">
+        <div
+          className="rounded p-3 text-xs font-mono"
+          style={{
+            border: "1px solid var(--border-color)",
+            backgroundColor: "var(--sidebar-bg)",
+          }}
+        >
+          <div className="text-[10px] uppercase tracking-wider opacity-50">
+            A (baseline)
+          </div>
+          <div className="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1 opacity-70">
+            <Link
+              href={`/runs/${a}`}
+              style={{ color: "var(--sidebar-active)" }}
+              className="hover:opacity-80"
+            >
+              {a.slice(0, 12)}
+            </Link>
+            <span className="opacity-50">{shaA?.slice(0, 8) ?? "—"}</span>
+            <span className="w-full break-words opacity-50 sm:w-auto">
+              {formatDate(runA.started_at)}
+            </span>
+          </div>
         </div>
-        <div>
-          <span className="opacity-70 mr-1">B (current):</span>
-          <Link
-            href={`/runs/${b}`}
-            style={{ color: "var(--sidebar-active)" }}
-            className="hover:opacity-80"
-          >
-            {b.slice(0, 12)}
-          </Link>
-          <span className="ml-2 opacity-50">
-            {shaB?.slice(0, 8) ?? "—"} &middot; {formatDate(runB.started_at)}
-          </span>
+        <div
+          className="rounded p-3 text-xs font-mono"
+          style={{
+            border: "1px solid var(--border-color)",
+            backgroundColor: "var(--sidebar-bg)",
+          }}
+        >
+          <div className="text-[10px] uppercase tracking-wider opacity-50">
+            B (current)
+          </div>
+          <div className="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1 opacity-70">
+            <Link
+              href={`/runs/${b}`}
+              style={{ color: "var(--sidebar-active)" }}
+              className="hover:opacity-80"
+            >
+              {b.slice(0, 12)}
+            </Link>
+            <span className="opacity-50">{shaB?.slice(0, 8) ?? "—"}</span>
+            <span className="w-full break-words opacity-50 sm:w-auto">
+              {formatDate(runB.started_at)}
+            </span>
+          </div>
         </div>
       </div>
 
       {/* Section 1: Headline strip */}
-      <div className="flex flex-wrap gap-4 mb-10">
-        <StatCard
+      <div className="mb-10 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <MetricCard
           label="Avg Error A"
           value={
             runA.overall_avg_error_pct != null
@@ -213,7 +206,7 @@ export default async function ComparePage({ params }: PageProps) {
               : "—"
           }
         />
-        <StatCard
+        <MetricCard
           label="Avg Error B"
           value={
             runB.overall_avg_error_pct != null
@@ -221,7 +214,7 @@ export default async function ComparePage({ params }: PageProps) {
               : "—"
           }
         />
-        <StatCard
+        <MetricCard
           label="Δ Avg Error"
           value={
             deltaError != null
@@ -230,28 +223,28 @@ export default async function ComparePage({ params }: PageProps) {
           }
           color={deltaErrorColor}
         />
-        <StatCard
+        <MetricCard
           label="Improved"
           value={String(deltaCounts.improved)}
           color="#a6e3a1"
         />
-        <StatCard
+        <MetricCard
           label="Regressed"
           value={String(deltaCounts.regressed)}
           color="#f38ba8"
         />
-        <StatCard
+        <MetricCard
           label="Added"
           value={String(deltaCounts.added)}
           color="#89dceb"
         />
-        <StatCard
+        <MetricCard
           label="Retired"
           value={String(deltaCounts.retired)}
           color="#6c7086"
         />
         {deltaCounts.skipped > 0 && (
-          <StatCard
+          <MetricCard
             label="Skipped"
             value={String(deltaCounts.skipped)}
             color="#f9e2af"
@@ -296,13 +289,16 @@ export default async function ComparePage({ params }: PageProps) {
                 No recorded commits between these runs.
               </p>
             ) : (
-              <div className="font-mono text-xs space-y-1">
+              <div className="space-y-2 font-mono text-xs">
                 {commits.map((c) => (
-                  <div key={c.git_sha} className="flex gap-2">
-                    <span className="opacity-60">
+                  <div
+                    key={c.git_sha}
+                    className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:gap-2"
+                  >
+                    <span className="shrink-0 opacity-60">
                       {c.git_sha.slice(0, 8)}
                     </span>
-                    <span className="flex-1">
+                    <span className="min-w-0 flex-1 break-words sm:break-normal">
                       {c.commit_subject ?? "(no subject)"}
                     </span>
                     {c.commit_author && (

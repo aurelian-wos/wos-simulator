@@ -11,31 +11,10 @@ import {
 } from "@/lib/db";
 import HeroTrendChart from "@/components/HeroTrendChart";
 import HeroCoverageTimelineChart from "@/components/HeroCoverageTimelineChart";
+import MetricCard from "@/components/MetricCard";
 import { testcaseDetailHref } from "@/lib/testcase-file";
 
 export const dynamic = "force-dynamic";
-
-function StatCard({ label, value }: { label: string; value: string }) {
-  return (
-    <div
-      className="rounded p-4 flex flex-col gap-1 min-w-28"
-      style={{
-        border: "1px solid var(--border-color)",
-        backgroundColor: "var(--sidebar-bg)",
-      }}
-    >
-      <span className="text-xs uppercase tracking-wider opacity-50">
-        {label}
-      </span>
-      <span
-        className="text-2xl font-bold font-mono"
-        style={{ color: "var(--sidebar-active)" }}
-      >
-        {value}
-      </span>
-    </div>
-  );
-}
 
 function shortDate(iso: string | null): string {
   if (!iso) return "—";
@@ -127,7 +106,7 @@ export default async function HeroDetailPage({ params }: PageProps) {
         &larr; Back to Heroes
       </Link>
 
-      <div className="flex items-center gap-3 mb-6">
+      <div className="mb-6 flex flex-wrap items-center gap-2 sm:gap-3">
         <h2
           className="text-xl font-bold"
           style={{ color: "var(--sidebar-active)" }}
@@ -150,20 +129,27 @@ export default async function HeroDetailPage({ params }: PageProps) {
       </div>
 
       {/* Stat cards */}
-      <div className="flex flex-wrap gap-4 mb-8">
-        <StatCard label="Skills" value={String(skills.length)} />
-        <StatCard
+      <div className="mb-8 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <MetricCard
+          label="Skills"
+          value={String(skills.length)}
+          valueClassName="text-xl sm:text-2xl"
+        />
+        <MetricCard
           label="Testcases"
           value={latestRunId ? String(testcases.length) : "—"}
+          valueClassName="text-xl sm:text-2xl"
         />
-        <StatCard
+        <MetricCard
           label="History Runs"
           value={String(errorHistory.length)}
+          valueClassName="text-xl sm:text-2xl"
         />
         {latestCoverage && (
-          <StatCard
+          <MetricCard
             label="Coverage"
             value={`${latestCoverage.skills_covered}/${latestCoverage.skills_total}`}
+            valueClassName="text-xl sm:text-2xl"
           />
         )}
       </div>
