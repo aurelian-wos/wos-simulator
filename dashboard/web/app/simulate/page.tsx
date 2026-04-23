@@ -1729,11 +1729,11 @@ function SidePanel({
       <h4 className="text-xs uppercase tracking-wider opacity-60 mb-2 font-bold">
         Stat Bonuses (%)
       </h4>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <div className="flex flex-wrap gap-3">
         {CATEGORIES.map((cat) => (
           <div
             key={cat}
-            className="min-w-0 rounded border p-2.5"
+            className="min-w-[8.75rem] flex-1 rounded border p-2.5"
             style={{
               borderColor: "var(--border-color)",
               backgroundColor: "var(--main-bg)",
@@ -1765,9 +1765,9 @@ function SidePanel({
                       {STAT_SHORT_LABELS[stat]}
                     </span>
                     <input
-                      type="number"
-                      step="0.1"
+                      type="text"
                       inputMode="decimal"
+                      pattern="[0-9]*[.]?[0-9]*"
                       value={baseValue}
                       onChange={(e) => {
                         const v = parseFloat(e.target.value);

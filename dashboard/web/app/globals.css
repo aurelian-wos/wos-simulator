@@ -36,12 +36,14 @@ body {
 }
 
 .simulate-stat-input {
-  appearance: textfield;
+  appearance: none;
+  -webkit-appearance: none;
   -moz-appearance: textfield;
 }
 
 .simulate-stat-input::-webkit-outer-spin-button,
 .simulate-stat-input::-webkit-inner-spin-button {
   -webkit-appearance: none;
+  appearance: none;
   margin: 0;
 }
