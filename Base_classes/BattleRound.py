@@ -4,6 +4,43 @@ from Base_classes.Fighter import Fighter
 from Base_classes.UnitType import UnitType, _to_unitx, prettify
 from Base_classes.Skill import Skill, Effect, RoundEffect, Benefit
 
+
+def _merge_chance_and_additive(entries_by_ben_type):
+    """Aggregate benefit contributions into a {ben_type: {op: value}} mapping.
+
+    Applies the game's chance-skill dedup rule consistently:
+      - Non-chance contributions sum within the same op (classic additive
+        stacking across different skills).
+      - Multiple procs of the same chance skill — keyed on (skill_name, op) —
+        collapse to max. A chance skill can proc at most once per round
+        regardless of how many trigger attempts or duplicate copies exist.
+      - Different chance skills on the same op keep their individual maxes
+        and stack additively with each other and with non-chance sums.
+
+    Call site builds one entry per valid benefit as
+    (is_chance, skill_name, op, value), grouped by ben_type. The output is
+    order-independent over the entries — no dependence on the iteration order
+    of self.round_benefits.
+    """
+    result = {}
+    for ben_type, entries in entries_by_ben_type.items():
+        non_chance = {}          # op -> running sum across non-chance skills
+        chance_max = {}          # (skill_name, op) -> running max per chance skill
+        for is_chance, skill_name, op, value in entries:
+            if is_chance:
+                key = (skill_name, op)
+                prior = chance_max.get(key, 0.0)
+                if value > prior:
+                    chance_max[key] = value
+            else:
+                non_chance[op] = non_chance.get(op, 0.0) + value
+        combined = dict(non_chance)
+        for (_, op), val in chance_max.items():
+            combined[op] = combined.get(op, 0.0) + val
+        result[ben_type] = combined
+    return result
+
+
 class BattleRound():
     """Represents a single round of battle between two fighters.
     
@@ -275,7 +312,9 @@ class BattleRound():
                 # Collect benefits into three buckets
                 extra_att = {k: {} for k in attack_keys}       # extra_attack=True (the actual extra attacks)
                 extra_mult_att = {k: {} for k in attack_keys}  # benefit_on="extra" (multipliers like Wu Ming S3)
-                effective_att = {k: {} for k in attack_keys}   # benefit_on="all" (general buffs)
+                # Effective bucket entries: (is_chance, skill_name, op, value)
+                # grouped by ben_type. Merged via _merge_chance_and_additive below.
+                effective_att_entries = {k: [] for k in attack_keys}
                 matched_extra = []
 
                 for benefit in self.round_benefits:
@@ -300,9 +339,12 @@ class BattleRound():
                         if benefit.op not in effect_dict: effect_dict[benefit.op] = 0
                         effect_dict[benefit.op] += ben_value
                     elif benefit.benefit_on == 'all':
-                        effect_dict = effective_att[benefit.benefit_type]
-                        if benefit.op not in effect_dict: effect_dict[benefit.op] = 0
-                        effect_dict[benefit.op] += ben_value
+                        effective_att_entries[benefit.benefit_type].append((
+                            benefit._effect.is_chance,
+                            benefit._effect._skill.skill_name,
+                            benefit.op,
+                            ben_value,
+                        ))
 
                 if not matched_extra: continue
 
@@ -318,8 +360,9 @@ class BattleRound():
                 if dodge_extra: continue
 
                 # Collect opponent defensive benefits for extra pass
-                effective_def = {k: {} for k in defense_keys}
                 extra_mult_def = {k: {} for k in defense_keys}
+                # Effective-def entries: (is_chance, skill_name, op, value).
+                effective_def_entries = {k: [] for k in defense_keys}
 
                 for opp_benefit in self.opponent.rounds[self.round_idx].round_benefits:
                     if 'dodge' in opp_benefit.benefit_type.lower(): continue
@@ -335,11 +378,17 @@ class BattleRound():
                         if opp_benefit.op not in effect_dict: effect_dict[opp_benefit.op] = 0
                         effect_dict[opp_benefit.op] += opp_value
                     elif opp_benefit.benefit_on == 'all':
-                        effect_dict = effective_def[opp_benefit.benefit_type]
-                        if opp_benefit.op not in effect_dict: effect_dict[opp_benefit.op] = 0
-                        effect_dict[opp_benefit.op] += opp_value
+                        effective_def_entries[opp_benefit.benefit_type].append((
+                            opp_benefit._effect.is_chance,
+                            opp_benefit._effect._skill.skill_name,
+                            opp_benefit.op,
+                            opp_value,
+                        ))
 
                 unit_base_dmg = army * self.fighter.attack_by_type[ut] / self.opponent.defense_by_type[extra_vs] / 100
+
+                effective_att = _merge_chance_and_additive(effective_att_entries)
+                effective_def = _merge_chance_and_additive(effective_def_entries)
 
                 effective = self.calc_coef(effective_att, effective_def)
                 extra_coef = self.calc_coef(extra_att, {k: {} for k in defense_keys})
@@ -392,14 +441,15 @@ class BattleRound():
         attack_effects_keys = ['DamageUp', 'OppDefenseDown']
         defense_effects_keys = ['DefenseUp', 'OppDamageDown']
 
-        # Effective = general benefits (benefit_on: "all")
-        effective_attacker = {key: {} for key in attack_effects_keys}
-        effective_defender = {key: {} for key in defense_effects_keys}
         # Normal-only = benefits with benefit_on: "normal"
         normal_attacker = {key: {} for key in attack_effects_keys}
         normal_defender = {key: {} for key in defense_effects_keys}
 
-        applied_skill_effects = {}
+        # Effective bucket entries: collected as
+        # (is_chance, skill_name, op, value) for later order-independent merge
+        # via _merge_chance_and_additive.
+        effective_att_entries = {key: [] for key in attack_effects_keys}
+        effective_def_entries = {key: [] for key in defense_effects_keys}
 
         # Fighter benefits (attacker's offensive buffs)
         for benefit in self.round_benefits:
@@ -419,21 +469,12 @@ class BattleRound():
                 effect_dict[ben_op] += ben_value
             else:
                 # benefit_on == 'all': general buffs go into effective
-                skill_name = benefit._effect._skill.skill_name
-                effect_key = (skill_name, ben_type, ben_op)
-                effect_dict = effective_attacker[ben_type]
-
-                if ben_op not in effect_dict:
-                    effect_dict[ben_op] = 0
-
-                if benefit._effect.is_chance and effect_key in applied_skill_effects:
-                    applied_skill_effects[effect_key] = max(applied_skill_effects[effect_key], ben_value)
-                    effect_dict[ben_op] = applied_skill_effects[effect_key]
-                elif benefit._effect.is_chance:
-                    applied_skill_effects[effect_key] = ben_value
-                    effect_dict[ben_op] = max(effect_dict[ben_op], ben_value)
-                else:
-                    effect_dict[ben_op] += ben_value
+                effective_att_entries[ben_type].append((
+                    benefit._effect.is_chance,
+                    benefit._effect._skill.skill_name,
+                    ben_op,
+                    ben_value,
+                ))
 
             benefit.use()
             if BattleRound.DEBUG and self.round_idx % BattleRound.DEBUG_FREQ == 0 and self.round_idx < self.DEBUG_MAX_ROUND:
@@ -467,25 +508,20 @@ class BattleRound():
                     opp_effect_dict[opp_ben_op] = 0
                 opp_effect_dict[opp_ben_op] += opp_ben_value
             else:
-                opp_skill_name = opp_benefit._effect._skill.skill_name
-                opp_effect_key = (opp_skill_name, opp_ben_type, opp_ben_op)
-                opp_effect_dict = effective_defender[opp_ben_type]
-
-                if opp_ben_op not in opp_effect_dict:
-                    opp_effect_dict[opp_ben_op] = 0
-
-                if opp_benefit._effect.is_chance and opp_effect_key in applied_skill_effects:
-                    applied_skill_effects[opp_effect_key] = max(applied_skill_effects[opp_effect_key], opp_ben_value)
-                    opp_effect_dict[opp_ben_op] = applied_skill_effects[opp_effect_key]
-                elif opp_benefit._effect.is_chance:
-                    applied_skill_effects[opp_effect_key] = opp_ben_value
-                    opp_effect_dict[opp_ben_op] = max(opp_effect_dict[opp_ben_op], opp_ben_value)
-                else:
-                    opp_effect_dict[opp_ben_op] += opp_ben_value
+                # benefit_on == 'all': general buffs go into effective
+                effective_def_entries[opp_ben_type].append((
+                    opp_benefit._effect.is_chance,
+                    opp_benefit._effect._skill.skill_name,
+                    opp_ben_op,
+                    opp_ben_value,
+                ))
 
             opp_benefit.use()
             if BattleRound.DEBUG and self.round_idx % BattleRound.DEBUG_FREQ == 0 and self.round_idx < self.DEBUG_MAX_ROUND:
                 print(f"           OPP_APPLIED: ", opp_benefit)
+
+        effective_attacker = _merge_chance_and_additive(effective_att_entries)
+        effective_defender = _merge_chance_and_additive(effective_def_entries)
 
         effective = self.calc_coef(effective_attacker, effective_defender)
         normal_coef = self.calc_coef(normal_attacker, normal_defender)
