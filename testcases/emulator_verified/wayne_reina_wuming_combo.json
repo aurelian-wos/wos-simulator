@@ -1,0 +1,120 @@
+[
+  {
+    "test_id": "wayne_reina_wuming_combo",
+    "description": "WOS-229: Wayne (Marksman) + Reina (Lancer) + Wu Ming (Infantry) full-class combo. WIP attacking minxxx. Extends wayne_reina_combo with Wu Ming adding base-layer DamageUp (S2=2 Crescent Uplift, op=101, all troops) and defensive normal+extra layer DefenseUp (S1=2 Shadow's Evasion, op=111, infantry-only). Active skills: Wayne S1=2 Thunder Strike (extra, op=1010), Wayne S2=2 Roundabout Hit (extra, op=1011/op=1012), Wayne S3=3 Fleet (15% crit, NOT extra), Reina S1=1 Assassin's Instinct (benefit_on=normal, +10%), Reina S2=1 Swift Jive (4% dodge), Wu Ming S1=2 Shadow's Evasion (DefenseUp benefit_on=normal+extra for infantry), Wu Ming S2=2 Crescent Uplift (+8% DamageUp base, all troops). NOTE: Reina S3=0 (Shadow Blade inactive), Wu Ming S3=0 (Elemental Resonance inactive). Wu Ming S1 exercises the defensive side of the normal/extra layer split on infantry. Run at least 8 battles due to Wayne S3 + Reina S2 variance.",
+    "attacker": {
+      "name": "[BBQ]XxWIPxX",
+      "heroes": {
+        "Wu Ming": {
+          "skill_1": 2,
+          "skill_2": 2,
+          "skill_3": 0
+        },
+        "Reina": {
+          "skill_1": 1,
+          "skill_2": 1,
+          "skill_3": 0
+        },
+        "Wayne": {
+          "skill_1": 2,
+          "skill_2": 2,
+          "skill_3": 3
+        }
+      },
+      "troops": {
+        "infantry_t6": 600,
+        "lancer_t6": 600,
+        "marksman_t6": 600
+      },
+      "stats": {
+        "inf": {
+          "attack": 245.1,
+          "defense": 250.4,
+          "lethality": 128.6,
+          "health": 148.0
+        },
+        "lanc": {
+          "attack": 196.8,
+          "defense": 194.8,
+          "lethality": 108.1,
+          "health": 90.2
+        },
+        "mark": {
+          "attack": 296.7,
+          "defense": 286.5,
+          "lethality": 143.7,
+          "health": 116.8
+        }
+      },
+      "joiner_heroes": {}
+    },
+    "defender": {
+      "name": "[ARK]Piddilyminxxx",
+      "heroes": {},
+      "troops": {
+        "infantry_t6": 200,
+        "lancer_t6": 200,
+        "marksman_t6": 200
+      },
+      "stats": {
+        "inf": {
+          "attack": 240.0,
+          "defense": 224.1,
+          "lethality": 157.9,
+          "health": 160.6
+        },
+        "lanc": {
+          "attack": 226.8,
+          "defense": 217.8,
+          "lethality": 161.2,
+          "health": 146.6
+        },
+        "mark": {
+          "attack": 236.3,
+          "defense": 225.3,
+          "lethality": 175.1,
+          "health": 156.8
+        }
+      },
+      "joiner_heroes": {}
+    },
+    "sim_result": {
+      "attacker": 1700,
+      "defender": 0
+    },
+    "game_report_result": [
+      {
+        "attacker": 1693,
+        "defender": 0
+      },
+      {
+        "attacker": 1695,
+        "defender": 0
+      },
+      {
+        "attacker": 1698,
+        "defender": 0
+      },
+      {
+        "attacker": 1694,
+        "defender": 0
+      },
+      {
+        "attacker": 1706,
+        "defender": 0
+      },
+      {
+        "attacker": 1685,
+        "defender": 0
+      },
+      {
+        "attacker": 1697,
+        "defender": 0
+      },
+      {
+        "attacker": 1684,
+        "defender": 0
+      }
+    ]
+  }
+]
