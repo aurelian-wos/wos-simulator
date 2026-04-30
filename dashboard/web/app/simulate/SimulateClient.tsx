@@ -50,6 +50,7 @@ import type {
   SimulateRequestPayload,
   SimulateSidePayload,
 } from "@/lib/simulate-run";
+import type { PlayerStatPreset, StatPresetValues } from "@/lib/stat-presets";
 
 type Side = "attacker" | "defender";
 const CATEGORIES: TroopCategory[] = ["infantry", "lancer", "marksman"];
@@ -99,6 +100,8 @@ interface SaveMetaPayload {
   saved_kind?: SavedSimulationKind;
   share_url?: string;
 }
+
+type PresetStatus = { kind: "ok" | "error"; message: string } | null;
 
 function defaultSide(): SideState {
   return {
@@ -247,6 +250,37 @@ function sideFromPayload(side: SimulateSidePayload): SideState {
       lancer: parseStatTuple(side.stats?.lanc),
       marksman: parseStatTuple(side.stats?.mark),
     },
+  };
+}
+
+function heroAdjustedStats(
+  side: SideState,
+  mode: "subtract" | "add",
+): StatPresetValues {
+  const out = {} as StatPresetValues;
+  for (const cat of CATEGORIES) {
+    const heroStats = heroBaseStats(side.heroes[cat].name);
+    out[cat] = {} as StatPresetValues[typeof cat];
+    for (const stat of STAT_NAMES) {
+      const delta = heroStats[stat];
+      const value =
+        mode === "subtract"
+          ? side.stats[cat][stat] - delta
+          : side.stats[cat][stat] + delta;
+      out[cat][stat] = Math.round(value * 100) / 100;
+    }
+  }
+  return out;
+}
+
+function sideWithPresetStats(
+  side: SideState,
+  preset: PlayerStatPreset,
+): SideState {
+  const stats = heroAdjustedStats({ ...side, stats: preset.stats }, "add");
+  return {
+    ...side,
+    stats,
   };
 }
 
@@ -648,6 +682,12 @@ export default function SimulateClient({
     () => initialState.savedRunError,
   );
   const [loadingSavedRun, setLoadingSavedRun] = useState(false);
+  const [statPresets, setStatPresets] = useState<PlayerStatPreset[]>([]);
+  const [loadingPresets, setLoadingPresets] = useState(false);
+  const [selectedPresetId, setSelectedPresetId] = useState("");
+  const [presetName, setPresetName] = useState("");
+  const [presetSide, setPresetSide] = useState<Side>("attacker");
+  const [presetStatus, setPresetStatus] = useState<PresetStatus>(null);
   const toastIdRef = useRef(0);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loadedRunIdRef = useRef<string | null>(initialSavedRun?.id ?? null);
@@ -658,6 +698,46 @@ export default function SimulateClient({
   useEffect(() => {
     return () => {
       if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoadingPresets(true);
+    void (async () => {
+      try {
+        const res = await fetch("/api/simulate/stat-presets", {
+          cache: "no-store",
+        });
+        const data = (await res.json()) as {
+          presets?: PlayerStatPreset[];
+          error?: string;
+        };
+        if (!res.ok) {
+          throw new Error(data.error || `Preset request failed with ${res.status}`);
+        }
+        if (cancelled) return;
+        const presets = data.presets ?? [];
+        setStatPresets(presets);
+        setSelectedPresetId((current) => {
+          if (current || !presets[0]) return current;
+          setPresetName(presets[0].name);
+          return presets[0].id;
+        });
+      } catch (err) {
+        if (!cancelled) {
+          setPresetStatus({
+            kind: "error",
+            message:
+              err instanceof Error ? err.message : "Failed to load presets",
+          });
+        }
+      } finally {
+        if (!cancelled) setLoadingPresets(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
     };
   }, []);
 
@@ -863,6 +943,71 @@ export default function SimulateClient({
 
   const setSide = (side: Side) =>
     side === "attacker" ? setAttacker : setDefender;
+
+  const selectedPreset = statPresets.find((p) => p.id === selectedPresetId);
+
+  function upsertPreset(preset: PlayerStatPreset) {
+    setStatPresets((prev) => {
+      const filtered = prev.filter((p) => p.id !== preset.id);
+      return [preset, ...filtered].sort((a, b) =>
+        b.updated_at.localeCompare(a.updated_at),
+      );
+    });
+    setSelectedPresetId(preset.id);
+    setPresetName(preset.name);
+  }
+
+  async function saveStatPreset(updateExisting: boolean) {
+    setPresetStatus(null);
+    const source = presetSide === "attacker" ? attacker : defender;
+    const body: {
+      id?: string;
+      name: string;
+      stats: StatPresetValues;
+    } = {
+      name: presetName.trim(),
+      stats: heroAdjustedStats(source, "subtract"),
+    };
+    if (updateExisting && selectedPresetId) body.id = selectedPresetId;
+    try {
+      const res = await fetch("/api/simulate/stat-presets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = (await res.json()) as {
+        preset?: PlayerStatPreset;
+        error?: string;
+      };
+      if (!res.ok || !data.preset) {
+        throw new Error(data.error || `Preset save failed with ${res.status}`);
+      }
+      upsertPreset(data.preset);
+      setPresetStatus({
+        kind: "ok",
+        message: updateExisting ? "Preset updated." : "Preset saved.",
+      });
+    } catch (err) {
+      setPresetStatus({
+        kind: "error",
+        message: err instanceof Error ? err.message : "Failed to save preset",
+      });
+    }
+  }
+
+  function loadStatPreset() {
+    if (!selectedPreset) {
+      setPresetStatus({ kind: "error", message: "Choose a preset to load." });
+      return;
+    }
+    const setter = presetSide === "attacker" ? setAttacker : setDefender;
+    setter((prev) => sideWithPresetStats(prev, selectedPreset));
+    setPresetName(selectedPreset.name);
+    setPresetStatus({
+      kind: "ok",
+      message: `Loaded ${selectedPreset.name} into ${presetSide}.`,
+    });
+  }
 
   function applyUpload(submission: UploadReportSubmission) {
     const {
@@ -1251,6 +1396,149 @@ export default function SimulateClient({
           ) : null}
         </div>
       )}
+
+      <div
+        className="mb-4 rounded p-3 sm:mb-6"
+        style={{
+          border: "1px solid var(--border-color)",
+          backgroundColor: "var(--sidebar-bg)",
+        }}
+        data-testid="stat-presets-panel"
+      >
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-end">
+          <div className="min-w-0 flex-1">
+            <h3 className="text-xs uppercase tracking-wider opacity-60 font-bold">
+              Player stat presets
+            </h3>
+            <p className="mt-1 text-xs opacity-60">
+              Presets store base player stats only. Selected main hero stats
+              are removed on save and reapplied on load.
+            </p>
+          </div>
+          <label className="flex min-w-0 flex-col gap-1 lg:w-52">
+            <span className="text-[10px] uppercase tracking-wider opacity-50">
+              Preset
+            </span>
+            <select
+              value={selectedPresetId}
+              onChange={(e) => {
+                const id = e.target.value;
+                setSelectedPresetId(id);
+                const preset = statPresets.find((p) => p.id === id);
+                setPresetName(preset?.name ?? "");
+              }}
+              className="rounded px-2 py-2 font-mono text-xs min-h-[40px]"
+              style={{
+                backgroundColor: "var(--main-bg)",
+                border: "1px solid var(--border-color)",
+                color: "var(--main-text)",
+              }}
+              aria-label="Stat preset"
+            >
+              <option value="">
+                {loadingPresets ? "Loading…" : "— New preset —"}
+              </option>
+              {statPresets.map((preset) => (
+                <option key={preset.id} value={preset.id}>
+                  {preset.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex min-w-0 flex-col gap-1 lg:w-44">
+            <span className="text-[10px] uppercase tracking-wider opacity-50">
+              Name
+            </span>
+            <input
+              type="text"
+              value={presetName}
+              onChange={(e) => setPresetName(e.target.value)}
+              placeholder="Preset name"
+              className="rounded px-2 py-2 text-sm min-h-[40px]"
+              style={{
+                backgroundColor: "var(--main-bg)",
+                border: "1px solid var(--border-color)",
+                color: "var(--main-text)",
+              }}
+              aria-label="Stat preset name"
+            />
+          </label>
+          <label className="flex min-w-0 flex-col gap-1 lg:w-32">
+            <span className="text-[10px] uppercase tracking-wider opacity-50">
+              Side
+            </span>
+            <select
+              value={presetSide}
+              onChange={(e) => setPresetSide(e.target.value as Side)}
+              className="rounded px-2 py-2 font-mono text-xs min-h-[40px]"
+              style={{
+                backgroundColor: "var(--main-bg)",
+                border: "1px solid var(--border-color)",
+                color: "var(--main-text)",
+              }}
+              aria-label="Stat preset side"
+            >
+              <option value="attacker">Attacker</option>
+              <option value="defender">Defender</option>
+            </select>
+          </label>
+          <div className="grid grid-cols-3 gap-2 lg:w-auto">
+            <button
+              type="button"
+              onClick={loadStatPreset}
+              disabled={!selectedPreset}
+              className="rounded px-3 py-2 text-xs font-bold min-h-[40px]"
+              style={{
+                border: "1px solid var(--border-color)",
+                backgroundColor: "var(--main-bg)",
+                color: selectedPreset
+                  ? "var(--sidebar-active)"
+                  : "var(--sidebar-text)",
+                opacity: selectedPreset ? 1 : 0.55,
+              }}
+            >
+              Load
+            </button>
+            <button
+              type="button"
+              onClick={() => saveStatPreset(false)}
+              className="rounded px-3 py-2 text-xs font-bold min-h-[40px]"
+              style={{
+                border: "1px solid var(--sidebar-active)",
+                backgroundColor: "transparent",
+                color: "var(--sidebar-active)",
+              }}
+            >
+              Save new
+            </button>
+            <button
+              type="button"
+              onClick={() => saveStatPreset(true)}
+              disabled={!selectedPreset}
+              className="rounded px-3 py-2 text-xs font-bold min-h-[40px]"
+              style={{
+                border: "1px solid var(--border-color)",
+                backgroundColor: "transparent",
+                color: selectedPreset
+                  ? "var(--main-text)"
+                  : "var(--sidebar-text)",
+                opacity: selectedPreset ? 1 : 0.55,
+              }}
+            >
+              Update
+            </button>
+          </div>
+        </div>
+        {presetStatus && (
+          <p
+            className="mt-2 text-xs font-mono"
+            style={{ color: presetStatus.kind === "error" ? "#f38ba8" : "#a6e3a1" }}
+            data-testid="stat-preset-status"
+          >
+            {presetStatus.message}
+          </p>
+        )}
+      </div>
 
       <div className="flex flex-col md:flex-row items-stretch gap-3 sm:gap-4 mb-4 sm:mb-6">
         <div className="flex-1 min-w-0" style={{ order: sidesSwapped ? 3 : 1 }}>
