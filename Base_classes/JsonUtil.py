@@ -63,20 +63,62 @@ class JsonUtil:
     
     fighters_stats_path = 'fighters_data/fighters_stats.json',
     fighters_heroes_path = 'fighters_data/fighters_heroes.json'
+    hero_base_stats_path = 'fighters_data/hero_base_stats.json'
     fighter_stats = None
     fighter_heroes = None
+    hero_base_stats = None
+
+    @staticmethod
+    def _normalize_hero_name(name):
+        return ''.join(str(name).split())
+
+    @classmethod
+    def _resolve_hero_base_stats(cls, hero_name):
+        """Resolve a hero's max base stats from the shared category file."""
+        if not cls.hero_base_stats:
+            return None
+
+        normalized_name = cls._normalize_hero_name(hero_name)
+        overrides = cls.hero_base_stats.get('hero_overrides', {}) or {}
+        override_by_name = {
+            cls._normalize_hero_name(name): value
+            for name, value in overrides.items()
+        }
+        categories = cls.hero_base_stats.get('categories', {}) or {}
+        for category in categories.values():
+            heroes = category.get('heroes', []) or []
+            if normalized_name not in {cls._normalize_hero_name(hero) for hero in heroes}:
+                continue
+            stats = dict(category.get('stats', {}) or {})
+            override = override_by_name.get(normalized_name, {}) or {}
+            stats.update(override.get('stats', {}) or {})
+            return stats
+        return None
+
+    @classmethod
+    def _apply_hero_base_stats(cls):
+        """Hydrate fighter_heroes['max'] from the shared hero base stats file."""
+        if not cls.fighter_heroes or not cls.hero_base_stats:
+            return
+        max_heroes = cls.fighter_heroes.get('max', {}) or {}
+        for hero_name, hero_config in max_heroes.items():
+            stats = cls._resolve_hero_base_stats(hero_name)
+            if stats is not None:
+                hero_config['stats'] = stats
 
     @classmethod
     def load_fighters_data(
         cls,
         fighters_stats_path = fighters_stats_path,
-        fighters_heroes_path = fighters_heroes_path
+        fighters_heroes_path = fighters_heroes_path,
+        hero_base_stats_path = hero_base_stats_path
         ):
         """Load saved fighter configurations from JSON files.
         
         Args:
             fighters_stats_path (str, optional): Path to fighter stats JSON. Defaults to 'fighters_data/fighters_stats.json'.
             fighters_heroes_path (str, optional): Path to fighter heroes JSON. Defaults to 'fighters_data/fighters_heroes.json'.
+            hero_base_stats_path (str, optional): Path to shared max hero base stats JSON.
         """
         
         with open(fighters_stats_path, 'r+') as f:
@@ -84,6 +126,10 @@ class JsonUtil:
         
         with open(fighters_heroes_path, 'r+') as f:
             cls.fighter_heroes = _normalize_json_values(json.load(f))
+
+        with open(hero_base_stats_path, 'r') as f:
+            cls.hero_base_stats = _normalize_json_values(json.load(f))
+        cls._apply_hero_base_stats()
 
     # # Get asset by id
     # @staticmethod

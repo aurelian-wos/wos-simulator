@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sys
 import unittest
 from pathlib import Path
@@ -55,6 +56,26 @@ class Gen7HeroSkillsTests(unittest.TestCase):
             self.assertIn(hero_name, max_heroes)
             self.assertEqual(max_heroes[hero_name]["stats"], expected_stats)
             self.assertEqual(max_heroes[hero_name]["skill_levels"], expected_levels)
+
+    def test_max_base_stats_are_loaded_from_shared_category_file(self) -> None:
+        JsonUtil.load_fighters_data(
+            "fighters_data/fighters_stats.json",
+            "fighters_data/fighters_heroes.json",
+        )
+
+        raw_fighter_heroes = json.loads(Path("fighters_data/fighters_heroes.json").read_text())
+        self.assertNotIn("stats", raw_fighter_heroes["max"]["Bradley"])
+        self.assertEqual(
+            JsonUtil.hero_base_stats["categories"]["S7"]["stats"],
+            {
+                "attack": 650.52,
+                "defense": 650.52,
+                "lethality": 160.5,
+                "health": 160.5,
+            },
+        )
+        self.assertEqual(JsonUtil.fighter_heroes["max"]["Bradley"]["stats"]["attack"], 650.52)
+        self.assertEqual(JsonUtil.fighter_heroes["max"]["Natalia"]["stats"]["lethality"], 55.5)
 
     def test_bradley_and_edith_are_registered_with_expected_shape(self) -> None:
         for hero_name in ("Bradley", "Edith"):

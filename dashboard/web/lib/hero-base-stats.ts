@@ -1,5 +1,5 @@
 import { HEROES } from "./heroes-catalogue";
-import fightersHeroes from "../../../fighters_data/fighters_heroes.json";
+import heroBaseStatsData from "../../../fighters_data/hero_base_stats.json";
 
 export type HeroStatCategory =
   | "SR"
@@ -30,33 +30,25 @@ interface FighterHeroDefinition {
   stats?: Partial<Record<keyof HeroBaseStats, number>>;
 }
 
-interface FighterHeroData {
-  max?: Record<string, FighterHeroDefinition>;
+interface HeroBaseStatsCategory {
+  heroes: string[];
+  stats: Partial<Record<keyof HeroBaseStats, number>>;
 }
 
-export const HERO_STAT_CATEGORY_MEMBERS: Record<
-  HeroStatCategory,
-  readonly string[]
-> = {
-  SR: [
-    "Jessie",
-    "Jasser",
-    "Sergey",
-    "Bahiti",
-    "Seo-yoon",
-    "Lumak",
-    "Ling",
-    "Patrick",
-  ],
-  S1: ["Molly", "Natalia", "Zinman"],
-  S1Plus: ["Jeronimo"],
-  S2: ["Flint", "Philly", "Alonso"],
-  S3: ["Logan", "Mia", "Greg"],
-  S4: ["Ahmose", "Lynn", "Reina"],
-  S5: ["Hector", "Norah", "Gwen"],
-  S6: ["Wayne", "Renee", "WuMing"],
-  S7: ["Edith", "Gordon", "Bradley"],
-};
+interface HeroBaseStatsData {
+  categories: Record<HeroStatCategory, HeroBaseStatsCategory>;
+  hero_overrides?: Record<string, FighterHeroDefinition>;
+}
+
+const SHARED_HERO_BASE_STATS =
+  heroBaseStatsData as HeroBaseStatsData;
+
+export const HERO_STAT_CATEGORY_MEMBERS: Record<HeroStatCategory, string[]> =
+  Object.fromEntries(
+    Object.entries(SHARED_HERO_BASE_STATS.categories).map(
+      ([category, value]) => [category, value.heroes],
+    ),
+  ) as Record<HeroStatCategory, string[]>;
 
 export const HERO_STAT_CATEGORY_BY_HERO: Record<string, HeroStatCategory> =
   Object.fromEntries(
@@ -69,23 +61,31 @@ function normalizeHeroName(name: string): string {
   return name.replace(/\s+/g, "");
 }
 
+function fillStats(
+  stats: Partial<Record<keyof HeroBaseStats, number>>,
+): HeroBaseStats {
+  return {
+    attack: stats.attack ?? 0,
+    defense: stats.defense ?? 0,
+    lethality: stats.lethality ?? 0,
+    health: stats.health ?? 0,
+  };
+}
+
 function buildHeroBaseStats(): Record<string, HeroBaseStats> {
-  const maxHeroes = (fightersHeroes as FighterHeroData).max ?? {};
-  const byNormalizedName = new Map<string, FighterHeroDefinition>();
-  for (const [name, definition] of Object.entries(maxHeroes)) {
-    byNormalizedName.set(normalizeHeroName(name), definition);
+  const overrides = SHARED_HERO_BASE_STATS.hero_overrides ?? {};
+  const overridesByNormalizedName = new Map<string, FighterHeroDefinition>();
+  for (const [name, definition] of Object.entries(overrides)) {
+    overridesByNormalizedName.set(normalizeHeroName(name), definition);
   }
 
   const out: Record<string, HeroBaseStats> = {};
-  for (const hero of HEROES) {
-    const definition = byNormalizedName.get(normalizeHeroName(hero.name));
-    const stats = definition?.stats ?? {};
-    out[hero.name] = {
-      attack: stats.attack ?? 0,
-      defense: stats.defense ?? 0,
-      lethality: stats.lethality ?? 0,
-      health: stats.health ?? 0,
-    };
+  for (const category of Object.values(SHARED_HERO_BASE_STATS.categories)) {
+    for (const hero of category.heroes) {
+      const override =
+        overridesByNormalizedName.get(normalizeHeroName(hero))?.stats ?? {};
+      out[hero] = fillStats({ ...category.stats, ...override });
+    }
   }
   return out;
 }
