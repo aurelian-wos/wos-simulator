@@ -13,40 +13,63 @@
 # backed bind mounts; polling keeps hot reload reliable in that setup.
 #
 # The dashboard spawns two Python CLIs inside the container:
-#   - dashboard/ocr_report.py  (Import report flow; needs tesseract + Pillow
-#     + pytesseract)
+#   - dashboard/ocr_report.py  (Import report flow; uses the skill parser,
+#     RapidOCR, ONNX Runtime, and OpenCV)
 #   - dashboard/simulate_battle.py  (Simulate battle page; imports the
 #     Base_classes simulator package, which depends on tabulate)
-# compose mounts the host dashboard/, Base_classes/, assets/, and
-# fighters_data/ trees read-only at the matching container paths so those
-# scripts can reach them. A dedicated /opt/sim-venv holds the Python deps
-# for both flows and SIMULATOR_PYTHON points the routes at that venv.
+# compose mounts the host dashboard/, skill/, Base_classes/, assets/, and
+# fighters_data/ trees at the matching container paths so those scripts can
+# reach them. A dedicated /opt/sim-venv holds the Python deps for both flows
+# and SIMULATOR_PYTHON points the routes at that venv.
 
 FROM node:20-bookworm-slim
 WORKDIR /app
 
 # better-sqlite3 is a native module; node-gyp needs python + a C++ toolchain.
-# tesseract-ocr + Pillow/pytesseract are needed for the OCR flow. tabulate is
-# imported by Base_classes.Fight, which simulate_battle.py pulls in. A
-# dedicated /opt/sim-venv keeps those deps out of the system Python and
-# avoids --break-system-packages.
+# RapidOCR/ONNX Runtime/OpenCV are needed for the OCR flow. tabulate is imported
+# by Base_classes.Fight, which simulate_battle.py pulls in. A dedicated
+# /opt/sim-venv keeps those deps out of the system Python and avoids
+# --break-system-packages.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
       python3 python3-venv \
       make g++ \
-      tesseract-ocr \
+      libgl1 \
+      libglib2.0-0 \
+      libxcb1 \
+      libx11-6 \
+      gosu \
       ca-certificates \
- && rm -rf /var/lib/apt/lists/* \
- && python3 -m venv /opt/sim-venv \
- && /opt/sim-venv/bin/pip install --no-cache-dir \
-      "Pillow==12.2.0" "pytesseract==0.3.13" "tabulate==0.9.0"
+ && rm -rf /var/lib/apt/lists/*
 
-COPY package.json package-lock.json ./
+COPY pyproject.toml uv.lock /opt/sim-deps/
+RUN python3 -m venv /opt/sim-venv \
+ && /opt/sim-venv/bin/pip install --no-cache-dir uv \
+ && cd /opt/sim-deps \
+ && UV_PROJECT_ENVIRONMENT=/opt/sim-venv /opt/sim-venv/bin/uv sync \
+      --frozen --no-dev --no-install-project \
+ && /opt/sim-venv/bin/uv pip uninstall --python /opt/sim-venv/bin/python opencv-python \
+ && /opt/sim-venv/bin/uv pip install --python /opt/sim-venv/bin/python \
+      --no-deps --reinstall "opencv-python-headless==4.13.0.92"
+
+COPY dashboard/web/package.json dashboard/web/package-lock.json ./
+COPY dashboard/web/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+
+RUN mkdir -p /app/.next /data/simulations /data/test_results /test_results \
+ && chown -R node:node /app /data /test_results \
+ && chmod +x /usr/local/bin/docker-entrypoint.sh
+
+USER node
+
 RUN npm ci --no-audit --no-fund
+
+USER root
 
 ENV NODE_ENV=development \
     NEXT_TELEMETRY_DISABLED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
     SIMULATOR_PYTHON=/opt/sim-venv/bin/python
 
+ENTRYPOINT ["docker-entrypoint.sh"]
 EXPOSE 3000
 CMD ["npm", "run", "dev:docker", "--", "--hostname", "0.0.0.0", "--port", "3000"]

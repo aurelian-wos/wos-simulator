@@ -16,10 +16,12 @@
 services:
   app:
     build:
-      context: ./dashboard/web
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: dashboard/web/Dockerfile
     image: wos-simulator-dashboard:dev
     restart: unless-stopped
+    # The entrypoint repairs named-volume ownership, then drops to the node user
+    # (uid 1000) so bind-mounted outputs remain writable from the WSL shell.
     environment:
       NODE_ENV: development
       DB_PATH: /data/test_results/dashboard.sqlite
@@ -31,7 +33,7 @@ services:
       WATCHPACK_POLLING: ${WATCHPACK_POLLING:-true}
       CHOKIDAR_USEPOLLING: ${CHOKIDAR_USEPOLLING:-true}
     volumes:
-      # Live bind mount of the source tree. Edits on disk → Turbopack hot
+      # Live bind mount of the source tree. Edits on disk -> Turbopack hot
       # reload in the container.
       - ./dashboard/web:/app
       # Named-volume overlays: keep container-built node_modules and the
@@ -44,7 +46,9 @@ services:
       # The dashboard's "Import report" route spawns dashboard/ocr_report.py
       # inside the container (REPO_ROOT = cwd/../.. = /). Mount the host
       # dashboard/ tree read-only at /dashboard so the route can reach it.
+      # The parser delegates to the imported agent skill under /skill.
       - ./dashboard:/dashboard:ro
+      - ./skill:/skill:ro
       # The /api/simulate route spawns dashboard/simulate_battle.py, which
       # computes _REPO_ROOT = dirname(dirname(__file__)) = "/" and imports
       # Base_classes / reads assets + fighters_data relative to that root.
