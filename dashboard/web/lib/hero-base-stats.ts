@@ -1,16 +1,5 @@
-/**
- * Max-level hero base stats, copied verbatim from
- * `fighters_data/fighters_heroes.json` → `max` section.
- *
- * Duplicated here (instead of imported) so dashboard behaviour stays stable
- * if that JSON file changes for other tooling. Keep in sync manually when
- * new heroes ship.
- *
- * Heroes missing from the `max` section of the source JSON (currently
- * Natalia and Zinman) are treated as all-zero here — a swap to/from them
- * will still produce a correct delta against any other hero.
- */
 import { HEROES } from "./heroes-catalogue";
+import fightersHeroes from "../../../fighters_data/fighters_heroes.json";
 
 export interface HeroBaseStats {
   attack: number;
@@ -26,56 +15,41 @@ export const ZERO_STATS: HeroBaseStats = {
   health: 0,
 };
 
-export const HERO_BASE_STATS: Record<string, HeroBaseStats> = {
-  // t1-equivalent: 140.11 / 140.11 / 0 / 0
-  Jessie: { attack: 140.11, defense: 140.11, lethality: 0, health: 0 },
-  Jasser: { attack: 140.11, defense: 140.11, lethality: 0, health: 0 },
-  Sergey: { attack: 140.11, defense: 140.11, lethality: 0, health: 0 },
-  Bahiti: { attack: 140.11, defense: 140.11, lethality: 0, health: 0 },
-  "Seo-yoon": { attack: 140.11, defense: 140.11, lethality: 0, health: 0 },
-  Lumak: { attack: 140.11, defense: 140.11, lethality: 0, health: 0 },
-  Ling: { attack: 140.11, defense: 140.11, lethality: 0, health: 0 },
-  Patrick: { attack: 140.11, defense: 140.11, lethality: 0, health: 0 },
+interface FighterHeroDefinition {
+  stats?: Partial<Record<keyof HeroBaseStats, number>>;
+}
 
-  // Molly/Jeronimo (SSR tier 1)
-  Molly: { attack: 200.16, defense: 200.16, lethality: 50.0, health: 50.0 },
-  Jeronimo: { attack: 260.2, defense: 260.2, lethality: 62.5, health: 62.5 },
+interface FighterHeroData {
+  max?: Record<string, FighterHeroDefinition>;
+}
 
-  // Flint / Philly / Alonso
-  Flint: { attack: 240.19, defense: 240.19, lethality: 60.0, health: 60.0 },
-  Philly: { attack: 240.19, defense: 240.19, lethality: 60.0, health: 60.0 },
-  Alonso: { attack: 240.19, defense: 240.19, lethality: 60.0, health: 60.0 },
+function normalizeHeroName(name: string): string {
+  return name.replace(/\s+/g, "");
+}
 
-  // Logan / Mia / Greg
-  Logan: { attack: 290.23, defense: 290.23, lethality: 70.0, health: 70.0 },
-  Mia: { attack: 290.23, defense: 290.23, lethality: 70.0, health: 70.0 },
-  Greg: { attack: 290.23, defense: 290.23, lethality: 70.0, health: 70.0 },
+function buildHeroBaseStats(): Record<string, HeroBaseStats> {
+  const maxHeroes = (fightersHeroes as FighterHeroData).max ?? {};
+  const byNormalizedName = new Map<string, FighterHeroDefinition>();
+  for (const [name, definition] of Object.entries(maxHeroes)) {
+    byNormalizedName.set(normalizeHeroName(name), definition);
+  }
 
-  // Ahmose / Lynn / Reina
-  Ahmose: { attack: 370.29, defense: 370.29, lethality: 92.5, health: 92.5 },
-  Lynn: { attack: 370.29, defense: 370.29, lethality: 92.5, health: 92.5 },
-  Reina: { attack: 370.29, defense: 370.29, lethality: 92.5, health: 92.5 },
+  const out: Record<string, HeroBaseStats> = {};
+  for (const hero of HEROES) {
+    const definition = byNormalizedName.get(normalizeHeroName(hero.name));
+    const stats = definition?.stats ?? {};
+    out[hero.name] = {
+      attack: stats.attack ?? 0,
+      defense: stats.defense ?? 0,
+      lethality: stats.lethality ?? 0,
+      health: stats.health ?? 0,
+    };
+  }
+  return out;
+}
 
-  // Hector / Norah / Gwen
-  Hector: { attack: 444.35, defense: 444.35, lethality: 111.0, health: 111.0 },
-  Norah: { attack: 444.35, defense: 444.35, lethality: 111.0, health: 111.0 },
-  Gwen: { attack: 444.35, defense: 444.35, lethality: 111.0, health: 111.0 },
-
-  // Wayne / Renee / WuMing
-  Wayne: { attack: 540.43, defense: 540.43, lethality: 133.5, health: 133.5 },
-  Renee: { attack: 540.43, defense: 540.43, lethality: 133.5, health: 133.5 },
-  // Source JSON uses "Wu Ming" (with space); catalogue uses "WuMing".
-  WuMing: { attack: 540.43, defense: 540.43, lethality: 133.5, health: 133.5 },
-
-  // Edith / Gordon / Bradley
-  Edith: { attack: 650.52, defense: 650.52, lethality: 160.5, health: 160.5 },
-  Gordon: { attack: 650.52, defense: 650.52, lethality: 160.5, health: 160.5 },
-  Bradley: { attack: 650.52, defense: 650.52, lethality: 160.5, health: 160.5 },
-
-  // Heroes absent from fighters_heroes.json → max: treat as zero base stats.
-  Natalia: { attack: 0, defense: 0, lethality: 0, health: 0 },
-  Zinman: { attack: 0, defense: 0, lethality: 0, health: 0 },
-};
+export const HERO_BASE_STATS: Record<string, HeroBaseStats> =
+  buildHeroBaseStats();
 
 export function heroBaseStats(name: string | null): HeroBaseStats {
   if (!name) return ZERO_STATS;
