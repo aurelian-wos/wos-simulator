@@ -63,7 +63,7 @@ class JsonUtil:
     
     fighters_stats_path = 'fighters_data/fighters_stats.json',
     fighters_heroes_path = 'fighters_data/fighters_heroes.json'
-    hero_base_stats_path = 'fighters_data/hero_base_stats.json'
+    hero_base_stats_path = 'assets/hero_base_stats.json'
     fighter_stats = None
     fighter_heroes = None
     hero_base_stats = None
@@ -87,7 +87,8 @@ class JsonUtil:
         categories = cls.hero_base_stats.get('categories', {}) or {}
         for category in categories.values():
             heroes = category.get('heroes', []) or []
-            if normalized_name not in {cls._normalize_hero_name(hero) for hero in heroes}:
+            normalized_heroes = {cls._normalize_hero_name(hero) for hero in heroes}
+            if normalized_name not in normalized_heroes:
                 continue
             stats = dict(category.get('stats', {}) or {})
             override = override_by_name.get(normalized_name, {}) or {}

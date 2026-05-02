@@ -20,24 +20,14 @@
       "heroes": [
         "Molly",
         "Natalia",
-        "Zinman"
+        "Zinman",
+        "Jeronimo"
       ],
       "stats": {
         "attack": 200.16,
         "defense": 200.16,
         "lethality": 50,
         "health": 50
-      }
-    },
-    "S1Plus": {
-      "heroes": [
-        "Jeronimo"
-      ],
-      "stats": {
-        "attack": 260.2,
-        "defense": 260.2,
-        "lethality": 62.5,
-        "health": 62.5
       }
     },
     "S2": {
@@ -126,6 +116,14 @@
         "defense": 200.16,
         "lethality": 55.5,
         "health": 55.5
+      }
+    },
+    "Jeronimo": {
+      "stats": {
+        "attack": 260.2,
+        "defense": 260.2,
+        "lethality": 62.5,
+        "health": 62.5
       }
     }
   }

@@ -1,10 +1,9 @@
 import { HEROES } from "./heroes-catalogue";
-import heroBaseStatsData from "../../../fighters_data/hero_base_stats.json";
+import heroBaseStatsData from "../../../assets/hero_base_stats.json";
 
 export type HeroStatCategory =
   | "SR"
   | "S1"
-  | "S1Plus"
   | "S2"
   | "S3"
   | "S4"

@@ -76,6 +76,9 @@ class Gen7HeroSkillsTests(unittest.TestCase):
         )
         self.assertEqual(JsonUtil.fighter_heroes["max"]["Bradley"]["stats"]["attack"], 650.52)
         self.assertEqual(JsonUtil.fighter_heroes["max"]["Natalia"]["stats"]["lethality"], 55.5)
+        self.assertIn("Jeronimo", JsonUtil.hero_base_stats["categories"]["S1"]["heroes"])
+        self.assertNotIn("S1Plus", JsonUtil.hero_base_stats["categories"])
+        self.assertEqual(JsonUtil.hero_base_stats["hero_overrides"]["Jeronimo"]["stats"]["attack"], 260.2)
 
     def test_bradley_and_edith_are_registered_with_expected_shape(self) -> None:
         for hero_name in ("Bradley", "Edith"):

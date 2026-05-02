@@ -10,7 +10,7 @@ Feel free to test and give feedback.
 # HOW TO USE
 
 1. Edit `fighters_data\fighter_stats.json` to add your accounts bonus stats from a battle report
-2. You can add heroes stats and skill levels in `fighters_data\fighters_heroes.json` (if the hero stats are not included in the previous step stats)
+2. Max hero base stats live in `assets\hero_base_stats.json`; fighter-specific hero skill levels live in `fighters_data\fighters_heroes.json`
 3. Edit fighters names, troops, heroes and joiner_heroes in `main.py`
 4. You can change `BattleRound.DEBUG` and `show_rounds_freq` in `main.py` to show rounds and more details
 5. run `main.py`
@@ -28,7 +28,7 @@ You can add stats from a battle report (A report from a beast attack without her
 -   Natalia's special bonus for Attack/defense (for example: +10% at 5 stars) ;
 -   Jeronimo's special bonus for Lethality/Health (for example: +15% at 5 stars) ;
 
-Add your heroes stats to `fighters_data\fighters_heroes.json` (Hero overall stats in Stats tab of each hero). Might as well add hero skill levels.
+Max hero base stats are shared in `assets\hero_base_stats.json`. Fighter-specific hero stats and skill levels can still be added to `fighters_data\fighters_heroes.json` for non-max profiles.
 When using heroes, you then can simply specify the heroes names and the simulator will calculate the total bonus stats by adding fighters stats and heroes stats.
 Be careful when you're saving testcases, make sure your stats didn't change (Buffs, Facilities, Research, Hero upgrades, etc). If they changed, you need to update them in `fighters_data`.
 

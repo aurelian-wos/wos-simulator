@@ -56,8 +56,9 @@ class Fighter:
     def add_heroes_stats(self):
         """Add hero stat bonuses to fighter stats.
         
-        Loads hero stats from fighters_heroes.json and applies them to
-        this fighter's stats. Use only if hero stats are not already
+        Loads hero stats from JsonUtil.fighter_heroes and applies them to
+        this fighter's stats. Max-profile base stats are hydrated from
+        assets/hero_base_stats.json. Use only if hero stats are not already
         included in fighter_stats.json.
         
         Raises:

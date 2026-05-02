@@ -12,7 +12,7 @@ from Base_classes.JsonUtil import JsonUtil
 
 JsonUtil.load_fighters_data(
     fighters_stats_path = "fighters_data/fighters_stats.json",      # File containing the fighters stats
-    fighters_heroes_path = "fighters_data/fighters_heroes.json"     # File containing the fighters heroes stats
+    fighters_heroes_path = "fighters_data/fighters_heroes.json"     # File containing hero skill-level profiles
 )
 
 
@@ -47,7 +47,8 @@ attacker.troops = {
 #     "lancer_t2"      : 3000
 # }
 
-### Add heroes stats. # If this is used, hero stats are added. All heroes stats should be specified in 'fighters_heroes.json'
+### Add heroes stats. # Max hero base stats are loaded from assets/hero_base_stats.json.
+### Non-max fighter-specific hero stats can still be specified in fighters_heroes.json.
 ### Use only if heroes stats are not included in fighters_data/fighter_stats.json
 # attacker.add_heroes_stats()           
 
