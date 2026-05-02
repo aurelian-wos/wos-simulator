@@ -8,11 +8,9 @@
 # build) and provide the dev command — everything under /app is expected to be
 # replaced by the host bind mount at runtime.
 #
-# We intentionally use webpack-mode `next dev` (not `--turbopack`) in the
-# container: on WSL2/Windows-backed bind mounts, Turbopack's native watcher
-# misses inotify events and does not pick up host-side edits, while webpack
-# honours WATCHPACK_POLLING / CHOKIDAR_USEPOLLING reliably. Host-side `npm run
-# dev` continues to use Turbopack for speed.
+# The container uses Turbopack with Next's watchOptions.pollIntervalMs enabled
+# from docker-compose. Native inotify can miss host-side edits on WSL2/Windows-
+# backed bind mounts; polling keeps hot reload reliable in that setup.
 #
 # The dashboard spawns two Python CLIs inside the container:
 #   - dashboard/ocr_report.py  (Import report flow; needs tesseract + Pillow

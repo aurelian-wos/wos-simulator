@@ -23,6 +23,11 @@ npm run dev
 
 The app runs at http://localhost:3000 and redirects to `/runs` by default.
 
+For Docker-on-WSL2 development, `docker-compose.yml` runs Turbopack with
+`NEXT_WATCH_POLL_INTERVAL_MS=1000` so bind-mounted source edits are picked up
+even when native file notifications are unreliable. Set the value to `0` in
+`.env` to disable polling on native Linux filesystems.
+
 ## Database
 
 The SQLite DB lives at:

@@ -1,12 +1,21 @@
 import type { NextConfig } from "next";
 import path from "path";
 
+const pollIntervalMs = Number(process.env.NEXT_WATCH_POLL_INTERVAL_MS ?? 0);
+
 const nextConfig: NextConfig = {
   serverExternalPackages: ["better-sqlite3"],
   allowedDevOrigins: ["wos-sim.ratme.org"],
   // Prevent Next.js from walking up to the home-directory package-lock.json
   // and misidentifying the workspace root.
   outputFileTracingRoot: path.resolve(__dirname),
+  ...(pollIntervalMs > 0
+    ? {
+        watchOptions: {
+          pollIntervalMs,
+        },
+      }
+    : {}),
   // This is a purely dynamic app; skip static prerender of all pages.
   // Avoids the Next.js 15.x bug where /_not-found prerender fails with
   // "Cannot read properties of null (reading 'useOptimistic')" when the

@@ -24,8 +24,10 @@ services:
       NODE_ENV: development
       DB_PATH: /data/test_results/dashboard.sqlite
       SIM_RUNS_DIR: /data/simulations
-      # Polling watchers — needed on WSL2/SMB/NFS-backed mounts, harmless on
-      # native Linux. Override to false in .env if inotify works natively.
+      # Next 15.5+ Turbopack polling watcher. Needed on WSL2/SMB/NFS-backed
+      # mounts where native inotify can miss host-side edits.
+      NEXT_WATCH_POLL_INTERVAL_MS: ${NEXT_WATCH_POLL_INTERVAL_MS:-1000}
+      # Kept for webpack/chokidar fallback tools; Turbopack uses the option above.
       WATCHPACK_POLLING: ${WATCHPACK_POLLING:-true}
       CHOKIDAR_USEPOLLING: ${CHOKIDAR_USEPOLLING:-true}
     volumes:
