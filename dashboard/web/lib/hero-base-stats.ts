@@ -1,5 +1,5 @@
 import { HEROES } from "./heroes-catalogue";
-import heroBaseStatsData from "../../../assets/hero_base_stats.json";
+import heroBaseStatsData from "../assets/hero_base_stats.json";
 
 export type HeroStatCategory =
   | "SR"

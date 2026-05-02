@@ -5,7 +5,13 @@ const pollIntervalMs = Number(process.env.NEXT_WATCH_POLL_INTERVAL_MS ?? 0);
 
 const nextConfig: NextConfig = {
   serverExternalPackages: ["better-sqlite3"],
-  allowedDevOrigins: ["wos-sim.ratme.org"],
+  allowedDevOrigins: [
+    "wos-sim.ratme.org",
+    "localhost",
+    "localhost:3000",
+    "127.0.0.1",
+    "127.0.0.1:3000",
+  ],
   // Prevent Next.js from walking up to the home-directory package-lock.json
   // and misidentifying the workspace root.
   outputFileTracingRoot: path.resolve(__dirname),
