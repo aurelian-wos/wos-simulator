@@ -583,6 +583,27 @@ test.describe("Dashboard smoke tests", () => {
     expect(errors).toHaveLength(0);
   });
 
+  test("/simulate — stat bonus inputs accept typed decimals", async ({
+    page,
+  }) => {
+    const errors = await assertNoConsoleErrors(page);
+
+    const response = await page.goto("/simulate");
+    expect(response?.status()).toBe(200);
+
+    const input = page.getByLabel("Infantry Attack").first();
+    await input.fill("");
+    await input.pressSequentially("100.");
+    await expect(input).toHaveValue("100.");
+
+    await input.pressSequentially("5");
+    await expect(input).toHaveValue("100.5");
+
+    await input.blur();
+    await expect(input).toHaveValue("100.5");
+    expect(errors).toHaveLength(0);
+  });
+
   test("/simulate — desktop troop-count tab order moves across counts first", async ({
     page,
   }) => {

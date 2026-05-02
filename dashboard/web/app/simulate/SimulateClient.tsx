@@ -2218,6 +2218,60 @@ type StatSyncHandler = (info: {
   deltas: HeroBaseStats;
 }) => void;
 
+function StatBonusInput({
+  value,
+  onValueChange,
+  ariaLabel,
+}: {
+  value: number;
+  onValueChange: (value: number) => void;
+  ariaLabel: string;
+}) {
+  const [draft, setDraft] = useState(String(value));
+  const focusedRef = useRef(false);
+
+  useEffect(() => {
+    if (!focusedRef.current) {
+      setDraft(String(value));
+    }
+  }, [value]);
+
+  return (
+    <input
+      type="text"
+      inputMode="decimal"
+      pattern="[0-9]*[.]?[0-9]*"
+      value={draft}
+      onFocus={() => {
+        focusedRef.current = true;
+      }}
+      onBlur={() => {
+        focusedRef.current = false;
+        const parsed = parseFloat(draft);
+        const normalized = Number.isNaN(parsed) ? 0 : parsed;
+        onValueChange(normalized);
+        setDraft(String(normalized));
+      }}
+      onChange={(e) => {
+        const next = e.target.value;
+        if (!/^\d*\.?\d*$/.test(next)) return;
+        setDraft(next);
+        const parsed = parseFloat(next);
+        if (!Number.isNaN(parsed)) {
+          onValueChange(parsed);
+        }
+      }}
+      className="simulate-stat-input w-full min-w-0 rounded px-1 py-1.5 font-mono text-[11px] text-center tabular-nums min-h-[34px]"
+      style={{
+        backgroundColor: "var(--sidebar-bg)",
+        border: "1px solid var(--border-color)",
+        color: "var(--main-text)",
+      }}
+      aria-label={ariaLabel}
+    />
+  );
+}
+
 function SidePanel({
   title,
   which,
@@ -2407,13 +2461,9 @@ function SidePanel({
                     >
                       {STAT_SHORT_LABELS[stat]}
                     </span>
-                    <input
-                      type="text"
-                      inputMode="decimal"
-                      pattern="[0-9]*[.]?[0-9]*"
+                    <StatBonusInput
                       value={baseValue}
-                      onChange={(e) => {
-                        const v = parseFloat(e.target.value);
+                      onValueChange={(v) => {
                         setState((prev) => ({
                           ...prev,
                           stats: {
@@ -2425,13 +2475,7 @@ function SidePanel({
                           },
                         }));
                       }}
-                      className="simulate-stat-input w-full min-w-0 rounded px-1 py-1.5 font-mono text-[11px] text-center tabular-nums min-h-[34px]"
-                      style={{
-                        backgroundColor: "var(--sidebar-bg)",
-                        border: "1px solid var(--border-color)",
-                        color: "var(--main-text)",
-                      }}
-                      aria-label={statLabel(cat, stat)}
+                      ariaLabel={statLabel(cat, stat)}
                     />
                     {previewValue ? (
                       <span
