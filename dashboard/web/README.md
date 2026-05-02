@@ -37,6 +37,17 @@ or stop the app before starting a second app container. The entrypoint holds a
 non-blocking lock on the `.next` volume and exits with a clear error if another
 app container is already using it.
 
+When the Docker dev app is already running, verify dashboard source/UI changes
+directly at `https://wos-sim.ratme.org` or `http://localhost:3000`. The bind
+mount plus polling watcher should pick up edits automatically. Rebuild or
+recreate the container only for Dockerfile, compose, package/dependency, or
+entrypoint changes.
+
+Do not run local dashboard dev/build/test servers as `root`. Root-run host
+processes can create root-owned `.next`, cache, or result files that the WSL
+shell user and the Docker `node` runtime cannot later update. If a command must
+run inside the container, prefer `docker compose exec -u node app ...`.
+
 ## Database
 
 The SQLite DB lives at:
