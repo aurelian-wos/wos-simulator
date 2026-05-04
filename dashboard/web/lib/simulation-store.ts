@@ -2,6 +2,7 @@ import { randomUUID } from "crypto";
 import { promises as fs } from "fs";
 import path from "path";
 
+import { resolveSimulatorRoot } from "@/lib/simulator-root";
 import {
   buildSimulationShareUrl,
   type SavedSimulationKind,
@@ -15,7 +16,7 @@ const ID_RE = /^[A-Za-z0-9_-]{8,128}$/;
 
 export const SIM_RUNS_DIR =
   process.env.SIM_RUNS_DIR ??
-  path.resolve(process.cwd(), "../../tmp/simulate-runs");
+  path.join(resolveSimulatorRoot(), "tmp", "simulate-runs");
 
 function runPath(id: string): string {
   if (!ID_RE.test(id)) {

@@ -1,10 +1,25 @@
 import { expect, test } from "@playwright/test";
 import { promises as fs } from "fs";
+import path from "path";
 import {
   listPlayerStatPresets,
   savePlayerStatPreset,
   updatePlayerStatPreset,
 } from "../lib/stat-presets";
+import { resolveSimulatorRoot } from "../lib/simulator-root";
+
+test("default player stat preset store resolves to simulator tmp", () => {
+  const cwd = process.cwd();
+  const repoRoot = cwd.endsWith("dashboard/web")
+    ? path.resolve(cwd, "../..")
+    : cwd.endsWith("dashboard")
+      ? path.resolve(cwd, "..")
+      : cwd;
+
+  expect(resolveSimulatorRoot(process.cwd())).toBe(repoRoot);
+  expect(resolveSimulatorRoot(`${repoRoot}/dashboard/web`)).toBe(repoRoot);
+  expect(resolveSimulatorRoot(`${repoRoot}/dashboard`)).toBe(repoRoot);
+});
 
 test("player stat preset store saves, updates, and sorts by update time", async () => {
   expect(process.env.STAT_PRESETS_FILE).toBeTruthy();

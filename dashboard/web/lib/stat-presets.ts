@@ -3,6 +3,7 @@ import { promises as fs } from "fs";
 import path from "path";
 
 import type { TroopCategory } from "@/lib/heroes-catalogue";
+import { resolveSimulatorRoot } from "@/lib/simulator-root";
 
 export const STAT_PRESET_CATEGORIES: TroopCategory[] = [
   "infantry",
@@ -36,7 +37,7 @@ const MAX_NAME_LENGTH = 80;
 
 export const STAT_PRESETS_FILE =
   process.env.STAT_PRESETS_FILE ??
-  path.resolve(process.cwd(), "../../tmp/player-stat-presets.json");
+  path.join(resolveSimulatorRoot(), "tmp", "player-stat-presets.json");
 
 function nowIso(): string {
   return new Date().toISOString();
