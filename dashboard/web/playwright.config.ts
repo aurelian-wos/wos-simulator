@@ -7,6 +7,7 @@ const BASE_URL = process.env.PLAYWRIGHT_BASE_URL ?? `http://localhost:${PORT}`;
 
 export default defineConfig({
   testDir: './tests',
+  outputDir: './tmp/playwright',
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: 0,
