@@ -6,6 +6,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type FocusEventHandler,
   type KeyboardEventHandler,
 } from "react";
 import { useRouter } from "next/navigation";
@@ -47,7 +48,9 @@ import {
   resolveInfantryBounds,
   totalTroopsForCounts,
 } from "@/lib/optimize-ratio";
-import type {
+import {
+  buildSimulationRunTitle,
+  type SavedSimulationRunListItem,
   OptimizeRatioApiResponse,
   OptimizeRatioRequestPayload,
   SavedSimulationKind,
@@ -108,6 +111,7 @@ interface SavedRunMeta {
   kind: SavedSimulationKind;
   createdAt: string;
   shareUrl: string;
+  title: string;
 }
 
 interface SaveMetaPayload {
@@ -126,6 +130,19 @@ function formatSavedRunTimestamp(iso: string): string {
   }
   return `${SAVED_RUN_DATE_FORMATTER.format(date)} UTC`;
 }
+
+const DEFAULT_PAGE_TITLE = "Simulate Battle - WOS Simulator Dashboard";
+
+const selectFocusedInputText: FocusEventHandler<HTMLDivElement> = (event) => {
+  const target = event.target;
+  if (!(target instanceof HTMLInputElement)) return;
+  if (
+    !["number", "text", "search", "tel", "url", "email"].includes(target.type)
+  ) {
+    return;
+  }
+  requestAnimationFrame(() => target.select());
+};
 
 function defaultSide(): SideState {
   return {
@@ -594,6 +611,7 @@ function buildInitialSavedRunState(
       kind: saved.kind,
       createdAt: saved.created_at,
       shareUrl: saved.share_url,
+      title: buildSimulationRunTitle(saved.request),
     },
     savedRunError: null,
   };
@@ -731,9 +749,17 @@ export default function SimulateClient({
   const [presetModalSide, setPresetModalSide] = useState<Side | null>(null);
   const [presetDraftName, setPresetDraftName] = useState("");
   const [presetStatus, setPresetStatus] = useState<PresetStatus>(null);
+  const [recentRunsOpen, setRecentRunsOpen] = useState(false);
+  const [recentRuns, setRecentRuns] = useState<SavedSimulationRunListItem[]>([]);
+  const [recentRunsLoading, setRecentRunsLoading] = useState(false);
+  const [recentRunsError, setRecentRunsError] = useState<string | null>(null);
   const toastIdRef = useRef(0);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loadedRunIdRef = useRef<string | null>(initialSavedRun?.id ?? null);
+  const pendingSimulateRequestRef = useRef<SimulateRequestPayload | null>(null);
+  const pendingOptimizeRequestRef = useRef<OptimizeRatioRequestPayload | null>(
+    null,
+  );
   // When true, the defender panel is rendered on the left. Shared with the
   // upload modal so both views always display sides in the same order.
   const [sidesSwapped, setSidesSwapped] = useState(false);
@@ -743,6 +769,27 @@ export default function SimulateClient({
       if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     };
   }, []);
+
+  useEffect(() => {
+    document.title = savedRunMeta
+      ? `${savedRunMeta.title} - WOS Simulator`
+      : DEFAULT_PAGE_TITLE;
+    return () => {
+      document.title = "WOS Simulator Dashboard";
+    };
+  }, [savedRunMeta]);
+
+  useEffect(() => {
+    if (!presetModalSide && !recentRunsOpen) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        setPresetModalSide(null);
+        setRecentRunsOpen(false);
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [presetModalSide, recentRunsOpen]);
 
   useEffect(() => {
     let cancelled = false;
@@ -777,6 +824,34 @@ export default function SimulateClient({
       cancelled = true;
     };
   }, []);
+
+  const refreshRecentRuns = useCallback(async () => {
+    setRecentRunsLoading(true);
+    setRecentRunsError(null);
+    try {
+      const res = await fetch("/api/simulate/runs?limit=20", {
+        cache: "no-store",
+      });
+      const data = (await res.json()) as {
+        runs?: SavedSimulationRunListItem[];
+        error?: string;
+      };
+      if (!res.ok) {
+        throw new Error(data.error || `Recent runs request failed with ${res.status}`);
+      }
+      setRecentRuns(data.runs ?? []);
+    } catch (err) {
+      setRecentRunsError(
+        err instanceof Error ? err.message : "Failed to load recent runs",
+      );
+    } finally {
+      setRecentRunsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (recentRunsOpen) void refreshRecentRuns();
+  }, [recentRunsOpen, refreshRecentRuns]);
 
   const storeSavedRunMeta = useCallback((meta: SavedRunMeta) => {
     loadedRunIdRef.current = meta.id;
@@ -855,10 +930,14 @@ export default function SimulateClient({
       kind: saved.kind,
       createdAt: saved.created_at,
       shareUrl: saved.share_url,
+      title: buildSimulationRunTitle(saved.request),
     });
   }, [storeSavedRunMeta]);
 
-  function maybeActivateSavedRun(meta: SaveMetaPayload) {
+  function maybeActivateSavedRun(
+    meta: SaveMetaPayload,
+    request: SimulateRequestPayload | OptimizeRatioRequestPayload,
+  ) {
     if (
       typeof meta.saved_run_id !== "string" ||
       typeof meta.saved_at !== "string" ||
@@ -868,13 +947,29 @@ export default function SimulateClient({
     ) {
       return;
     }
+    const id = meta.saved_run_id;
+    const kind = meta.saved_kind;
+    const createdAt = meta.saved_at;
+    const shareUrl = meta.share_url;
+    const title = buildSimulationRunTitle(request);
     storeSavedRunMeta({
-      id: meta.saved_run_id,
-      kind: meta.saved_kind,
-      createdAt: meta.saved_at,
-      shareUrl: meta.share_url,
+      id,
+      kind,
+      createdAt,
+      shareUrl,
+      title,
     });
-    router.replace(meta.share_url, { scroll: false });
+    router.push(shareUrl, { scroll: false });
+    setRecentRuns((prev) => [
+      {
+        id,
+        kind,
+        created_at: createdAt,
+        share_url: shareUrl,
+        title,
+      },
+      ...prev.filter((run) => run.id !== id),
+    ]);
   }
 
   useEffect(() => {
@@ -1136,6 +1231,7 @@ export default function SimulateClient({
     setSimulateProgress({ done: 0, total: replicates });
     try {
       const payload = toApiPayload(attacker, defender, replicates, rallyMode);
+      pendingSimulateRequestRef.current = payload;
       const res = await fetch("/api/simulate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1171,6 +1267,7 @@ export default function SimulateClient({
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
+      pendingSimulateRequestRef.current = null;
       setLoading(false);
     }
   }
@@ -1195,7 +1292,10 @@ export default function SimulateClient({
       setSimulateProgress({ done: event.done, total: event.total });
     } else if (event.type === "result" && event.data) {
       setResult(event.data);
-      maybeActivateSavedRun(event.data);
+      const request =
+        pendingSimulateRequestRef.current ??
+        toApiPayload(attacker, defender, replicates, rallyMode);
+      maybeActivateSavedRun(event.data, request);
     } else if (event.type === "error") {
       setError(event.message ?? "Unknown error");
     }
@@ -1219,7 +1319,8 @@ export default function SimulateClient({
         top_n: DEFAULT_TOP_RESULTS,
         search_mode: optimizeSearchMode,
         optimize_side: optimizeSide,
-      };
+      } satisfies OptimizeRatioRequestPayload;
+      pendingOptimizeRequestRef.current = payload;
       const res = await fetch("/api/simulate/optimize-ratio", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1255,6 +1356,7 @@ export default function SimulateClient({
     } catch (err) {
       setOptimizeError(err instanceof Error ? err.message : String(err));
     } finally {
+      pendingOptimizeRequestRef.current = null;
       setOptimizeLoading(false);
     }
   }
@@ -1279,7 +1381,19 @@ export default function SimulateClient({
       setOptimizeProgress({ done: event.done, total: event.total });
     } else if (event.type === "result" && event.data) {
       setOptimizeResult(event.data);
-      maybeActivateSavedRun(event.data);
+      const request =
+        pendingOptimizeRequestRef.current ??
+        ({
+          ...toApiPayload(attacker, defender, replicates, rallyMode),
+          grid_step: resolvedOptimizeStep,
+          search_replicates: optimizeReplicates,
+          infantry_min_pct: resolvedInfantryBounds.minPct,
+          infantry_max_pct: resolvedInfantryBounds.maxPct,
+          top_n: DEFAULT_TOP_RESULTS,
+          search_mode: optimizeSearchMode,
+          optimize_side: optimizeSide,
+        } satisfies OptimizeRatioRequestPayload);
+      maybeActivateSavedRun(event.data, request);
     } else if (event.type === "error") {
       setOptimizeError(event.message ?? "Unknown error");
     }
@@ -1397,7 +1511,7 @@ export default function SimulateClient({
   const optimizeInputsValid = resolvedInfantryBounds.isValid;
 
   return (
-    <div>
+    <div onFocusCapture={selectFocusedInputText}>
       <div className="mb-4 flex flex-col gap-3 sm:mb-6 lg:flex-row lg:items-start lg:justify-between">
         <div className="space-y-1">
           <h2
@@ -1466,6 +1580,19 @@ export default function SimulateClient({
             }}
           >
             Upload report
+          </button>
+          <button
+            type="button"
+            onClick={() => setRecentRunsOpen(true)}
+            className="col-span-2 rounded px-3 py-2 text-xs font-bold min-h-[44px] sm:col-span-1"
+            style={{
+              border: "1px solid var(--border-color)",
+              backgroundColor: "var(--sidebar-bg)",
+              color: "var(--main-text)",
+            }}
+            data-testid="recent-runs-toggle"
+          >
+            Recent runs
           </button>
         </div>
       </div>
@@ -1592,6 +1719,20 @@ export default function SimulateClient({
         </div>
       </div>
 
+      {recentRunsOpen && (
+        <RecentRunsModal
+          runs={recentRuns}
+          loading={recentRunsLoading}
+          error={recentRunsError}
+          onClose={() => setRecentRunsOpen(false)}
+          onRefresh={() => void refreshRecentRuns()}
+          onChoose={(run) => {
+            setRecentRunsOpen(false);
+            router.push(run.share_url, { scroll: false });
+          }}
+        />
+      )}
+
       {presetModalSide && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center px-3 py-6"
@@ -1600,13 +1741,19 @@ export default function SimulateClient({
           aria-modal="true"
           aria-labelledby="stat-profile-modal-title"
           data-testid="stat-profile-modal"
+          onClick={closeStatPresetModal}
         >
-          <div
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              void createStatPresetFromSide();
+            }}
             className="w-full max-w-md rounded p-4 shadow-xl"
             style={{
               border: "1px solid var(--border-color)",
               backgroundColor: "var(--sidebar-bg)",
             }}
+            onClick={(e) => e.stopPropagation()}
           >
             <div className="mb-4 flex items-start justify-between gap-3">
               <div className="min-w-0">
@@ -1683,8 +1830,7 @@ export default function SimulateClient({
 
             <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
               <button
-                type="button"
-                onClick={createStatPresetFromSide}
+                type="submit"
                 className="rounded px-3 py-2 text-xs font-bold min-h-[40px]"
                 style={{
                   border: "1px solid var(--sidebar-active)",
@@ -1719,7 +1865,7 @@ export default function SimulateClient({
                 {presetStatus.message}
               </p>
             )}
-          </div>
+          </form>
         </div>
       )}
 
@@ -2287,6 +2433,122 @@ export default function SimulateClient({
         </div>
       )}
 
+    </div>
+  );
+}
+
+function RecentRunsModal({
+  runs,
+  loading,
+  error,
+  onClose,
+  onRefresh,
+  onChoose,
+}: {
+  runs: SavedSimulationRunListItem[];
+  loading: boolean;
+  error: string | null;
+  onClose: () => void;
+  onRefresh: () => void;
+  onChoose: (run: SavedSimulationRunListItem) => void;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center px-3 py-4 sm:items-center"
+      style={{ backgroundColor: "rgba(0, 0, 0, 0.55)" }}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="recent-runs-modal-title"
+      onClick={onClose}
+      data-testid="recent-runs-modal"
+    >
+      <div
+        className="max-h-[85vh] w-full max-w-lg overflow-hidden rounded shadow-xl"
+        style={{
+          border: "1px solid var(--border-color)",
+          backgroundColor: "var(--sidebar-bg)",
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div
+          className="flex items-center justify-between gap-3 px-4 py-3"
+          style={{ borderBottom: "1px solid var(--border-color)" }}
+        >
+          <h3
+            id="recent-runs-modal-title"
+            className="text-sm font-bold uppercase tracking-wider"
+            style={{ color: "var(--sidebar-active)" }}
+          >
+            Recent runs
+          </h3>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onRefresh}
+              className="rounded px-2 py-1 text-xs"
+              style={{
+                border: "1px solid var(--border-color)",
+                color: "var(--main-text)",
+              }}
+            >
+              Refresh
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded px-2 py-1 text-lg leading-none"
+              style={{
+                border: "1px solid var(--border-color)",
+                color: "var(--main-text)",
+              }}
+              aria-label="Close recent runs"
+            >
+              ×
+            </button>
+          </div>
+        </div>
+
+        <div className="max-h-[65vh] overflow-y-auto p-3">
+          {loading ? (
+            <p className="px-1 py-4 text-xs opacity-60">Loading recent runs…</p>
+          ) : error ? (
+            <p className="px-1 py-4 text-xs" style={{ color: "#f38ba8" }}>
+              {error}
+            </p>
+          ) : runs.length === 0 ? (
+            <p className="px-1 py-4 text-xs opacity-60">
+              No saved simulation runs yet.
+            </p>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {runs.map((run) => (
+                <button
+                  key={run.id}
+                  type="button"
+                  onClick={() => onChoose(run)}
+                  className="rounded p-3 text-left"
+                  style={{
+                    border: "1px solid var(--border-color)",
+                    backgroundColor: "var(--main-bg)",
+                    color: "var(--main-text)",
+                  }}
+                >
+                  <span className="block truncate text-xs font-bold">
+                    {run.title}
+                  </span>
+                  <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-[10px] opacity-55">
+                    <span>
+                      {run.kind === "simulate" ? "Simulation" : "Ratio search"}
+                    </span>
+                    <span>{formatSavedRunTimestamp(run.created_at)}</span>
+                    <span className="truncate">{run.id}</span>
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

@@ -105,6 +105,48 @@ export interface SavedSimulationRunResponse extends SavedSimulationRunDocument {
   share_url: string;
 }
 
+export interface SavedSimulationRunListItem {
+  id: string;
+  kind: SavedSimulationKind;
+  created_at: string;
+  share_url: string;
+  title: string;
+}
+
+const CATEGORIES: TroopCategory[] = ["infantry", "lancer", "marksman"];
+
 export function buildSimulationShareUrl(id: string): string {
   return `/simulate?run=${encodeURIComponent(id)}`;
+}
+
+function heroName(name: string | null | undefined): string {
+  if (!name) return "None";
+  return name === "WuMing" ? "Wu Ming" : name;
+}
+
+function sideHeroes(side: SimulateSidePayload): string {
+  return CATEGORIES.map((cat) => heroName(side.heroes?.[cat]?.name)).join("/");
+}
+
+function sideRatio(side: SimulateSidePayload): string {
+  const counts = CATEGORIES.map((cat) => Math.max(0, side.troops?.[cat] ?? 0));
+  const total = counts.reduce((sum, value) => sum + value, 0);
+  if (total <= 0) return "0-0-0";
+  let remaining = 100;
+  return counts
+    .map((count, index) => {
+      if (index === counts.length - 1) return remaining;
+      const pct = Math.round((count / total) * 100);
+      remaining -= pct;
+      return pct;
+    })
+    .join("-");
+}
+
+export function buildSimulationRunTitle(
+  request: SavedSimulationRequest,
+): string {
+  return `${sideHeroes(request.attacker)} (${sideRatio(
+    request.attacker,
+  )}) vs ${sideHeroes(request.defender)} (${sideRatio(request.defender)})`;
 }
