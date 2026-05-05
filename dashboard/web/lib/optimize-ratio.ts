@@ -8,6 +8,9 @@ export const DEFAULT_INFANTRY_MIN_PCT = 30;
 export const DEFAULT_INFANTRY_MAX_PCT = 70;
 export const DEFAULT_OPTIMIZE_SEARCH_MODE = "adaptive" as const;
 export const DEFAULT_OPTIMIZE_SIDE = "attacker" as const;
+export const ADAPTIVE_MAX_PHASE2_SEEDS = 20;
+export const ADAPTIVE_LOCAL_NEIGHBOURS_PER_SEED = 49;
+export const ADAPTIVE_MAX_FINALISTS = 40;
 
 export type OptimizeSearchMode = "adaptive" | "grid";
 export type OptimizeSide = "attacker" | "defender";
@@ -44,21 +47,52 @@ export interface OptimizeRatioResult {
   replicates_per_ratio: number;
   infantry_min_pct: number;
   infantry_max_pct: number;
-  phase_counts?: Partial<Record<"phase1" | "phase2" | "finalists" | "grid", number>>;
+  phase_counts?: Partial<
+    Record<"phase1" | "phase2" | "finalists" | "grid", number>
+  >;
   best: OptimizeRatioPoint;
   top_results: OptimizeRatioPoint[];
   points: OptimizeRatioPoint[];
 }
 
-export function estimateAdaptiveCompositionCount(): number {
+function estimateAdaptivePhase1Count(
+  minPct = DEFAULT_INFANTRY_MIN_PCT,
+  maxPct = DEFAULT_INFANTRY_MAX_PCT,
+): number {
+  const bounds = resolveInfantryBounds(minPct, maxPct);
+  if (!bounds.isValid) return 0;
+  const minInf = Math.ceil(bounds.minPct / 5) * 5;
+  const maxInf = Math.floor(bounds.maxPct / 5) * 5;
+  let count = 0;
+  for (let infantryPct = minInf; infantryPct <= maxInf; infantryPct += 5) {
+    count += Math.floor((100 - infantryPct) / 5) + 1;
+  }
+  return count;
+}
+
+export function estimateAdaptiveCompositionCount(
+  minPct = DEFAULT_INFANTRY_MIN_PCT,
+  maxPct = DEFAULT_INFANTRY_MAX_PCT,
+): number {
   // 5% grid with infantry constrained to 30%-70% plus bounded local/final
   // phases. The exact local candidate count depends on phase-1 rankings, so
   // this is intentionally a stable worst-case progress estimate for the UI.
-  return 9 * 21 + 20 * 49 + 40;
+  return (
+    estimateAdaptivePhase1Count(minPct, maxPct) +
+    ADAPTIVE_MAX_PHASE2_SEEDS * ADAPTIVE_LOCAL_NEIGHBOURS_PER_SEED +
+    ADAPTIVE_MAX_FINALISTS
+  );
 }
 
-export function estimateAdaptiveBattleCount(): number {
-  return 9 * 21 * 30 + 20 * 49 * 10 + 40 * 100;
+export function estimateAdaptiveBattleCount(
+  minPct = DEFAULT_INFANTRY_MIN_PCT,
+  maxPct = DEFAULT_INFANTRY_MAX_PCT,
+): number {
+  return (
+    estimateAdaptivePhase1Count(minPct, maxPct) * 30 +
+    ADAPTIVE_MAX_PHASE2_SEEDS * ADAPTIVE_LOCAL_NEIGHBOURS_PER_SEED * 10 +
+    ADAPTIVE_MAX_FINALISTS * 100
+  );
 }
 
 export interface InfantryBounds {

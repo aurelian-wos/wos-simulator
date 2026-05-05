@@ -26,6 +26,9 @@ DEFAULT_MAX_WORKERS = max(1, min(10, (os.cpu_count() or 2) - 1))
 ADAPTIVE_PHASE1_REPLICATES = 30
 ADAPTIVE_PHASE2_REPLICATES = 10
 ADAPTIVE_FINAL_REPLICATES = 100
+ADAPTIVE_MAX_PHASE2_SEEDS = 20
+ADAPTIVE_LOCAL_NEIGHBOURS_PER_SEED = 49
+ADAPTIVE_MAX_FINALISTS = 40
 
 _WORKER_ATTACKER_CFG: Dict[str, Any] | None = None
 _WORKER_DEFENDER_CFG: Dict[str, Any] | None = None
@@ -137,6 +140,14 @@ def _adaptive_neighbours(
                     continue
                 candidates.add(_counts_for_percentages(total, next_inf, next_lanc))
     return sorted(candidates)
+
+
+def _estimated_adaptive_compositions(phase1_count: int) -> int:
+    return (
+        phase1_count
+        + ADAPTIVE_MAX_PHASE2_SEEDS * ADAPTIVE_LOCAL_NEIGHBOURS_PER_SEED
+        + ADAPTIVE_MAX_FINALISTS
+    )
 
 
 def _composition_count(
@@ -445,6 +456,7 @@ def main() -> int:
             ADAPTIVE_PHASE1_REPLICATES,
             optimize_side,
             max_workers,
+            progress_total=_estimated_adaptive_compositions(len(phase1_compositions)),
         )
         phase1_points = _tag_results(
             phase1_results,
@@ -468,7 +480,7 @@ def main() -> int:
             optimize_side,
             max_workers,
             progress_start=len(phase1_compositions),
-            progress_total=len(phase1_compositions) + len(phase2_candidates),
+            progress_total=_estimated_adaptive_compositions(len(phase1_compositions)),
         )
         phase2_points = _tag_results(
             phase2_results,

@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test";
 import {
+  estimateAdaptiveBattleCount,
+  estimateAdaptiveCompositionCount,
   estimateCompositionCount,
   recommendedOptimizeStep,
   resolveInfantryBounds,
@@ -15,6 +17,13 @@ test.describe("optimize-ratio helpers", () => {
     expect(estimateCompositionCount(3000, 100)).toBe(208);
     expect(estimateCompositionCount(150000, 5000)).toBe(208);
     expect(estimateCompositionCount(3000, 1000)).toBe(5);
+  });
+
+  test("adaptive search estimate uses the 30 to 70 infantry 5 percent grid", () => {
+    expect(estimateAdaptiveCompositionCount()).toBe(1119);
+    expect(estimateAdaptiveBattleCount()).toBe(16770);
+    expect(estimateAdaptiveCompositionCount(25, 75)).toBe(1141);
+    expect(estimateAdaptiveBattleCount(25, 75)).toBe(17430);
   });
 
   test("composition count still supports full simplex searches when explicitly requested", () => {

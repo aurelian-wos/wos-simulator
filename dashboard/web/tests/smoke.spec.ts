@@ -763,6 +763,9 @@ test.describe("Dashboard smoke tests", () => {
     await expect(
       page.locator('[data-testid="optimize-options-panel"]'),
     ).toBeVisible();
+    await expect(page.locator("body")).toContainText(
+      "1,119 comps · 30/10/100 reps · 16,770 battles",
+    );
 
     await page.getByRole("button", { name: /^Optimise ratio$/i }).click();
     await expect(

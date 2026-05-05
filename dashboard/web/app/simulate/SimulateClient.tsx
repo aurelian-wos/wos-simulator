@@ -1356,7 +1356,10 @@ export default function SimulateClient({
   const estimatedOptimizeCompositions = useMemo(
     () =>
       optimizeSearchMode === "adaptive"
-        ? estimateAdaptiveCompositionCount()
+        ? estimateAdaptiveCompositionCount(
+            resolvedInfantryBounds.minPct,
+            resolvedInfantryBounds.maxPct,
+          )
         : estimateCompositionCount(
             optimizedTotalTroops,
             resolvedOptimizeStep,
@@ -1374,9 +1377,18 @@ export default function SimulateClient({
   const estimatedOptimizeBattles = useMemo(
     () =>
       optimizeSearchMode === "adaptive"
-        ? estimateAdaptiveBattleCount()
+        ? estimateAdaptiveBattleCount(
+            resolvedInfantryBounds.minPct,
+            resolvedInfantryBounds.maxPct,
+          )
         : estimatedOptimizeCompositions * optimizeReplicates,
-    [estimatedOptimizeCompositions, optimizeReplicates, optimizeSearchMode],
+    [
+      estimatedOptimizeCompositions,
+      optimizeReplicates,
+      optimizeSearchMode,
+      resolvedInfantryBounds.maxPct,
+      resolvedInfantryBounds.minPct,
+    ],
   );
 
   const optimizeBudgetTooLarge =
