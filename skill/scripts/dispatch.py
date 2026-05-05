@@ -58,6 +58,9 @@ TPL_RECALL            = str(_TPL / "tile_recall_button.png")
 TPL_CAMP_RECALL       = str(_TPL / "camp_recall_button.png")
 TPL_RECALL_CONFIRM    = str(_TPL / "recall_confirm_button.png")
 TPL_PRESET1           = str(_TPL / "deploy_preset1_tab.png")
+TPL_SAVE_FLAG         = str(_TPL / "save_flag.png")
+TPL_FLAG_7            = str(_TPL / "flag_7.png")
+TPL_FLAG_7_SELECTED   = str(_TPL / "flag_7_selected.png")
 TPL_HERO_ASSIGN       = str(_TPL / "hero_picker_assign_btn.png")
 TPL_HERO_REMOVE       = str(_TPL / "hero_picker_remove_btn.png")
 TPL_WITHDRAW_ALL      = str(_TPL / "deploy_withdraw_all_btn.png")
@@ -140,6 +143,38 @@ def _find_and_tap(emulator: WosEmulator, template_path: str, label: str, thresho
     logger.info("%s: tapping (%d,%d)", label, cx, cy)
     emulator.tap(cx, cy)
     return cx, cy
+
+
+def _verify_preset7_selected(emulator: WosEmulator) -> None:
+    """Fail unless deploy preset slot 7 is visibly selected."""
+    img = emulator.screencap_bgr()
+    found, _ = find_template(img, TPL_FLAG_7_SELECTED, threshold=0.90)
+    if not found:
+        raise WosDispatchError("Preset 7 did not show selected state after tap")
+
+
+def _select_preset7(emulator: WosEmulator, label: str = "Preset7") -> None:
+    _find_and_tap(emulator, TPL_FLAG_7, label)
+    time.sleep(0.8)
+    _verify_preset7_selected(emulator)
+
+
+def _save_preset7(emulator: WosEmulator) -> None:
+    logger.info("deploy_army: saving configured army to preset slot 7")
+    _find_and_tap(emulator, TPL_SAVE_FLAG, "SaveFlag")
+    time.sleep(1)
+    _select_preset7(emulator, "SaveFlagPreset7")
+    time.sleep(1)
+
+
+def _deploy_preset7(emulator: WosEmulator) -> dict:
+    logger.info("deploy_army: loading preset slot 7")
+    _select_preset7(emulator, "LoadPreset7")
+    logger.info("deploy_army: tapping Deploy button")
+    _find_and_tap(emulator, TPL_DEPLOY_BTN, "Deploy")
+    time.sleep(3)
+    logger.info("deploy_army: ✅ preset 7 army dispatched")
+    return {"ok": True, "preset": 7, "time": time.time()}
 
 
 def _find_hero_on_screen(emulator: WosEmulator, hero_name: str) -> Optional[tuple[int, int]]:
@@ -487,6 +522,7 @@ def attack_when_ready(
     army_spec: dict,
     timeout_sec: int = 120,
     poll_sec: int = 5,
+    preset_mode: Optional[str] = None,
 ) -> dict:
     """Self-contained flow: wait until Attack is available, then attack+deploy.
 
@@ -526,7 +562,7 @@ def attack_when_ready(
         logger.info("attack_when_ready: Attack button found — tapping Attack")
         _find_and_tap(emulator, TPL_ATTACK, "Attack")
         time.sleep(3)
-        return deploy_army(emulator, army_spec)
+        return deploy_army(emulator, army_spec, preset_mode=preset_mode)
 
     raise WosDispatchError(
         f"attack_when_ready: Attack button not found at X={world_x} Y={world_y} after {timeout_sec}s"
@@ -550,7 +586,7 @@ def wait_for_battle_complete(emulator: WosEmulator, after: float, timeout_sec: i
 
 
 # ─── Main entry point ──────────────────────────────────────────────────────────
-def deploy_army(emulator: WosEmulator, army_spec: dict) -> dict:
+def deploy_army(emulator: WosEmulator, army_spec: dict, preset_mode: Optional[str] = None) -> dict:
     """
     Deploy an army from the already-open troop deploy screen.
 
@@ -577,6 +613,11 @@ def deploy_army(emulator: WosEmulator, army_spec: dict) -> dict:
     unknown_troops = [t for t in troops if t not in TROOP_DISPLAY_NAMES]
     if unknown_troops:
         raise WosDispatchError(f"Unknown troop type(s): {unknown_troops}. Known: {list(TROOP_DISPLAY_NAMES)}")
+    if preset_mode not in (None, "save", "load"):
+        raise WosDispatchError(f"Unsupported preset mode: {preset_mode!r}")
+
+    if preset_mode == "load":
+        return _deploy_preset7(emulator)
 
     # ── Step 1: Clear ALL hero slots, keeping picker open throughout ─────────
     # Open picker via Slot 1 first, then switch slot focus by tapping slot
@@ -713,6 +754,9 @@ def deploy_army(emulator: WosEmulator, army_spec: dict) -> dict:
             )
 
         _set_troop_count(emulator, display_name, count, row_cy)
+
+    if preset_mode == "save":
+        _save_preset7(emulator)
 
     # ── Step 7: Tap Deploy ────────────────────────────────────────────────────
     logger.info("deploy_army: tapping Deploy button")

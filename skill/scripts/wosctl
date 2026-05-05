@@ -846,8 +846,11 @@ def cmd_run_testcase(spec: str, dry_run: bool = False, repeat: int = 1, debug: b
 
     results: list[dict] = []
     for run_number in range(1, repeat + 1):
+        preset_mode = None
+        if repeat > 1:
+            preset_mode = "save" if run_number == 1 else "load"
         try:
-            result = run_testcase(spec, dry_run=dry_run, debug=debug)
+            result = run_testcase(spec, dry_run=dry_run, debug=debug, preset_mode=preset_mode)
         except Exception as exc:
             return _fail(
                 str(exc),

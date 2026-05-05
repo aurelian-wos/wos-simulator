@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+import types
 import unittest
 from pathlib import Path
 
@@ -9,6 +10,12 @@ ROOT = Path(__file__).resolve().parents[2]
 SCRIPTS = ROOT / "skill" / "scripts"
 if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
+
+navigation = types.ModuleType("navigation")
+navigation.find_template = lambda *_args, **_kwargs: (False, (0, 0))
+navigation.goto_world_map = lambda *_args, **_kwargs: None
+navigation.WosNavigationError = RuntimeError
+sys.modules.setdefault("navigation", navigation)
 
 from dispatch import _troop_rows_from_ocr_lines
 

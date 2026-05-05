@@ -155,7 +155,12 @@ def _map_stats(stat_bonuses: dict) -> dict:
 
 
 
-def run_testcase(spec_path: str, dry_run: bool = False, debug: bool = False) -> dict:
+def run_testcase(
+    spec_path: str,
+    dry_run: bool = False,
+    debug: bool = False,
+    preset_mode: str | None = None,
+) -> dict:
     spec       = json.loads(Path(spec_path).read_text())
     test_id    = spec["test_id"]
     description = spec.get("description", "")
@@ -166,6 +171,8 @@ def run_testcase(spec_path: str, dry_run: bool = False, debug: bool = False) -> 
     logger.info("=" * 60)
     logger.info("Testcase: %s", test_id)
     logger.info("Defender: %s | Attacker: %s", def_instance, atk_instance)
+    if preset_mode:
+        logger.info("Repeat preset mode: %s", preset_mode)
 
     if dry_run:
         logger.info("[DRY RUN] Skipping all emulator steps")
@@ -215,7 +222,7 @@ def run_testcase(spec_path: str, dry_run: bool = False, debug: bool = False) -> 
     }
     logger.info("Deploying defender army...")
     try:
-        def_result = deploy_army(def_emulator, def_army_spec)
+        def_result = deploy_army(def_emulator, def_army_spec, preset_mode=preset_mode)
     except WosDispatchError as e:
         if "available" in str(e):
             from heal import heal_troops
@@ -239,7 +246,7 @@ def run_testcase(spec_path: str, dry_run: bool = False, debug: bool = False) -> 
                 raise WosDispatchError("Occupy popup did not appear after 3 taps following defender heal")
             _find_and_tap(def_emulator, TPL_OCCUPY, "Occupy")
             time.sleep(3)
-            def_result = deploy_army(def_emulator, def_army_spec)
+            def_result = deploy_army(def_emulator, def_army_spec, preset_mode=preset_mode)
         else:
             raise
     if not def_result.get("ok"):
@@ -262,14 +269,30 @@ def run_testcase(spec_path: str, dry_run: bool = False, debug: bool = False) -> 
         "troops": spec["attacker"]["troops"],
     }
     try:
-        atk_result = attack_when_ready(atk_emulator, world_x, world_y, atk_army_spec, timeout_sec=180, poll_sec=5)
+        atk_result = attack_when_ready(
+            atk_emulator,
+            world_x,
+            world_y,
+            atk_army_spec,
+            timeout_sec=180,
+            poll_sec=5,
+            preset_mode=preset_mode,
+        )
     except WosDispatchError as e:
         if "available" in str(e):
             from heal import heal_troops
             logger.info("Attacker has insufficient troops — healing and retrying...")
             heal_troops(atk_emulator, home_tag=atk_cfg.get("battle_alliance", ""))
             # attack_when_ready handles its own navigation back to the tile
-            atk_result = attack_when_ready(atk_emulator, world_x, world_y, atk_army_spec, timeout_sec=180, poll_sec=5)
+            atk_result = attack_when_ready(
+                atk_emulator,
+                world_x,
+                world_y,
+                atk_army_spec,
+                timeout_sec=180,
+                poll_sec=5,
+                preset_mode=preset_mode,
+            )
         else:
             raise
     if not atk_result.get("ok"):
