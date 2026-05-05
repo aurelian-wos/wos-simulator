@@ -2237,11 +2237,11 @@ export default function SimulateClient({
                       <th className="pb-1 pr-2">Counts</th>
                       <th className="pb-1 pr-2 text-right">Win</th>
                       <th className="pb-1 pr-2 text-right">Margin</th>
-                      <th className="pb-1 text-right">
-                        {(optimizeResult.optimized_side ?? optimizeSide) ===
-                        "defender"
-                          ? "Def left"
-                          : "Atk left"}
+                      <th
+                        className="pb-1 text-right"
+                        title="Average survivors left on the optimized side. Margin is signed against the opponent, so this is a survivor-total companion metric rather than the ranking denominator."
+                      >
+                        Avg optimized survivors
                       </th>
                     </tr>
                   </thead>

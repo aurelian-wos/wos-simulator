@@ -288,6 +288,20 @@ def _dedupe_results(results: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return list(by_key.values())
 
 
+def _tag_results(
+    results: Iterable[Dict[str, Any]],
+    search_phase: str,
+    phase_replicates: int,
+) -> List[Dict[str, Any]]:
+    tagged = []
+    for row in results:
+        entry = dict(row)
+        entry["search_phase"] = search_phase
+        entry["phase_replicates"] = phase_replicates
+        tagged.append(entry)
+    return tagged
+
+
 def _evaluate_batch(
     compositions: Sequence[Tuple[int, int, int]],
     attacker_cfg: Dict[str, Any],
@@ -413,6 +427,7 @@ def main() -> int:
             optimize_side,
             max_workers,
         )
+        all_points = _tag_results(results, "grid", replicates)
         final_replicates = replicates
         phase_counts = {"grid": composition_count}
     else:
@@ -430,6 +445,11 @@ def main() -> int:
             ADAPTIVE_PHASE1_REPLICATES,
             optimize_side,
             max_workers,
+        )
+        phase1_points = _tag_results(
+            phase1_results,
+            "coarse",
+            ADAPTIVE_PHASE1_REPLICATES,
         )
         top_by_win = _rank_results(phase1_results)[:10]
         top_by_margin = sorted(phase1_results, key=lambda row: row["avg_margin"], reverse=True)[:10]
@@ -449,6 +469,11 @@ def main() -> int:
             max_workers,
             progress_start=len(phase1_compositions),
             progress_total=len(phase1_compositions) + len(phase2_candidates),
+        )
+        phase2_points = _tag_results(
+            phase2_results,
+            "local",
+            ADAPTIVE_PHASE2_REPLICATES,
         )
         top_by_conservative_win = sorted(
             phase2_results,
@@ -472,6 +497,12 @@ def main() -> int:
             progress_start=len(phase1_compositions) + len(phase2_candidates),
             progress_total=len(phase1_compositions) + len(phase2_candidates) + len(finalists),
         )
+        finalist_points = _tag_results(
+            results,
+            "finalist",
+            ADAPTIVE_FINAL_REPLICATES,
+        )
+        all_points = [*phase1_points, *phase2_points, *finalist_points]
         final_replicates = ADAPTIVE_FINAL_REPLICATES
         composition_count = len(phase1_compositions) + len(phase2_candidates) + len(finalists)
         projected_battles = (
@@ -499,12 +530,13 @@ def main() -> int:
         top_results.append(entry)
 
     points = []
-    for row in results:
+    for row in all_points:
         point = dict(row)
         point["is_best"] = (
             row["infantry_count"] == best["infantry_count"]
             and row["lancer_count"] == best["lancer_count"]
             and row["marksman_count"] == best["marksman_count"]
+            and row.get("search_phase") in {"finalist", "grid"}
         )
         points.append(point)
 

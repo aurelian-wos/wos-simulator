@@ -30,6 +30,8 @@ export interface OptimizeRatioPoint {
   avg_defender_left: number;
   rank?: number;
   is_best?: boolean;
+  search_phase?: "coarse" | "local" | "finalist" | "grid";
+  phase_replicates?: number;
 }
 
 export interface OptimizeRatioResult {

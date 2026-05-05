@@ -744,6 +744,8 @@ test.describe("Dashboard smoke tests", () => {
               avg_margin: 415.2,
               avg_attacker_left: 622.1,
               avg_defender_left: 0,
+              search_phase: "coarse",
+              phase_replicates: 30,
               is_best: true,
             },
           ],
@@ -878,6 +880,8 @@ test.describe("Dashboard smoke tests", () => {
               avg_margin: 370.0,
               avg_attacker_left: 580.4,
               avg_defender_left: 12.3,
+              search_phase: "local",
+              phase_replicates: 10,
               is_best: false,
             },
             {
@@ -892,6 +896,8 @@ test.describe("Dashboard smoke tests", () => {
               avg_margin: 211.7,
               avg_attacker_left: 345.8,
               avg_defender_left: 88.2,
+              search_phase: "finalist",
+              phase_replicates: 100,
               is_best: false,
             },
             {
@@ -906,6 +912,8 @@ test.describe("Dashboard smoke tests", () => {
               avg_margin: 260.1,
               avg_attacker_left: 401.6,
               avg_defender_left: 54.3,
+              search_phase: "finalist",
+              phase_replicates: 100,
               is_best: false,
             },
           ],
@@ -919,6 +927,8 @@ test.describe("Dashboard smoke tests", () => {
     await page.getByRole("button", { name: /Optimise ratio/i }).click();
     await expect(page.locator("body")).toContainText("Ratio Optimisation");
     await expect(page.locator("body")).toContainText("Top 10 ratios");
+    await expect(page.locator("body")).toContainText("Hollow dots are coarse checks");
+    await expect(page.locator("body")).toContainText("Avg optimized survivors");
     await expect(page.locator("body")).toContainText("26.7 / 30.0 / 43.3%");
     await expect(page.locator("body")).toContainText("30%–70%");
 

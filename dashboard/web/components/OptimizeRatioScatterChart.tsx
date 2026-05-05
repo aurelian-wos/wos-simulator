@@ -9,6 +9,7 @@ interface Props {
 
 interface ProjectedPoint extends OptimizeRatioPoint {
   key: string;
+  compositionKey: string;
   baseX: number;
   baseY: number;
   plotX: number;
@@ -45,6 +46,20 @@ function winRateColor(winRatePct: number): string {
   if (winRatePct >= 40) return "#f9e2af";
   if (winRatePct >= 20) return "#fab387";
   return "#f38ba8";
+}
+
+function phaseLabel(point: OptimizeRatioPoint): string {
+  if (point.search_phase === "coarse") return "Coarse search";
+  if (point.search_phase === "local") return "Local search";
+  if (point.search_phase === "finalist") return "Final evaluation";
+  return "Grid search";
+}
+
+function phaseRank(point: OptimizeRatioPoint): number {
+  if (point.search_phase === "finalist") return 3;
+  if (point.search_phase === "local") return 2;
+  if (point.search_phase === "coarse") return 1;
+  return 3;
 }
 
 function projectBase(infantryPct: number, lancerPct: number) {
@@ -128,6 +143,10 @@ function HoverCard({ point }: { point: OptimizeRatioPoint }) {
       <div>Win rate: {point.win_rate_pct.toFixed(1)}%</div>
       <div>Avg margin: {compactNumber(point.avg_margin)}</div>
       <div>
+        Phase: {phaseLabel(point)}
+        {point.phase_replicates ? ` (${point.phase_replicates} reps)` : ""}
+      </div>
+      <div>
         Counts: {point.infantry_count.toLocaleString()} /{" "}
         {point.lancer_count.toLocaleString()} /{" "}
         {point.marksman_count.toLocaleString()}
@@ -141,19 +160,37 @@ export default function OptimizeRatioScatterChart({ points }: Props) {
     return [...points]
       .map((point) => {
         const base = projectBase(point.infantry_pct, point.lancer_pct);
+        const compositionKey = pointKey(point);
         return {
           ...point,
-          key: pointKey(point),
+          key: `${compositionKey}:${point.search_phase ?? "grid"}:${point.phase_replicates ?? "na"}`,
+          compositionKey,
           baseX: base.x,
           baseY: base.y,
           plotX: base.x,
           plotY: base.y - point.win_rate_pct * Z_SCALE,
         };
       })
-      .sort((a, b) => a.baseY - b.baseY);
+      .sort((a, b) => a.baseY - b.baseY || phaseRank(a) - phaseRank(b));
   }, [points]);
 
-  const triangles = useMemo(() => buildTriangles(projectedPoints), [projectedPoints]);
+  const surfacePoints = useMemo<ProjectedPoint[]>(() => {
+    const byComposition = new Map<string, ProjectedPoint>();
+    for (const point of projectedPoints) {
+      const current = byComposition.get(point.compositionKey);
+      if (
+        !current ||
+        phaseRank(point) > phaseRank(current) ||
+        (phaseRank(point) === phaseRank(current) &&
+          (point.phase_replicates ?? 0) > (current.phase_replicates ?? 0))
+      ) {
+        byComposition.set(point.compositionKey, point);
+      }
+    }
+    return [...byComposition.values()].sort((a, b) => a.baseY - b.baseY);
+  }, [projectedPoints]);
+
+  const triangles = useMemo(() => buildTriangles(surfacePoints), [surfacePoints]);
   const defaultHoverKey = useMemo(
     () => projectedPoints.find((point) => point.is_best)?.key ?? projectedPoints[0]?.key ?? null,
     [projectedPoints],
@@ -303,7 +340,7 @@ export default function OptimizeRatioScatterChart({ points }: Props) {
             />
           ))}
 
-          {projectedPoints.map((point) => (
+          {surfacePoints.map((point) => (
             <line
               key={`${point.key}-stem`}
               x1={point.baseX}
@@ -320,10 +357,23 @@ export default function OptimizeRatioScatterChart({ points }: Props) {
               key={point.key}
               cx={point.plotX}
               cy={point.plotY}
-              r={point.is_best ? 6.5 : 4.5}
-              fill={winRateColor(point.win_rate_pct)}
-              stroke={point.is_best ? "#f9e2af" : "rgba(17,17,27,0.55)"}
-              strokeWidth={point.is_best ? 2 : 1.2}
+              r={
+                point.is_best
+                  ? 7
+                  : point.search_phase === "coarse"
+                    ? 3.5
+                    : point.search_phase === "local"
+                      ? 4.25
+                      : 5
+              }
+              fill={
+                point.search_phase === "coarse"
+                  ? "transparent"
+                  : winRateColor(point.win_rate_pct)
+              }
+              fillOpacity={point.search_phase === "local" ? 0.72 : 1}
+              stroke={point.is_best ? "#f9e2af" : winRateColor(point.win_rate_pct)}
+              strokeWidth={point.is_best ? 2.2 : point.search_phase === "coarse" ? 1.4 : 1.1}
               onMouseEnter={() => setHoverKey(point.key)}
               onFocus={() => setHoverKey(point.key)}
             />
@@ -335,7 +385,8 @@ export default function OptimizeRatioScatterChart({ points }: Props) {
 
       <p className="text-xs opacity-60">
         Infantry and lancer define the base plane, marksman is the remainder, and
-        win rate is projected upward as a true height axis.
+        win rate is projected upward. Hollow dots are coarse checks; filled dots
+        are local/final evaluations, with the best finalist highlighted.
       </p>
     </div>
   );
