@@ -12,8 +12,8 @@ test.describe("optimize-ratio helpers", () => {
   });
 
   test("composition count defaults to the bounded infantry search band", () => {
-    expect(estimateCompositionCount(3000, 100)).toBe(240);
-    expect(estimateCompositionCount(150000, 5000)).toBe(240);
+    expect(estimateCompositionCount(3000, 100)).toBe(208);
+    expect(estimateCompositionCount(150000, 5000)).toBe(208);
     expect(estimateCompositionCount(3000, 1000)).toBe(5);
   });
 
@@ -24,9 +24,9 @@ test.describe("optimize-ratio helpers", () => {
   });
 
   test("infantry bounds are clamped and validated", () => {
-    expect(resolveInfantryBounds(25, 75)).toEqual({
-      minPct: 25,
-      maxPct: 75,
+    expect(resolveInfantryBounds(30, 70)).toEqual({
+      minPct: 30,
+      maxPct: 70,
       isValid: true,
     });
     expect(resolveInfantryBounds(-10, 120)).toEqual({

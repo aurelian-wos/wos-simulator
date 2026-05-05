@@ -1,5 +1,9 @@
 import type { TroopCategory } from "@/lib/heroes-catalogue";
-import type { OptimizeRatioResult } from "@/lib/optimize-ratio";
+import type {
+  OptimizeRatioResult,
+  OptimizeSearchMode,
+  OptimizeSide,
+} from "@/lib/optimize-ratio";
 
 export type { OptimizeRatioResult } from "@/lib/optimize-ratio";
 
@@ -66,6 +70,8 @@ export interface OptimizeRatioRequestPayload extends SimulateRequestPayload {
   infantry_min_pct: number;
   infantry_max_pct: number;
   top_n: number;
+  search_mode?: OptimizeSearchMode;
+  optimize_side?: OptimizeSide;
 }
 
 export type SavedSimulationKind = "simulate" | "optimize_ratio";

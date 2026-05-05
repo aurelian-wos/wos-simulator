@@ -681,17 +681,24 @@ test.describe("Dashboard smoke tests", () => {
     });
 
     await page.route("**/api/simulate/optimize-ratio", async (route) => {
+      const payload = route.request().postDataJSON();
+      expect(payload.search_mode).toBe("adaptive");
+      expect(payload.optimize_side).toBe("attacker");
+      expect(payload.infantry_min_pct).toBe(30);
+      expect(payload.infantry_max_pct).toBe(70);
       await route.fulfill({
         status: 200,
         contentType: "application/json",
         body: JSON.stringify({
           total_troops: 3000,
+          optimized_side: "attacker",
+          search_mode: "adaptive",
           grid_step: 100,
           compositions_tested: 240,
           projected_battles: 4800,
-          replicates_per_ratio: 20,
-          infantry_min_pct: 25,
-          infantry_max_pct: 75,
+          replicates_per_ratio: 100,
+          infantry_min_pct: 30,
+          infantry_max_pct: 70,
           best: {
             infantry_count: 800,
             lancer_count: 900,
@@ -789,12 +796,14 @@ test.describe("Dashboard smoke tests", () => {
         contentType: "application/json",
         body: JSON.stringify({
           total_troops: 3000,
+          optimized_side: "attacker",
+          search_mode: "adaptive",
           grid_step: 100,
           compositions_tested: 240,
           projected_battles: 4800,
-          replicates_per_ratio: 20,
-          infantry_min_pct: 25,
-          infantry_max_pct: 75,
+          replicates_per_ratio: 100,
+          infantry_min_pct: 30,
+          infantry_max_pct: 70,
           best: {
             infantry_count: 800,
             lancer_count: 900,
@@ -911,9 +920,9 @@ test.describe("Dashboard smoke tests", () => {
     await expect(page.locator("body")).toContainText("Ratio Optimisation");
     await expect(page.locator("body")).toContainText("Top 10 ratios");
     await expect(page.locator("body")).toContainText("26.7 / 30.0 / 43.3%");
-    await expect(page.locator("body")).toContainText("25%–75%");
+    await expect(page.locator("body")).toContainText("30%–70%");
 
-    await page.getByRole("button", { name: /Use best ratio/i }).click();
+    await page.getByRole("button", { name: /Use best attacker ratio/i }).click();
     await expect(
       page.locator('input[aria-label="infantry troop count"]').first(),
     ).toHaveValue("800");

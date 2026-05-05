@@ -29,14 +29,20 @@ import { HeroBaseStats, heroBaseStats } from "@/lib/hero-base-stats";
 import {
   DEFAULT_INFANTRY_MAX_PCT,
   DEFAULT_INFANTRY_MIN_PCT,
+  DEFAULT_OPTIMIZE_SEARCH_MODE,
+  DEFAULT_OPTIMIZE_SIDE,
   DEFAULT_OPTIMIZE_REPLICATES,
   DEFAULT_TOP_RESULTS,
+  estimateAdaptiveBattleCount,
+  estimateAdaptiveCompositionCount,
   estimateCompositionCount,
   formatComposition,
   formatCounts,
   MAX_OPTIMIZE_BATTLES,
   MAX_OPTIMIZE_COMPOSITIONS,
   OptimizeRatioResult,
+  OptimizeSearchMode,
+  OptimizeSide,
   recommendedOptimizeStep,
   resolveInfantryBounds,
   totalTroopsForCounts,
@@ -545,6 +551,8 @@ interface InitialSavedRunState {
   optimizeStepInput: string;
   optimizeInfantryMinPct: number;
   optimizeInfantryMaxPct: number;
+  optimizeSearchMode: OptimizeSearchMode;
+  optimizeSide: OptimizeSide;
   savedRunMeta: SavedRunMeta | null;
   savedRunError: string | null;
 }
@@ -565,6 +573,8 @@ function buildInitialSavedRunState(
       optimizeStepInput: "",
       optimizeInfantryMinPct: DEFAULT_INFANTRY_MIN_PCT,
       optimizeInfantryMaxPct: DEFAULT_INFANTRY_MAX_PCT,
+      optimizeSearchMode: DEFAULT_OPTIMIZE_SEARCH_MODE,
+      optimizeSide: DEFAULT_OPTIMIZE_SIDE,
       savedRunMeta: null,
       savedRunError: error ?? null,
     };
@@ -603,6 +613,8 @@ function buildInitialSavedRunState(
       optimizeStepInput: "",
       optimizeInfantryMinPct: DEFAULT_INFANTRY_MIN_PCT,
       optimizeInfantryMaxPct: DEFAULT_INFANTRY_MAX_PCT,
+      optimizeSearchMode: DEFAULT_OPTIMIZE_SEARCH_MODE,
+      optimizeSide: DEFAULT_OPTIMIZE_SIDE,
     };
   }
 
@@ -638,6 +650,10 @@ function buildInitialSavedRunState(
       optimizeRequest.infantry_max_pct,
       DEFAULT_INFANTRY_MAX_PCT,
     ),
+    optimizeSearchMode:
+      optimizeRequest.search_mode === "grid" ? "grid" : DEFAULT_OPTIMIZE_SEARCH_MODE,
+    optimizeSide:
+      optimizeRequest.optimize_side === "defender" ? "defender" : DEFAULT_OPTIMIZE_SIDE,
   };
 }
 
@@ -690,6 +706,12 @@ export default function SimulateClient({
   );
   const [optimizeInfantryMaxPct, setOptimizeInfantryMaxPct] = useState(
     () => initialState.optimizeInfantryMaxPct,
+  );
+  const [optimizeSearchMode, setOptimizeSearchMode] = useState<OptimizeSearchMode>(
+    () => initialState.optimizeSearchMode,
+  );
+  const [optimizeSide, setOptimizeSide] = useState<OptimizeSide>(
+    () => initialState.optimizeSide,
   );
   const [savedRunMeta, setSavedRunMeta] = useState<SavedRunMeta | null>(
     () => initialState.savedRunMeta,
@@ -807,6 +829,16 @@ export default function SimulateClient({
       );
       setOptimizeInfantryMaxPct(
         clampValue(optimizeRequest.infantry_max_pct, DEFAULT_INFANTRY_MAX_PCT),
+      );
+      setOptimizeSearchMode(
+        optimizeRequest.search_mode === "grid"
+          ? "grid"
+          : DEFAULT_OPTIMIZE_SEARCH_MODE,
+      );
+      setOptimizeSide(
+        optimizeRequest.optimize_side === "defender"
+          ? "defender"
+          : DEFAULT_OPTIMIZE_SIDE,
       );
       setResult(null);
       setOptimizeResult({
@@ -1129,34 +1161,43 @@ export default function SimulateClient({
           const trimmed = line.trim();
           if (!trimmed) continue;
           try {
-            const event = JSON.parse(trimmed) as {
-              type: string;
-              done?: number;
-              total?: number;
-              data?: SimulateApiResponse;
-              message?: string;
-            };
-            if (
-              event.type === "progress" &&
-              typeof event.done === "number" &&
-              typeof event.total === "number"
-            ) {
-              setSimulateProgress({ done: event.done, total: event.total });
-            } else if (event.type === "result" && event.data) {
-              setResult(event.data);
-              maybeActivateSavedRun(event.data);
-            } else if (event.type === "error") {
-              setError(event.message ?? "Unknown error");
-            }
+            handleSimulateEvent(trimmed);
           } catch {
             // ignore malformed lines
           }
         }
       }
+      if (buf.trim()) handleSimulateEvent(buf.trim());
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
+    }
+  }
+
+  function handleSimulateEvent(line: string) {
+    const parsed = JSON.parse(line) as
+      | {
+          type: string;
+          done?: number;
+          total?: number;
+          data?: SimulateApiResponse;
+          message?: string;
+        }
+      | SimulateApiResponse;
+    const event =
+      "type" in parsed ? parsed : ({ type: "result", data: parsed } as const);
+    if (
+      event.type === "progress" &&
+      typeof event.done === "number" &&
+      typeof event.total === "number"
+    ) {
+      setSimulateProgress({ done: event.done, total: event.total });
+    } else if (event.type === "result" && event.data) {
+      setResult(event.data);
+      maybeActivateSavedRun(event.data);
+    } else if (event.type === "error") {
+      setError(event.message ?? "Unknown error");
     }
   }
 
@@ -1176,6 +1217,8 @@ export default function SimulateClient({
         infantry_min_pct: resolvedInfantryBounds.minPct,
         infantry_max_pct: resolvedInfantryBounds.maxPct,
         top_n: DEFAULT_TOP_RESULTS,
+        search_mode: optimizeSearchMode,
+        optimize_side: optimizeSide,
       };
       const res = await fetch("/api/simulate/optimize-ratio", {
         method: "POST",
@@ -1202,30 +1245,13 @@ export default function SimulateClient({
           const trimmed = line.trim();
           if (!trimmed) continue;
           try {
-            const event = JSON.parse(trimmed) as {
-              type: string;
-              done?: number;
-              total?: number;
-              data?: OptimizeRatioApiResponse;
-              message?: string;
-            };
-            if (
-              event.type === "progress" &&
-              typeof event.done === "number" &&
-              typeof event.total === "number"
-            ) {
-              setOptimizeProgress({ done: event.done, total: event.total });
-            } else if (event.type === "result" && event.data) {
-              setOptimizeResult(event.data);
-              maybeActivateSavedRun(event.data);
-            } else if (event.type === "error") {
-              setOptimizeError(event.message ?? "Unknown error");
-            }
+            handleOptimizeEvent(trimmed);
           } catch {
             // ignore malformed lines
           }
         }
       }
+      if (buf.trim()) handleOptimizeEvent(buf.trim());
     } catch (err) {
       setOptimizeError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -1233,9 +1259,39 @@ export default function SimulateClient({
     }
   }
 
+  function handleOptimizeEvent(line: string) {
+    const parsed = JSON.parse(line) as
+      | {
+          type: string;
+          done?: number;
+          total?: number;
+          data?: OptimizeRatioApiResponse;
+          message?: string;
+        }
+      | OptimizeRatioApiResponse;
+    const event =
+      "type" in parsed ? parsed : ({ type: "result", data: parsed } as const);
+    if (
+      event.type === "progress" &&
+      typeof event.done === "number" &&
+      typeof event.total === "number"
+    ) {
+      setOptimizeProgress({ done: event.done, total: event.total });
+    } else if (event.type === "result" && event.data) {
+      setOptimizeResult(event.data);
+      maybeActivateSavedRun(event.data);
+    } else if (event.type === "error") {
+      setOptimizeError(event.message ?? "Unknown error");
+    }
+  }
+
   function applyBestOptimizeRatio() {
     if (!optimizeResult) return;
-    setAttacker((prev) => ({
+    const setter =
+      (optimizeResult.optimized_side ?? optimizeSide) === "defender"
+        ? setDefender
+        : setAttacker;
+    setter((prev) => ({
       ...prev,
       troops: {
         ...prev.troops,
@@ -1273,14 +1329,24 @@ export default function SimulateClient({
     () => totalTroopsForCounts(attacker.troops),
     [attacker.troops],
   );
+  const defenderTotalTroops = useMemo(
+    () => totalTroopsForCounts(defender.troops),
+    [defender.troops],
+  );
+  const optimizedTotalTroops =
+    optimizeSide === "defender" ? defenderTotalTroops : attackerTotalTroops;
+  const optimizedSideLabel =
+    optimizeSide === "defender" ? SIDE_LABELS.defender : SIDE_LABELS.attacker;
+  const staticSideLabel =
+    optimizeSide === "defender" ? SIDE_LABELS.attacker : SIDE_LABELS.defender;
 
   const resolvedOptimizeStep = useMemo(() => {
     const parsed = parseInt(optimizeStepInput, 10);
     if (!Number.isFinite(parsed) || parsed <= 0) {
-      return recommendedOptimizeStep(attackerTotalTroops);
+      return recommendedOptimizeStep(optimizedTotalTroops);
     }
     return parsed;
-  }, [attackerTotalTroops, optimizeStepInput]);
+  }, [optimizedTotalTroops, optimizeStepInput]);
 
   const resolvedInfantryBounds = useMemo(
     () => resolveInfantryBounds(optimizeInfantryMinPct, optimizeInfantryMaxPct),
@@ -1289,18 +1355,28 @@ export default function SimulateClient({
 
   const estimatedOptimizeCompositions = useMemo(
     () =>
-      estimateCompositionCount(
-        attackerTotalTroops,
-        resolvedOptimizeStep,
-        resolvedInfantryBounds.minPct,
-        resolvedInfantryBounds.maxPct,
-      ),
-    [attackerTotalTroops, resolvedInfantryBounds, resolvedOptimizeStep],
+      optimizeSearchMode === "adaptive"
+        ? estimateAdaptiveCompositionCount()
+        : estimateCompositionCount(
+            optimizedTotalTroops,
+            resolvedOptimizeStep,
+            resolvedInfantryBounds.minPct,
+            resolvedInfantryBounds.maxPct,
+          ),
+    [
+      optimizedTotalTroops,
+      optimizeSearchMode,
+      resolvedInfantryBounds,
+      resolvedOptimizeStep,
+    ],
   );
 
   const estimatedOptimizeBattles = useMemo(
-    () => estimatedOptimizeCompositions * optimizeReplicates,
-    [estimatedOptimizeCompositions, optimizeReplicates],
+    () =>
+      optimizeSearchMode === "adaptive"
+        ? estimateAdaptiveBattleCount()
+        : estimatedOptimizeCompositions * optimizeReplicates,
+    [estimatedOptimizeCompositions, optimizeReplicates, optimizeSearchMode],
   );
 
   const optimizeBudgetTooLarge =
@@ -1716,15 +1792,69 @@ export default function SimulateClient({
             }}
           >
             <h3 className="mb-3 text-xs uppercase tracking-wider opacity-60 font-bold">
-              Optimise attacker ratio
+              Optimise ratio
             </h3>
             <div className="flex flex-col gap-3">
               <p className="text-xs opacity-60">
-                Keeps attacker total troops (
-                {attackerTotalTroops.toLocaleString()}), tiers, heroes, stats,
-                and the full defender setup fixed; only the attacker troop mix
-                changes.
+                Keeps {optimizedSideLabel.toLowerCase()} total troops (
+                {optimizedTotalTroops.toLocaleString()}), tiers, heroes, stats,
+                and the full {staticSideLabel.toLowerCase()} setup fixed; only
+                the {optimizedSideLabel.toLowerCase()} troop mix changes.
               </p>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <fieldset className="flex flex-col gap-1">
+                  <legend className="text-xs uppercase tracking-wider opacity-60">
+                    Optimise side
+                  </legend>
+                  <div className="grid grid-cols-2 overflow-hidden rounded border border-[var(--border-color)]">
+                    {(["attacker", "defender"] as OptimizeSide[]).map((side) => (
+                      <button
+                        key={side}
+                        type="button"
+                        onClick={() => setOptimizeSide(side)}
+                        className="px-3 py-2 text-xs font-bold"
+                        style={{
+                          backgroundColor:
+                            optimizeSide === side
+                              ? "var(--sidebar-active)"
+                              : "transparent",
+                          color:
+                            optimizeSide === side ? "#1e1e2e" : "var(--main-text)",
+                        }}
+                      >
+                        {SIDE_LABELS[side]}
+                      </button>
+                    ))}
+                  </div>
+                </fieldset>
+                <fieldset className="flex flex-col gap-1">
+                  <legend className="text-xs uppercase tracking-wider opacity-60">
+                    Search mode
+                  </legend>
+                  <div className="grid grid-cols-2 overflow-hidden rounded border border-[var(--border-color)]">
+                    {(["adaptive", "grid"] as OptimizeSearchMode[]).map((mode) => (
+                      <button
+                        key={mode}
+                        type="button"
+                        onClick={() => setOptimizeSearchMode(mode)}
+                        className="px-3 py-2 text-xs font-bold capitalize"
+                        style={{
+                          backgroundColor:
+                            optimizeSearchMode === mode
+                              ? "var(--sidebar-active)"
+                              : "transparent",
+                          color:
+                            optimizeSearchMode === mode
+                              ? "#1e1e2e"
+                              : "var(--main-text)",
+                        }}
+                      >
+                        {mode}
+                      </button>
+                    ))}
+                  </div>
+                </fieldset>
+              </div>
               <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
                 <button
                   type="button"
@@ -1732,7 +1862,7 @@ export default function SimulateClient({
                   disabled={
                     optimizeLoading ||
                     optimizeBudgetTooLarge ||
-                    attackerTotalTroops <= 0 ||
+                    optimizedTotalTroops <= 0 ||
                     !optimizeInputsValid
                   }
                   className="rounded px-4 py-2 text-sm font-bold min-h-[42px]"
@@ -1754,7 +1884,7 @@ export default function SimulateClient({
                     cursor:
                       optimizeLoading ||
                       optimizeBudgetTooLarge ||
-                      attackerTotalTroops <= 0 ||
+                      optimizedTotalTroops <= 0 ||
                       !optimizeInputsValid
                         ? "not-allowed"
                         : "pointer",
@@ -1764,7 +1894,7 @@ export default function SimulateClient({
                       ? "Infantry max % must be greater than or equal to infantry min %."
                       : optimizeBudgetTooLarge
                         ? "Increase the grid step or lower ratio reps before running the search."
-                        : "Search attacker troop compositions while keeping total troops, heroes, tiers, and stats fixed."
+                        : `Search ${optimizedSideLabel.toLowerCase()} troop compositions while keeping total troops, heroes, tiers, and stats fixed.`
                   }
                 >
                   {optimizeLoading ? "Optimising…" : "Optimise ratio"}
@@ -1786,7 +1916,10 @@ export default function SimulateClient({
                 </button>
                 <span className="text-xs font-mono opacity-60">
                   {estimatedOptimizeCompositions.toLocaleString()} comps ·{" "}
-                  {optimizeReplicates.toLocaleString()} reps ·{" "}
+                  {optimizeSearchMode === "adaptive"
+                    ? "30/10/100 reps"
+                    : `${optimizeReplicates.toLocaleString()} reps`}{" "}
+                  ·{" "}
                   {estimatedOptimizeBattles.toLocaleString()} battles
                 </span>
               </div>
@@ -1798,7 +1931,9 @@ export default function SimulateClient({
               <p className="text-xs opacity-60">
                 Infantry search band: {resolvedInfantryBounds.minPct}% to{" "}
                 {resolvedInfantryBounds.maxPct}%.
-                {optimizeStepInput.trim()
+                {optimizeSearchMode === "adaptive"
+                  ? " Adaptive search starts on a 5% grid, then checks 1% neighbours and 100-rep finalists."
+                  : optimizeStepInput.trim()
                   ? ` Step ${resolvedOptimizeStep.toLocaleString()} troops.`
                   : ` Auto step ${resolvedOptimizeStep.toLocaleString()} troops.`}
               </p>
@@ -1821,6 +1956,7 @@ export default function SimulateClient({
                       min={1}
                       max={500}
                       value={optimizeReplicates}
+                      disabled={optimizeSearchMode === "adaptive"}
                       onChange={(e) =>
                         setOptimizeReplicates(
                           Math.max(
@@ -1834,6 +1970,7 @@ export default function SimulateClient({
                         backgroundColor: "var(--sidebar-bg)",
                         border: "1px solid var(--border-color)",
                         color: "var(--main-text)",
+                        opacity: optimizeSearchMode === "adaptive" ? 0.55 : 1,
                       }}
                     />
                   </label>
@@ -1846,15 +1983,17 @@ export default function SimulateClient({
                       min={1}
                       inputMode="numeric"
                       value={optimizeStepInput}
+                      disabled={optimizeSearchMode === "adaptive"}
                       onChange={(e) => setOptimizeStepInput(e.target.value)}
                       placeholder={String(
-                        recommendedOptimizeStep(attackerTotalTroops),
+                        recommendedOptimizeStep(optimizedTotalTroops),
                       )}
                       className="rounded px-3 py-2 font-mono text-sm min-h-[42px] text-right tabular-nums"
                       style={{
                         backgroundColor: "var(--sidebar-bg)",
                         border: "1px solid var(--border-color)",
                         color: "var(--main-text)",
+                        opacity: optimizeSearchMode === "adaptive" ? 0.55 : 1,
                       }}
                     />
                   </label>
@@ -1918,7 +2057,9 @@ export default function SimulateClient({
                   ? "Fix the infantry bounds before optimising."
                   : optimizeBudgetTooLarge
                     ? "Projected search is too large. Increase the grid step or lower ratio reps."
-                    : "Current defaults are within the allowed optimise budget."}
+                    : optimizeSearchMode === "adaptive"
+                      ? "Adaptive search uses 30-rep coarse checks, 10-rep local neighbours, then 100-rep finalists."
+                      : "Current grid settings are within the allowed optimise budget."}
               </p>
               {optimizeError && (
                 <span className="text-xs" style={{ color: "#f38ba8" }}>
@@ -2006,11 +2147,15 @@ export default function SimulateClient({
                 Ratio Optimisation
               </h3>
               <p className="mt-1 text-xs opacity-60">
+                Optimised{" "}
+                {(optimizeResult.optimized_side ?? optimizeSide) === "defender"
+                  ? "defender"
+                  : "attacker"}{" "}
+                ratio with {optimizeResult.search_mode ?? "grid"} search.
                 Tested {optimizeResult.compositions_tested.toLocaleString()}{" "}
-                compositions at a {optimizeResult.grid_step.toLocaleString()}{" "}
-                troop step, with{" "}
+                candidates with{" "}
                 {optimizeResult.replicates_per_ratio.toLocaleString()}{" "}
-                replicates per composition. Infantry was constrained to{" "}
+                replicates for each finalist. Infantry was constrained to{" "}
                 {optimizeResult.infantry_min_pct}%–
                 {optimizeResult.infantry_max_pct}%.
               </p>
@@ -2025,7 +2170,11 @@ export default function SimulateClient({
                 backgroundColor: "transparent",
               }}
             >
-              Use best ratio
+              Use best{" "}
+              {(optimizeResult.optimized_side ?? optimizeSide) === "defender"
+                ? "defender"
+                : "attacker"}{" "}
+              ratio
             </button>
           </div>
 
@@ -2042,8 +2191,8 @@ export default function SimulateClient({
               label="Best counts"
               value={formatCounts(optimizeResult.best)}
             />
-            <ResultCard
-              label="Avg margin"
+              <ResultCard
+              label="Avg optimized margin"
               value={compactNumber(optimizeResult.best.avg_margin)}
             />
             <ResultCard
@@ -2088,7 +2237,12 @@ export default function SimulateClient({
                       <th className="pb-1 pr-2">Counts</th>
                       <th className="pb-1 pr-2 text-right">Win</th>
                       <th className="pb-1 pr-2 text-right">Margin</th>
-                      <th className="pb-1 text-right">Atk left</th>
+                      <th className="pb-1 text-right">
+                        {(optimizeResult.optimized_side ?? optimizeSide) ===
+                        "defender"
+                          ? "Def left"
+                          : "Atk left"}
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -2118,7 +2272,12 @@ export default function SimulateClient({
                           {compactNumber(row.avg_margin)}
                         </td>
                         <td className="py-1 text-right whitespace-nowrap">
-                          {compactNumber(row.avg_attacker_left)}
+                          {compactNumber(
+                            (optimizeResult.optimized_side ?? optimizeSide) ===
+                              "defender"
+                              ? row.avg_defender_left
+                              : row.avg_attacker_left,
+                          )}
                         </td>
                       </tr>
                     ))}

@@ -4,8 +4,13 @@ export const MAX_OPTIMIZE_COMPOSITIONS = 8_000;
 export const MAX_OPTIMIZE_BATTLES = 200_000;
 export const DEFAULT_OPTIMIZE_REPLICATES = 20;
 export const DEFAULT_TOP_RESULTS = 10;
-export const DEFAULT_INFANTRY_MIN_PCT = 25;
-export const DEFAULT_INFANTRY_MAX_PCT = 75;
+export const DEFAULT_INFANTRY_MIN_PCT = 30;
+export const DEFAULT_INFANTRY_MAX_PCT = 70;
+export const DEFAULT_OPTIMIZE_SEARCH_MODE = "adaptive" as const;
+export const DEFAULT_OPTIMIZE_SIDE = "attacker" as const;
+
+export type OptimizeSearchMode = "adaptive" | "grid";
+export type OptimizeSide = "attacker" | "defender";
 
 export interface OptimizeRatioPoint {
   infantry_count: number;
@@ -17,6 +22,10 @@ export interface OptimizeRatioPoint {
   win_rate: number;
   win_rate_pct: number;
   avg_margin: number;
+  margin_std?: number;
+  conservative_win_rate?: number;
+  conservative_win_rate_pct?: number;
+  conservative_margin?: number;
   avg_attacker_left: number;
   avg_defender_left: number;
   rank?: number;
@@ -25,15 +34,29 @@ export interface OptimizeRatioPoint {
 
 export interface OptimizeRatioResult {
   total_troops: number;
+  optimized_side?: OptimizeSide;
+  search_mode?: OptimizeSearchMode;
   grid_step: number;
   compositions_tested: number;
   projected_battles: number;
   replicates_per_ratio: number;
   infantry_min_pct: number;
   infantry_max_pct: number;
+  phase_counts?: Partial<Record<"phase1" | "phase2" | "finalists" | "grid", number>>;
   best: OptimizeRatioPoint;
   top_results: OptimizeRatioPoint[];
   points: OptimizeRatioPoint[];
+}
+
+export function estimateAdaptiveCompositionCount(): number {
+  // 5% grid with infantry constrained to 30%-70% plus bounded local/final
+  // phases. The exact local candidate count depends on phase-1 rankings, so
+  // this is intentionally a stable worst-case progress estimate for the UI.
+  return 9 * 21 + 20 * 49 + 40;
+}
+
+export function estimateAdaptiveBattleCount(): number {
+  return 9 * 21 * 30 + 20 * 49 * 10 + 40 * 100;
 }
 
 export interface InfantryBounds {
