@@ -71,17 +71,22 @@ def _load_baseline():
         return None
 
 
-def measure_distance(sim_result, game_result, winner_init_count, ignore_one_diff):
+def initial_army_error_scale(attacker_init_count, defender_init_count):
+    """Outcome-error denominator: total troops at risk across both sides."""
+    return (attacker_init_count or 0) + (defender_init_count or 0) or 1
+
+
+def measure_distance(sim_result, game_result, error_scale, ignore_one_diff):
     # SQRT(SUM-SQUARE((sim.att-game.att);(sim.def-game.def)))
     diff = math.sqrt(sum(math.pow(sim_result[key] - game_result[key], 2) for key in ['attacker', 'defender']))
     if ignore_one_diff and diff <= 1:
         diff = 0
-    diff_ratio = diff / winner_init_count if winner_init_count else 0.0
+    diff_ratio = diff / error_scale if error_scale else 0.0
     return round(diff, 1), round(diff_ratio * 100, 2)
 
 
-def measure_signed_outcome_error_ratio(sim_result, game_result, winner_init_count, ignore_one_diff):
-    # Signed outcome error as % of winner_init_count: positive means sim predicts the attacker
+def measure_signed_outcome_error_ratio(sim_result, game_result, error_scale, ignore_one_diff):
+    # Signed outcome error as % of total initial troops: positive means sim predicts the attacker
     # doing better (relative to the defender) than the game did; negative means the opposite.
     if ignore_one_diff:
         euclidean = math.sqrt(sum(math.pow(sim_result[key] - game_result[key], 2) for key in ['attacker', 'defender']))
@@ -90,9 +95,9 @@ def measure_signed_outcome_error_ratio(sim_result, game_result, winner_init_coun
     sim_outcome = sim_result['attacker'] - sim_result['defender']
     game_outcome = game_result['attacker'] - game_result['defender']
     signed_diff = sim_outcome - game_outcome
-    if not winner_init_count:
+    if not error_scale:
         return 0.0
-    return round(signed_diff / winner_init_count * 100, 2)
+    return round(signed_diff / error_scale * 100, 2)
 
 
 def get_signed_outcome(result):
@@ -125,7 +130,7 @@ def compute_testcase_stats(sim_outcomes, game_outcomes, attacker_init, defender_
                          sem = σ_sim * sqrt(1/n_sim + 1/n_game);
                          t = bias_raw / sem; p via normal approximation.
 
-    Stable bias_pct denominator: max(attacker_init, defender_init), fallback sum then 1.
+    Stable bias_pct denominator: total initial troops, matching signed_outcome_error_pct_initial.
     """
     n_sim = len(sim_outcomes)
     n_game = len(game_outcomes)
@@ -136,10 +141,7 @@ def compute_testcase_stats(sim_outcomes, game_outcomes, attacker_init, defender_
 
     bias_raw = mu_sim - mu_game
 
-    # Stable denominator: doesn't flip on tie / replicate noise.
-    denom = max(attacker_init or 0, defender_init or 0)
-    if not denom:
-        denom = (attacker_init or 0) + (defender_init or 0) or 1
+    denom = initial_army_error_scale(attacker_init, defender_init)
     bias_pct = round(bias_raw / denom * 100, 2)
 
     p = None
@@ -327,12 +329,11 @@ def fight_from_testcase(testcase, ignore_one_diff=False, show_rounds_freq=-1, re
     defender.joiner_heroes = testcase['defender']['joiner_heroes']
 
     f = Fight(attacker, defender, dont_save=True)
-    attacker_init_count = sum(attacker.troops.values())
-    defender_init_count = sum(defender.troops.values())
     _att, _def = f.battle(show_rounds_freq=show_rounds_freq)
     sim_result = {'attacker': _att, 'defender': _def}
-    winner = attacker if _att else defender
-    winner_init_count = winner.get_sum_army()
+    attacker_init_count = sum(attacker.troops.values())
+    defender_init_count = sum(defender.troops.values())
+    error_scale = initial_army_error_scale(attacker_init_count, defender_init_count)
 
     if isinstance(testcase['game_report_result'], list):
         game_result = {
@@ -342,8 +343,8 @@ def fight_from_testcase(testcase, ignore_one_diff=False, show_rounds_freq=-1, re
     else:
         game_result = testcase['game_report_result']
 
-    diff, diff_ratio = measure_distance(sim_result, game_result, winner_init_count, ignore_one_diff=ignore_one_diff)
-    signed_diff_ratio = measure_signed_outcome_error_ratio(sim_result, game_result, winner_init_count, ignore_one_diff=ignore_one_diff)
+    diff, diff_ratio = measure_distance(sim_result, game_result, error_scale, ignore_one_diff=ignore_one_diff)
+    signed_diff_ratio = measure_signed_outcome_error_ratio(sim_result, game_result, error_scale, ignore_one_diff=ignore_one_diff)
     game_outcome = get_signed_outcome(game_result)
     sim_outcome = get_signed_outcome(sim_result)
 
@@ -430,9 +431,11 @@ def check_testcases(testcases_files, TESTCASES_PATH='testcases', max_diff_ratio=
             num_tests = 1 if tc_is_deterministic else max(repeat, 1)
 
             def _post_replicate(i, result):
-                per_replicate_passes = result[14] <= (max_diff_ratio_deterministic * 100) if tc_is_deterministic \
-                    else result[14] <= (max_diff_ratio * 100)
-                result.append("✅" if per_replicate_passes else "❌")
+                if tc_is_deterministic:
+                    per_replicate_passes = result[14] <= (max_diff_ratio_deterministic * 100)
+                    result.append("✅" if per_replicate_passes else "❌")
+                else:
+                    result.append("·")
                 result[14] = (result[14] or '-')
 
                 file_diff_ratios.append(result[14] if isinstance(result[14], (int, float)) else 0)
@@ -563,10 +566,10 @@ def check_testcases(testcases_files, TESTCASES_PATH='testcases', max_diff_ratio=
         if show_raw_outcomes:
             headers = ['Test_ID', 'Att Troops', 'Def Troops', '✦✦', 'Att hero', 'Def Her', '✦✦',
                        'Game Att', 'Game Def', '✦✦', 'Sim Att', 'Sim Def', '✦✦',
-                       'Diff', 'Diff %', 'Game Δ', 'Sim Δ', 'Signed Err %', '?']
+                       'Diff', 'Abs Err % init', 'Game Δ', 'Sim Δ', 'Signed Err % init', '?']
         else:
             headers = ['Test_ID', 'Att Troops', 'Def Troops', '✦✦', 'Att hero', 'Def Her', '✦✦',
-                       'Diff', 'Diff %', 'Game Δ', 'Sim Δ', 'Signed Err %', '?']
+                       'Diff', 'Abs Err % init', 'Game Δ', 'Sim Δ', 'Signed Err % init', '?']
         print(tabulate(display_rows, headers=headers, tablefmt="pretty"))
 
         # Per-file summary
@@ -586,7 +589,7 @@ def check_testcases(testcases_files, TESTCASES_PATH='testcases', max_diff_ratio=
             flagged = [s for s in file_testcase_stats if not s['passes']]
             file_passes = len(flagged) == 0
 
-            print(f"✦✦ Mean |diff|: {file_mean_abs_diff:.2f} %   Mean signed bias: {file_average:+.2f} %")
+            print(f"✦✦ Mean abs err: {file_mean_abs_diff:.2f} % of initial troops   Mean signed bias: {file_average:+.2f} % of initial troops")
             if mean_stat is not None:
                 print(f"✦✦ Mean t: {mean_stat:+.2f}   Max |t|: {max_abs_stat:.2f}   Flagged: {len(flagged)}/{len(file_testcase_stats)}   ", "✅" if file_passes else "❌")
             else:
@@ -619,7 +622,7 @@ def check_testcases(testcases_files, TESTCASES_PATH='testcases', max_diff_ratio=
             ])
 
     print("\n🔹🔹🔹  RECAP 🔹🔹🔹")
-    recap_headers = ['file', 'Mean |diff| %', 'Mean signed bias %', 'Mean z/t', 'Max |z/t|', '✦✦']
+    recap_headers = ['file', 'Mean abs err % init', 'Mean signed bias % init', 'Mean z/t', 'Max |z/t|', '✦✦']
     print(tabulate(overall_prints, headers=recap_headers, tablefmt="fancy_grid", colalign=("left", "center", "center", "center", "center", "center")))
 
     if overall_z_stats:
@@ -653,8 +656,8 @@ def check_testcases(testcases_files, TESTCASES_PATH='testcases', max_diff_ratio=
                 if q <= bh_alpha:
                     bh_flagged_count += 1
 
-        print(f"🔹  Overall Mean |diff|: {glob_mean_abs_diff:.2f} %")
-        print(f"🔹  Overall Mean signed bias: {glob_signed_bias:+.2f} %")
+        print(f"🔹  Overall Mean abs err: {glob_mean_abs_diff:.2f} % of initial troops")
+        print(f"🔹  Overall Mean signed bias: {glob_signed_bias:+.2f} % of initial troops")
         if t_values:
             stouffer_z = sum(t_values) / math.sqrt(len(t_values))  # combined z-score assuming independence
             print(f"🔹  Overall Mean t: {statistics.fmean(t_values):+.2f}   Max |t|: {max(abs(s) for s in t_values):.2f}")

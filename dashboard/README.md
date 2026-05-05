@@ -73,7 +73,7 @@ One row per testcase per run.
 | `n_game` | INTEGER | Number of game (emulator) observations |
 | `mu_sim` | REAL | Simulator mean outcome |
 | `mu_game` | REAL | Game mean outcome |
-| `bias_pct` | REAL | `(mu_sim - mu_game) / mu_game * 100` |
+| `bias_pct` | REAL | `(mu_sim - mu_game) / total_initial_troops * 100` |
 | `t` | REAL | Welch t-statistic (NULL for deterministic/zero-var cases) |
 | `q` | REAL | Benjamini-Hochberg adjusted p-value (NULL for non-t cases) |
 | `passes` | INTEGER | 1 if the testcase passes all acceptance criteria |

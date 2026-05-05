@@ -107,7 +107,7 @@ python check_testcases.py
 | Table | Key columns |
 |---|---|
 | `runs` | id, started_at, finished_at, git_sha, dirty, overall_avg_error_pct, bh_sig_count |
-| `run_testcases` | run_id, file, testcase_id, mu_sim, mu_game, bias_pct, t, q, passes, waived_bool |
+| `run_testcases` | run_id, file, testcase_id, mu_sim, mu_game, bias_pct (percent of total initial troops), t, q, passes, waived_bool |
 | `run_testcase_files` | run_id, file_path, sha256 |
 | `blobs` | id, kind (patch\|untracked_manifest), content_gzip |
 | `heroes` | name, classes (JSON array), tier |
