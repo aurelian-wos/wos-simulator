@@ -7,12 +7,15 @@ fire-crystal level as separate fields while preserving the legacy
 """
 from __future__ import annotations
 
+import base64
 import dataclasses
 import difflib
+import json
 import logging
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 from typing import Any, Iterable
@@ -39,6 +42,7 @@ STAT_FIELDS = [
     "marksman_health",
 ]
 TROOP_TYPES = ("infantry", "lancer", "marksman")
+STAT_NAMES = ("attack", "defense", "lethality", "health")
 
 HEADER_MATCH_TEXT = "statbonuses"
 COMMON_LABEL_TRANSLATIONS = str.maketrans(
@@ -1182,7 +1186,110 @@ def extract_report_stats_and_troops(image_path: str | Path, *, debug_outdir: str
     return result
 
 
-def _json_dumps(data: Any) -> str:
-    import json
+def _troop_type_key(troop_type: str, tier: Any, fire_crystal_level: Any) -> str | None:
+    if not isinstance(tier, int):
+        return None
+    if tier < 1:
+        return None
+    if isinstance(fire_crystal_level, int) and fire_crystal_level > 0:
+        return f"{troop_type}_t{tier}_fc{fire_crystal_level}"
+    return f"{troop_type}_t{tier}"
 
+
+def shape_dashboard_side(side_data: dict[str, Any]) -> dict[str, Any]:
+    """Map parser-native side data to the dashboard upload contract."""
+    troops: dict[str, int | None] = {troop_type: None for troop_type in TROOP_TYPES}
+    troop_types: dict[str, str | None] = {troop_type: None for troop_type in TROOP_TYPES}
+    stats: dict[str, dict[str, float | None]] = {
+        troop_type: {stat: None for stat in STAT_NAMES} for troop_type in TROOP_TYPES
+    }
+
+    for troop in side_data.get("troops", []):
+        if not isinstance(troop, dict):
+            continue
+        troop_type = troop.get("type")
+        if troop_type not in TROOP_TYPES:
+            continue
+        count = troop.get("count")
+        if isinstance(count, int):
+            troops[troop_type] = count
+        troop_types[troop_type] = _troop_type_key(
+            troop_type,
+            troop.get("tier"),
+            troop.get("fire_crystal_level"),
+        )
+
+    # Older fallback fields can still contain counts or levels when typed troop
+    # details are incomplete.
+    for troop_type, count in side_data.get("troop_counts", {}).items():
+        if troop_type in TROOP_TYPES and troops[troop_type] is None and isinstance(count, int):
+            troops[troop_type] = count
+
+    for troop_type, level in side_data.get("levels", {}).items():
+        if troop_type not in TROOP_TYPES or troop_types[troop_type] is not None:
+            continue
+        troop_types[troop_type] = _troop_type_key(
+            troop_type,
+            level.get("tier") if isinstance(level, dict) else None,
+            level.get("fire_crystal_level") if isinstance(level, dict) else None,
+        )
+
+    for field, value in side_data.get("stat_bonuses", {}).items():
+        if not isinstance(value, (int, float)):
+            continue
+        try:
+            troop_type, stat = field.rsplit("_", 1)
+        except ValueError:
+            continue
+        if troop_type in TROOP_TYPES and stat in STAT_NAMES:
+            stats[troop_type][stat] = float(value)
+
+    return {"troops": troops, "troop_types": troop_types, "stats": stats}
+
+
+def dashboard_warnings_from_result(result: dict[str, Any]) -> list[str]:
+    missing = result.get("meta", {}).get("missing_fields", [])
+    if not missing:
+        return []
+    return ["missing fields: " + ", ".join(str(field) for field in missing)]
+
+
+def shape_dashboard_report_result(result: dict[str, Any]) -> dict[str, Any]:
+    strategies = result.get("meta", {}).get("ocr_strategy", [])
+    return {
+        "attacker": shape_dashboard_side(result["left"]),
+        "defender": shape_dashboard_side(result["right"]),
+        "raw_text": "",
+        "warnings": dashboard_warnings_from_result(result),
+        "ocr_retried": len(strategies) > 1,
+        "parser": "skill.report_stats_parser",
+    }
+
+
+def parse_dashboard_report_bytes(image_bytes: bytes) -> dict[str, Any]:
+    with tempfile.NamedTemporaryFile(suffix=".png") as tmp:
+        tmp.write(image_bytes)
+        tmp.flush()
+        return shape_dashboard_report_result(extract_report_stats_and_troops(tmp.name))
+
+
+def _json_dumps(data: Any) -> str:
     return json.dumps(data, indent=2, sort_keys=True) + "\n"
+
+
+def _main() -> int:
+    try:
+        payload = json.load(sys.stdin)
+        encoded = payload.get("image_base64") if isinstance(payload, dict) else None
+        if not isinstance(encoded, str) or not encoded:
+            raise ValueError("Missing 'image_base64' field in request body")
+        image_bytes = base64.b64decode(encoded)
+        sys.stdout.write(_json_dumps(parse_dashboard_report_bytes(image_bytes)))
+        return 0
+    except Exception as exc:  # noqa: BLE001 - CLI must return JSON errors.
+        sys.stdout.write(_json_dumps({"error": str(exc)}))
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(_main())

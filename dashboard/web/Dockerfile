@@ -13,7 +13,7 @@
 # backed bind mounts; polling keeps hot reload reliable in that setup.
 #
 # The dashboard spawns two Python CLIs inside the container:
-#   - dashboard/ocr_report.py  (Import report flow; uses the skill parser,
+#   - skill/scripts/report_stats_parser.py  (Import report flow,
 #     RapidOCR, ONNX Runtime, and OpenCV)
 #   - dashboard/simulate_battle.py  (Simulate battle page; imports the
 #     Base_classes simulator package, which depends on tabulate)

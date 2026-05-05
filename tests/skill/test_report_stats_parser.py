@@ -10,10 +10,83 @@ SCRIPTS = ROOT / "skill" / "scripts"
 if str(SCRIPTS) not in sys.path:
     sys.path.insert(0, str(SCRIPTS))
 
-from report_stats_parser import TROOP_TYPES, extract_report_stats_and_troops, extract_values_from_ocr_items
+from report_stats_parser import (
+    TROOP_TYPES,
+    dashboard_warnings_from_result,
+    extract_report_stats_and_troops,
+    extract_values_from_ocr_items,
+    shape_dashboard_side,
+)
 
 
 class ReportStatsParserTests(unittest.TestCase):
+    def test_dashboard_adapter_maps_typed_partial_troops_and_stats(self) -> None:
+        side = {
+            "troops": [
+                {
+                    "type": "infantry",
+                    "tier": 11,
+                    "fire_crystal_level": 3,
+                    "count": 1200,
+                },
+                {
+                    "type": "marksman",
+                    "tier": 10,
+                    "fire_crystal_level": 0,
+                    "count": 800,
+                },
+            ],
+            "troop_counts": {"infantry": 1200, "marksman": 800},
+            "levels": {},
+            "stat_bonuses": {
+                "infantry_attack": 113.5,
+                "lancer_health": 124.0,
+                "marksman_lethality": 1073.0,
+            },
+        }
+
+        result = shape_dashboard_side(side)
+
+        self.assertEqual(
+            result["troops"],
+            {"infantry": 1200, "lancer": None, "marksman": 800},
+        )
+        self.assertEqual(
+            result["troop_types"],
+            {
+                "infantry": "infantry_t11_fc3",
+                "lancer": None,
+                "marksman": "marksman_t10",
+            },
+        )
+        self.assertEqual(result["stats"]["infantry"]["attack"], 113.5)
+        self.assertEqual(result["stats"]["lancer"]["health"], 124.0)
+        self.assertEqual(result["stats"]["marksman"]["lethality"], 1073.0)
+        self.assertIsNone(result["stats"]["lancer"]["attack"])
+
+    def test_dashboard_adapter_maps_level_fallback_when_typed_troop_lacks_tier(self) -> None:
+        side = {
+            "troops": [{"type": "lancer", "tier": None, "count": 600}],
+            "troop_counts": {"lancer": 600},
+            "levels": {"lancer": {"tier": 9, "fire_crystal_level": None}},
+            "stat_bonuses": {},
+        }
+
+        result = shape_dashboard_side(side)
+
+        self.assertEqual(result["troops"]["lancer"], 600)
+        self.assertEqual(result["troop_types"]["lancer"], "lancer_t9")
+
+    def test_dashboard_adapter_missing_fields_become_warning(self) -> None:
+        warnings = dashboard_warnings_from_result(
+            {"meta": {"missing_fields": ["left_lancer_count", "right_marksman_tier"]}}
+        )
+
+        self.assertEqual(
+            warnings,
+            ["missing fields: left_lancer_count, right_marksman_tier"],
+        )
+
     def test_extracts_stats_counts_and_tier_from_ocr_items(self) -> None:
         items = [
             {"text": "Lv.11.0", "x1": 33, "y1": 124, "x2": 97, "y2": 144, "confidence": 0.93},

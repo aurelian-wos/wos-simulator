@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 const REPO_ROOT = path.resolve(process.cwd(), "../..");
-const CLI_PATH = path.join(REPO_ROOT, "dashboard", "ocr_report.py");
+const CLI_PATH = path.join(REPO_ROOT, "skill", "scripts", "report_stats_parser.py");
 
 function resolvePython(): string {
   if (process.env.SIMULATOR_PYTHON) return process.env.SIMULATOR_PYTHON;
@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
 
   if (!fs.existsSync(CLI_PATH)) {
     return NextResponse.json(
-      { error: `OCR CLI not found at ${CLI_PATH}` },
+      { error: `Report parser CLI not found at ${CLI_PATH}` },
       { status: 500 },
     );
   }
