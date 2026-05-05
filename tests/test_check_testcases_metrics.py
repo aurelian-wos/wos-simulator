@@ -5,6 +5,7 @@ from check_testcases import (
     initial_army_error_scale,
     measure_distance,
     measure_signed_outcome_error_ratio,
+    summarize_non_t_stat_label,
 )
 
 
@@ -52,3 +53,21 @@ def test_aggregate_bias_uses_same_total_initial_army_denominator():
 
     assert stats["bias_raw"] == 25.57
     assert math.isclose(stats["bias_pct"], 1.97)
+
+
+def test_non_t_recap_label_distinguishes_p_only_files():
+    assert summarize_non_t_stat_label([{"stat_type": "p"}]) == "p"
+
+
+def test_non_t_recap_label_keeps_deterministic_shorthand():
+    assert summarize_non_t_stat_label([{"stat_type": "deterministic"}]) == "det"
+
+
+def test_non_t_recap_label_distinguishes_zero_var_files():
+    assert summarize_non_t_stat_label([{"stat_type": "zero_var"}]) == "zvar"
+
+
+def test_non_t_recap_label_marks_mixed_non_t_files():
+    stats = [{"stat_type": "p"}, {"stat_type": "deterministic"}]
+
+    assert summarize_non_t_stat_label(stats) == "non-t"

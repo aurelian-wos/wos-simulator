@@ -201,6 +201,18 @@ def format_stat(stats):
     return f"{prefix}={stats['stat']:+.2f}"
 
 
+def summarize_non_t_stat_label(testcase_stats):
+    """Return a recap label when no z/t-scale statistic exists for a file."""
+    stat_types = {s['stat_type'] for s in testcase_stats}
+    if stat_types == {'deterministic'}:
+        return 'det'
+    if stat_types == {'zero_var'}:
+        return 'zvar'
+    if stat_types == {'p'}:
+        return 'p'
+    return 'non-t'
+
+
 def is_stochastic_fight(attacker, defender):
     """Runtime determinism classifier based on hydrated skills/effects.
 
@@ -585,6 +597,7 @@ def check_testcases(testcases_files, TESTCASES_PATH='testcases', max_diff_ratio=
             else:
                 mean_stat = None
                 max_abs_stat = None
+            non_t_stat_label = summarize_non_t_stat_label(file_testcase_stats)
 
             flagged = [s for s in file_testcase_stats if not s['passes']]
             file_passes = len(flagged) == 0
@@ -616,8 +629,8 @@ def check_testcases(testcases_files, TESTCASES_PATH='testcases', max_diff_ratio=
                 file_name,
                 round(file_mean_abs_diff, 2) if file_mean_abs_diff is not None else 'n/a',
                 f"{file_average:+.2f}",
-                f"{mean_stat:+.2f}" if mean_stat is not None else 'det',
-                f"{max_abs_stat:.2f}" if max_abs_stat is not None else 'det',
+                f"{mean_stat:+.2f}" if mean_stat is not None else non_t_stat_label,
+                f"{max_abs_stat:.2f}" if max_abs_stat is not None else non_t_stat_label,
                 '✅' if file_passes else '❌',
             ])
 
