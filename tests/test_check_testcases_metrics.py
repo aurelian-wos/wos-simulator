@@ -55,6 +55,24 @@ def test_aggregate_bias_uses_same_total_initial_army_denominator():
     assert math.isclose(stats["bias_pct"], 1.97)
 
 
+def test_single_game_observation_stochastic_stats_are_low_evidence():
+    stats = compute_testcase_stats(
+        sim_outcomes=[1606, 1612, 1607, 1607, 1613],
+        game_outcomes=[1597],
+        attacker_init=1700,
+        defender_init=300,
+    )
+
+    assert stats["stat_type"] == "single_obs"
+    assert stats["stat"] is None
+    assert stats["p"] is None
+    assert stats["n_game"] == 1
+
+
+def test_single_observation_stat_formats_as_low_evidence():
+    assert summarize_non_t_stat_label([{"stat_type": "single_obs"}]) == "n=1"
+
+
 def test_non_t_recap_label_distinguishes_p_only_files():
     assert summarize_non_t_stat_label([{"stat_type": "p"}]) == "p"
 

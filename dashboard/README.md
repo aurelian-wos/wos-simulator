@@ -74,10 +74,10 @@ One row per testcase per run.
 | `mu_sim` | REAL | Simulator mean outcome |
 | `mu_game` | REAL | Game mean outcome |
 | `bias_pct` | REAL | `(mu_sim - mu_game) / total_initial_troops * 100` |
-| `t` | REAL | Welch t-statistic (NULL for deterministic/zero-var cases) |
+| `t` | REAL | Welch t-statistic (NULL for deterministic/zero-var/single-observation cases) |
 | `q` | REAL | Benjamini-Hochberg adjusted p-value (NULL for non-t cases) |
 | `passes` | INTEGER | 1 if the testcase passes all acceptance criteria |
-| `stat_type` | TEXT | `deterministic`, `zero_var`, or `p` |
+| `stat_type` | TEXT | `deterministic`, `zero_var`, `single_obs`, `p`, or `t` |
 | `waived_bool` | INTEGER | 1 if the bias falls within an accepted-residual waiver band |
 
 ---

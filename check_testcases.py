@@ -123,9 +123,9 @@ def compute_testcase_stats(sim_outcomes, game_outcomes, attacker_init, defender_
     Four statistical regimes:
       - deterministic:   sim is non-stochastic (flagged via is_stochastic_fight). Flag purely on bias_pct.
       - zero_var:        sim has chance flags but σ_sim observed as 0. Fall back to bias_pct-only rule.
-      - empirical p (N_game == 1): primary stat is a two-sided empirical p-value comparing the
-                         single game observation against the sim outcome distribution.
-                         A z value is also computed for display continuity.
+      - single_obs:      sim is stochastic but only one game observation exists. Bias and sim
+                         variance are shown, but the observation is too thin for a decisive
+                         distribution comparison.
       - analytic t  (N_game >= 2): Welch-style predictive SEM
                          sem = σ_sim * sqrt(1/n_sim + 1/n_game);
                          t = bias_raw / sem; p via normal approximation.
@@ -154,16 +154,11 @@ def compute_testcase_stats(sim_outcomes, game_outcomes, attacker_init, defender_
         # Normal-approximation two-sided p from t.
         p = 2.0 * (1.0 - statistics.NormalDist().cdf(abs(stat)))
     elif n_game == 1 and sigma_sim > 0:
-        # Empirical two-sided p: rank single game obs in sim distribution.
-        obs = game_outcomes[0]
-        p_left = (1 + sum(1 for s in sim_outcomes if s <= obs)) / (n_sim + 1)
-        p_right = (1 + sum(1 for s in sim_outcomes if s >= obs)) / (n_sim + 1)
-        p = min(1.0, 2.0 * min(p_left, p_right))
-        # z kept for display continuity only.
-        _z = bias_raw / sigma_sim
+        # One stochastic game observation is useful as a rough sanity check, but
+        # not enough to decide whether the sim distribution matches the game.
         sem = sigma_sim
-        stat = p
-        stat_type = 'p'
+        stat = None
+        stat_type = 'single_obs'
     elif n_game >= 1 and sigma_sim == 0 and n_sim > 0:
         # Sim is effectively deterministic even though chance flags exist.
         sem = 0.0
@@ -195,6 +190,8 @@ def format_stat(stats):
     """Pretty-print the z/t/p cell for a per-file row."""
     if stats['stat_type'] in ('deterministic', 'zero_var'):
         return 'det' if stats['stat_type'] == 'deterministic' else 'zvar'
+    if stats['stat_type'] == 'single_obs':
+        return 'n=1'
     if stats['stat_type'] == 'p':
         return f"p={stats['stat']:.4f}"
     prefix = stats['stat_type']  # 't'
@@ -210,6 +207,8 @@ def summarize_non_t_stat_label(testcase_stats):
         return 'zvar'
     if stat_types == {'p'}:
         return 'p'
+    if stat_types == {'single_obs'}:
+        return 'n=1'
     return 'non-t'
 
 
@@ -395,7 +394,7 @@ def check_testcases(testcases_files, TESTCASES_PATH='testcases', max_diff_ratio=
         max_repeat_print = 0
     started_at = datetime.datetime.now(datetime.timezone.utc)
     bh_alpha = 0.05
-    print(f"\n ✦✦ Divergence flag: |t| > {z_threshold} or empirical p < {2*(1-statistics.NormalDist().cdf(z_threshold)):.4f}, AND |bias| > {min_bias_pct} %   (deterministic/zero-var fallback: linear bias > {max_diff_ratio_deterministic * 100} %)")
+    print(f"\n ✦✦ Divergence flag: |t| > {z_threshold} AND |bias| > {min_bias_pct} %   (deterministic/zero-var fallback: linear bias > {max_diff_ratio_deterministic * 100} %; stochastic n_game=1 reports are low-evidence)")
     testcases_files = get_testcases(testcases_files, TESTCASES_PATH=TESTCASES_PATH, resolve_patterns=resolve_patterns)
     available_files = list_available_testcase_files(TESTCASES_PATH=TESTCASES_PATH)
     overall_prints = []
@@ -503,9 +502,12 @@ def check_testcases(testcases_files, TESTCASES_PATH='testcases', max_diff_ratio=
             #  - deterministic / zero_var:  purely on |bias_pct|
             #  - t:                          |t| > threshold AND |bias| > min_bias_pct
             #  - p:                          p < p_alpha AND |bias| > min_bias_pct
+            #  - single_obs:                 low evidence; report bias/variance but do not flag
             st = stats['stat_type']
             if st in ('deterministic', 'zero_var'):
                 stats['passes'] = abs(stats['bias_pct']) <= (max_diff_ratio_deterministic * 100)
+            elif st == 'single_obs':
+                stats['passes'] = True
             elif st == 'p':
                 stats['passes'] = (stats['stat'] >= p_alpha) or (abs(stats['bias_pct']) <= min_bias_pct)
             else:  # 't'
@@ -648,6 +650,7 @@ def check_testcases(testcases_files, TESTCASES_PATH='testcases', max_diff_ratio=
         det_cases = [s for s in overall_z_stats if s['stat_type'] == 'deterministic']
         zvar_cases = [s for s in overall_z_stats if s['stat_type'] == 'zero_var']
         p_cases = [s for s in overall_z_stats if s['stat_type'] == 'p']
+        single_obs_cases = [s for s in overall_z_stats if s['stat_type'] == 'single_obs']
 
         # Benjamini-Hochberg q-values across all stochastic testcases that have a p-value.
         bh_inputs = [s for s in overall_z_stats if s.get('p') is not None]
@@ -677,7 +680,9 @@ def check_testcases(testcases_files, TESTCASES_PATH='testcases', max_diff_ratio=
             print(f"🔹  Stouffer combined z across {len(t_values)} t-testcases: {stouffer_z:+.2f}")
         waived_cases = [s for s in overall_z_stats if s.get('waived_by')]
         lapsed_cases = [s for s in overall_z_stats if s.get('waiver_lapsed')]
-        print(f"🔹  Flagged testcases (primary rule): {len(flagged)}/{len(overall_z_stats)}   (deterministic: {len(det_cases)}, zero_var: {len(zvar_cases)}, p-branch: {len(p_cases)})")
+        print(f"🔹  Flagged testcases (primary rule): {len(flagged)}/{len(overall_z_stats)}   (deterministic: {len(det_cases)}, zero_var: {len(zvar_cases)}, p-branch: {len(p_cases)}, single-observation stochastic: {len(single_obs_cases)})")
+        if single_obs_cases:
+            print(f"🔹  Low-evidence stochastic testcases: {len(single_obs_cases)} with n_game=1; collect more game observations before drawing conclusions.")
         if waived_cases:
             print(f"🔹  Waived (known-issue residuals): {len(waived_cases)}")
             for s in waived_cases:
@@ -697,6 +702,8 @@ def check_testcases(testcases_files, TESTCASES_PATH='testcases', max_diff_ratio=
                     print(f"    • {s['file']} :: {s['testcase_id']}  bias={s['bias_pct']:+.2f} %  ({s['stat_type']}){q_str}")
                 elif s['stat_type'] == 'p':
                     print(f"    • {s['file']} :: {s['testcase_id']}  bias={s['bias_pct']:+.2f} %  p={s['stat']:.4f}{q_str}  (μ_sim={s['mu_sim']} ±{s['sigma_sim']}, μ_game={s['mu_game']}, N_sim={s['n_sim']}, N_game={s['n_game']})")
+                elif s['stat_type'] == 'single_obs':
+                    print(f"    • {s['file']} :: {s['testcase_id']}  bias={s['bias_pct']:+.2f} %  n_game=1 low-evidence  (μ_sim={s['mu_sim']} ±{s['sigma_sim']}, μ_game={s['mu_game']}, N_sim={s['n_sim']})")
                 else:
                     print(f"    • {s['file']} :: {s['testcase_id']}  bias={s['bias_pct']:+.2f} %  {s['stat_type']}={s['stat']:+.2f}{q_str}  (μ_sim={s['mu_sim']} ±{s['sigma_sim']}, μ_game={s['mu_game']}, N_sim={s['n_sim']}, N_game={s['n_game']})")
     else:
