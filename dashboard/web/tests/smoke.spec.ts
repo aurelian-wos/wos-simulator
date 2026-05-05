@@ -931,7 +931,7 @@ test.describe("Dashboard smoke tests", () => {
     await expect(page.locator("body")).toContainText("Ratio Optimisation");
     await expect(page.locator("body")).toContainText("Top 10 ratios");
     await expect(page.locator("body")).toContainText("Hollow dots are coarse checks");
-    await expect(page.locator("body")).toContainText("Avg optimized survivors");
+    await expect(page.locator("body")).not.toContainText("Avg optimized survivors");
     await expect(page.locator("body")).toContainText("26.7 / 30.0 / 43.3%");
     await expect(page.locator("body")).toContainText("30%–70%");
 

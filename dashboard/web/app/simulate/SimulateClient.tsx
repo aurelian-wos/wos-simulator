@@ -2238,7 +2238,7 @@ export default function SimulateClient({
                 Top 10 ratios
               </h4>
               <div className="overflow-x-auto">
-                <table className="min-w-[44rem] w-full text-xs font-mono">
+                <table className="min-w-[36rem] w-full text-xs font-mono">
                   <thead>
                     <tr
                       className="text-left uppercase tracking-wider opacity-50"
@@ -2249,12 +2249,6 @@ export default function SimulateClient({
                       <th className="pb-1 pr-2">Counts</th>
                       <th className="pb-1 pr-2 text-right">Win</th>
                       <th className="pb-1 pr-2 text-right">Margin</th>
-                      <th
-                        className="pb-1 text-right"
-                        title="Average survivors left on the optimized side. Margin is signed against the opponent, so this is a survivor-total companion metric rather than the ranking denominator."
-                      >
-                        Avg optimized survivors
-                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -2282,14 +2276,6 @@ export default function SimulateClient({
                         </td>
                         <td className="py-1 pr-2 text-right whitespace-nowrap">
                           {compactNumber(row.avg_margin)}
-                        </td>
-                        <td className="py-1 text-right whitespace-nowrap">
-                          {compactNumber(
-                            (optimizeResult.optimized_side ?? optimizeSide) ===
-                              "defender"
-                              ? row.avg_defender_left
-                              : row.avg_attacker_left,
-                          )}
                         </td>
                       </tr>
                     ))}
