@@ -1,0 +1,26 @@
+{
+  "test_id": "alonso_solo_v2",
+  "description": "Alonso solo attacker. minxxx attacks with Alonso (S1: 40% chance lethality +30%, S2: 20% chance opp damage down 40% for 2t, S3: 50% chance extra attack damage up 40%) using 100/100/100 t6 troops. WIP defends with no heroes using 333/333/333 t6. All three skills are chance-based; collect 30 game results for RNG confidence. Reference: WOS-292.",
+  "emulator": {
+    "attacker": { "instance": "minxxx" },
+    "defender": { "instance": "WIP" }
+  },
+  "attacker": {
+    "heroes": {
+      "Alonso": {}
+    },
+    "troops": {
+      "infantry_t6": 100,
+      "lancer_t6": 100,
+      "marksman_t6": 100
+    }
+  },
+  "defender": {
+    "heroes": {},
+    "troops": {
+      "infantry_t6": 333,
+      "lancer_t6": 333,
+      "marksman_t6": 333
+    }
+  }
+}
