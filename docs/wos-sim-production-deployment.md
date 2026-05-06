@@ -119,6 +119,10 @@ WOS_SIM_REMOTE_RUNS_DIR=/srv/wos-sim/runtime/simulate-runs \
 
 Install Unison on both machines first. The helper exits without syncing if
 `unison` is not available, because a custom two-way `rsync` flow can lose data.
+Unison must use compatible versions on both sides. The helper prefers
+`unison-2.51+4.13.1` locally when available and uses
+`WOS_SIM_REMOTE_UNISON_CMD`, defaulting to `unison-2.51+4.13.1`, as the remote
+server command.
 
 Syncthing ignore patterns for both sides:
 
