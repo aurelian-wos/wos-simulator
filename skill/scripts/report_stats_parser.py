@@ -188,6 +188,39 @@ def _preprocess_image(img_bgr: np.ndarray, *, scale: float = 1.0, sharpen: bool 
     return processed
 
 
+def _crop_report_panel_for_ocr(img_bgr: np.ndarray) -> np.ndarray:
+    """Trim non-report controls below the stat panel before OCR.
+
+    Dashboard uploads are report-panel screenshots with blue action buttons
+    below the parseable content. Removing those controls keeps coordinates
+    stable while reducing OCR detector work. If the tan panel-bottom band cannot
+    be found, return the original image and let the normal fallback path handle
+    the crop.
+    """
+    if img_bgr.size == 0:
+        return img_bgr
+    image_height = img_bgr.shape[0]
+    hsv = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2HSV)
+    tan_mask = cv2.inRange(hsv, (5, 20, 100), (30, 120, 245))
+    row_density = tan_mask.mean(axis=1) / 255.0
+    rows = np.where(row_density > 0.55)[0]
+    groups: list[list[int]] = []
+    for row in rows:
+        row_index = int(row)
+        if not groups or row_index > groups[-1][-1] + 1:
+            groups.append([row_index])
+        else:
+            groups[-1].append(row_index)
+
+    bottom_candidates = [group for group in groups if len(group) > 2 and group[0] > image_height * 0.45]
+    if not bottom_candidates:
+        return img_bgr
+    crop_bottom = min(image_height, bottom_candidates[0][-1] + 8)
+    if crop_bottom >= image_height - 8:
+        return img_bgr
+    return img_bgr[:crop_bottom]
+
+
 def _ocr_pass(
     img_bgr: np.ndarray,
     *,
@@ -1184,8 +1217,9 @@ def extract_report_stats_and_troops(image_path: str | Path, *, debug_outdir: str
     # stay comparable to templates. The common OCR path uses a faster detector
     # on the original report; enhanced/server OCR is retained as a fallback for
     # noisy or unfamiliar crops.
-    fast_original = _ocr_pass(img_bgr, fast=True)
-    strategies = ["rapidocr:fast-original"]
+    ocr_input = _crop_report_panel_for_ocr(img_bgr)
+    fast_original = _ocr_pass(ocr_input, fast=True)
+    strategies = ["rapidocr:fast-panel-crop" if ocr_input.shape[:2] != img_bgr.shape[:2] else "rapidocr:fast-original"]
     try:
         result = extract_values_from_ocr_items(fast_original, image_width=image_width, image_height=image_height)
     except ValueError:
