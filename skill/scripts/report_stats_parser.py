@@ -55,6 +55,7 @@ TROOP_SLOT_HALF_WIDTH = 0.07
 MIN_TROOP_AVATAR_SCORE = 0.55
 MIN_FC_BADGE_TEMPLATE_SCORE = 0.80
 FC_BADGE_TEMPLATE_SCALES = (0.95, 1.05, 1.15, 1.25)
+FAST_OCR_TOP_CROP = 56
 
 _rapid_ocr: Any = None
 _fast_rapid_ocr: Any = None
@@ -228,6 +229,7 @@ def _ocr_pass(
     sharpen: bool = False,
     clahe: bool = False,
     fast: bool = False,
+    y_offset: int = 0,
 ) -> list[OCRItem]:
     processed = _preprocess_image(img_bgr, scale=scale, sharpen=sharpen, clahe=clahe)
     result = (_get_fast_rapid() if fast else _get_rapid())(processed)
@@ -241,9 +243,9 @@ def _ocr_pass(
             OCRItem(
                 text=str(text).strip(),
                 x1=int(min(xs) / scale),
-                y1=int(min(ys) / scale),
+                y1=int(min(ys) / scale) + y_offset,
                 x2=int(max(xs) / scale),
-                y2=int(max(ys) / scale),
+                y2=int(max(ys) / scale) + y_offset,
                 confidence=float(confidence),
             )
         )
@@ -1129,8 +1131,8 @@ def _extract_typed_troops_from_slots(stats_result: dict[str, Any], img_bgr: np.n
             if count_box is not None:
                 count_item = OCRItem(**count_box)
                 count_height = max(1, count_item.height)
-                badge_y1 = max(0, count_item.y1 - int(round(4.5 * count_height)))
-                badge_y2 = max(badge_y1 + 1, count_item.y1 - int(round(2.5 * count_height)))
+                badge_y1 = max(0, count_item.y1 - int(round(5.0 * count_height)))
+                badge_y2 = max(badge_y1 + 1, count_item.y1 - int(round(2.0 * count_height)))
                 slot_crop = img_bgr[badge_y1:badge_y2, x1:badge_x2]
                 count_fc, count_score = _detect_fire_crystal_badge_match(slot_crop, crop_from_slot=False)
             else:
@@ -1217,7 +1219,8 @@ def extract_report_stats_and_troops(image_path: str | Path, *, debug_outdir: str
     # on the original report; enhanced/server OCR is retained as a fallback for
     # noisy or unfamiliar crops.
     ocr_input = _crop_report_panel_for_ocr(img_bgr)
-    fast_original = _ocr_pass(ocr_input, fast=True)
+    fast_ocr_top = FAST_OCR_TOP_CROP if ocr_input.shape[0] > FAST_OCR_TOP_CROP + 200 else 0
+    fast_original = _ocr_pass(ocr_input[fast_ocr_top:], fast=True, y_offset=fast_ocr_top)
     strategies = ["rapidocr:fast-panel-crop" if ocr_input.shape[:2] != img_bgr.shape[:2] else "rapidocr:fast-original"]
     try:
         result = extract_values_from_ocr_items(fast_original, image_width=image_width, image_height=image_height)
