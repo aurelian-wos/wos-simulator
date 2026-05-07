@@ -1,0 +1,1838 @@
+{
+  "Screenshot 2026-03-20 005937.png": {
+    "left": {
+      "stat_bonuses": {
+        "infantry_attack": 176.3,
+        "infantry_defense": 163.0,
+        "infantry_health": 134.5,
+        "infantry_lethality": 151.0,
+        "lancer_attack": 117.3,
+        "lancer_defense": 115.0,
+        "lancer_health": 130.0,
+        "lancer_lethality": 130.0,
+        "marksman_attack": 165.3,
+        "marksman_defense": 168.5,
+        "marksman_health": 145.5,
+        "marksman_lethality": 140.0
+      },
+      "troops": {
+        "infantry": {
+          "count": 91728,
+          "fire_crystal_level": 0,
+          "tier": 11
+        },
+        "lancer": {
+          "count": 14112,
+          "fire_crystal_level": 0,
+          "tier": 10
+        },
+        "marksman": {
+          "count": 70560,
+          "fire_crystal_level": 0,
+          "tier": 11
+        }
+      }
+    },
+    "right": {
+      "stat_bonuses": {
+        "infantry_attack": 175.0,
+        "infantry_defense": 175.0,
+        "infantry_health": 175.0,
+        "infantry_lethality": 175.0,
+        "lancer_attack": 175.0,
+        "lancer_defense": 175.0,
+        "lancer_health": 175.0,
+        "lancer_lethality": 175.0,
+        "marksman_attack": 175.0,
+        "marksman_defense": 175.0,
+        "marksman_health": 175.0,
+        "marksman_lethality": 175.0
+      },
+      "troops": {
+        "infantry": {
+          "count": 60666,
+          "fire_crystal_level": 0,
+          "tier": 10
+        },
+        "lancer": {
+          "count": 60666,
+          "fire_crystal_level": 0,
+          "tier": 10
+        },
+        "marksman": {
+          "count": 60666,
+          "fire_crystal_level": 0,
+          "tier": 10
+        }
+      }
+    }
+  },
+  "Screenshot 2026-03-25 224629.png": {
+    "left": {
+      "stat_bonuses": {
+        "infantry_attack": 810.8,
+        "infantry_defense": 810.8,
+        "infantry_health": 813.7,
+        "infantry_lethality": 627.3,
+        "lancer_attack": 810.8,
+        "lancer_defense": 810.8,
+        "lancer_health": 630.1,
+        "lancer_lethality": 794.1,
+        "marksman_attack": 810.8,
+        "marksman_defense": 810.8,
+        "marksman_health": 630.5,
+        "marksman_lethality": 797.9
+      },
+      "troops": {
+        "infantry": {
+          "count": 75500,
+          "fire_crystal_level": 0,
+          "tier": 10
+        },
+        "lancer": {
+          "count": 37500,
+          "fire_crystal_level": 0,
+          "tier": 10
+        },
+        "marksman": {
+          "count": 52000,
+          "fire_crystal_level": 0,
+          "tier": 10
+        }
+      }
+    },
+    "right": {
+      "stat_bonuses": {
+        "infantry_attack": 700.2,
+        "infantry_defense": 700.2,
+        "infantry_health": 924.1,
+        "infantry_lethality": 924.1,
+        "lancer_attack": 700.2,
+        "lancer_defense": 700.2,
+        "lancer_health": 924.1,
+        "lancer_lethality": 924.1,
+        "marksman_attack": 700.2,
+        "marksman_defense": 700.2,
+        "marksman_health": 924.1,
+        "marksman_lethality": 924.1
+      },
+      "troops": {
+        "infantry": {
+          "count": 88000,
+          "fire_crystal_level": 0,
+          "tier": 10
+        },
+        "lancer": {
+          "count": 44000,
+          "fire_crystal_level": 0,
+          "tier": 10
+        },
+        "marksman": {
+          "count": 33000,
+          "fire_crystal_level": 0,
+          "tier": 10
+        }
+      }
+    }
+  },
+  "Screenshot 2026-03-25 231733.png": {
+    "left": {
+      "stat_bonuses": {
+        "infantry_attack": 99.0,
+        "infantry_defense": 99.0,
+        "infantry_health": 755.7,
+        "infantry_lethality": 755.7,
+        "lancer_attack": 99.0,
+        "lancer_defense": 99.0,
+        "lancer_health": 755.7,
+        "lancer_lethality": 755.7,
+        "marksman_attack": 99.0,
+        "marksman_defense": 99.0,
+        "marksman_health": 755.7,
+        "marksman_lethality": 755.7
+      },
+      "troops": {
+        "infantry": {
+          "count": 90000,
+          "fire_crystal_level": 0,
+          "tier": 10
+        },
+        "lancer": {
+          "count": 20000,
+          "fire_crystal_level": 0,
+          "tier": 10
+        },
+        "marksman": {
+          "count": 40000,
+          "fire_crystal_level": 0,
+          "tier": 10
+        }
+      }
+    },
+    "right": {
+      "stat_bonuses": {
+        "infantry_attack": 109.5,
+        "infantry_defense": 109.5,
+        "infantry_health": 827.0,
+        "infantry_lethality": 827.0,
+        "lancer_attack": 109.5,
+        "lancer_defense": 109.5,
+        "lancer_health": 827.0,
+        "lancer_lethality": 827.0,
+        "marksman_attack": 109.5,
+        "marksman_defense": 109.5,
+        "marksman_health": 827.0,
+        "marksman_lethality": 827.0
+      },
+      "troops": {
+        "infantry": {
+          "count": 50000,
+          "fire_crystal_level": 0,
+          "tier": 10
+        },
+        "lancer": {
+          "count": 50000,
+          "fire_crystal_level": 0,
+          "tier": 10
+        },
+        "marksman": {
+          "count": 50000,
+          "fire_crystal_level": 0,
+          "tier": 10
+        }
+      }
+    }
+  },
+  "Screenshot 2026-04-08 082435.png": {
+    "left": {
+      "stat_bonuses": {
+        "infantry_attack": 99.0,
+        "infantry_defense": 99.0,
+        "infantry_health": 755.7,
+        "infantry_lethality": 755.7,
+        "lancer_attack": 99.0,
+        "lancer_defense": 99.0,
+        "lancer_health": 755.7,
+        "lancer_lethality": 755.7,
+        "marksman_attack": 99.0,
+        "marksman_defense": 99.0,
+        "marksman_health": 755.7,
+        "marksman_lethality": 755.7
+      },
+      "troops": {
+        "infantry": {
+          "count": 90000,
+          "fire_crystal_level": 0,
+          "tier": 10
+        },
+        "lancer": {
+          "count": 20000,
+          "fire_crystal_level": 0,
+          "tier": 10
+        },
+        "marksman": {
+          "count": 40000,
+          "fire_crystal_level": 0,
+          "tier": 10
+        }
+      }
+    },
+    "right": {
+      "stat_bonuses": {
+        "infantry_attack": 109.5,
+        "infantry_defense": 109.5,
+        "infantry_health": 827.0,
+        "infantry_lethality": 827.0,
+        "lancer_attack": 109.5,
+        "lancer_defense": 109.5,
+        "lancer_health": 827.0,
+        "lancer_lethality": 827.0,
+        "marksman_attack": 109.5,
+        "marksman_defense": 109.5,
+        "marksman_health": 827.0,
+        "marksman_lethality": 827.0
+      },
+      "troops": {
+        "infantry": {
+          "count": 50000,
+          "fire_crystal_level": 0,
+          "tier": 10
+        },
+        "lancer": {
+          "count": 50000,
+          "fire_crystal_level": 0,
+          "tier": 10
+        },
+        "marksman": {
+          "count": 50000,
+          "fire_crystal_level": 0,
+          "tier": 10
+        }
+      }
+    }
+  },
+  "Screenshot 2026-04-09 001349.png": {
+    "left": {
+      "stat_bonuses": {
+        "infantry_attack": 0.0,
+        "infantry_defense": 0.0,
+        "infantry_health": 0.0,
+        "infantry_lethality": 0.0,
+        "lancer_attack": 0.0,
+        "lancer_defense": 0.0,
+        "lancer_health": 0.0,
+        "lancer_lethality": 0.0,
+        "marksman_attack": 0.0,
+        "marksman_defense": 0.0,
+        "marksman_health": 0.0,
+        "marksman_lethality": 0.0
+      },
+      "troops": {
+        "infantry": {
+          "count": 81000,
+          "fire_crystal_level": 0,
+          "tier": 10
+        },
+        "lancer": {
+          "count": 16500,
+          "fire_crystal_level": 0,
+          "tier": 10
+        },
+        "marksman": {
+          "count": 52500,
+          "fire_crystal_level": 0,
+          "tier": 10
+        }
+      }
+    },
+    "right": {
+      "stat_bonuses": {
+        "infantry_attack": 0.5,
+        "infantry_defense": 0.5,
+        "infantry_health": 3.0,
+        "infantry_lethality": 3.0,
+        "lancer_attack": 0.5,
+        "lancer_defense": 0.5,
+        "lancer_health": 3.0,
+        "lancer_lethality": 3.0,
+        "marksman_attack": 0.5,
+        "marksman_defense": 0.5,
+        "marksman_health": 3.0,
+        "marksman_lethality": 3.0
+      },
+      "troops": {
+        "infantry": {
+          "count": 50000,
+          "fire_crystal_level": 0,
+          "tier": 10
+        },
+        "lancer": {
+          "count": 50000,
+          "fire_crystal_level": 0,
+          "tier": 10
+        },
+        "marksman": {
+          "count": 50000,
+          "fire_crystal_level": 0,
+          "tier": 10
+        }
+      }
+    }
+  },
+  "Screenshot 2026-04-11 004803.png": {
+    "left": {
+      "stat_bonuses": {
+        "infantry_attack": 32.5,
+        "infantry_defense": 39.3,
+        "infantry_health": 29.8,
+        "infantry_lethality": 23.3,
+        "lancer_attack": 37.5,
+        "lancer_defense": 34.0,
+        "lancer_health": 20.8,
+        "lancer_lethality": 29.8,
+        "marksman_attack": 41.5,
+        "marksman_defense": 33.8,
+        "marksman_health": 20.8,
+        "marksman_lethality": 29.8
+      },
+      "troops": {
+        "infantry": {
+          "count": 73728,
+          "fire_crystal_level": 0,
+          "tier": 10
+        },
+        "lancer": {
+          "count": 23040,
+          "fire_crystal_level": 0,
+          "tier": 10
+        },
+        "marksman": {
+          "count": 56832,
+          "fire_crystal_level": 0,
+          "tier": 10
+        }
+      }
+    },
+    "right": {
+      "stat_bonuses": {
+        "infantry_attack": 38.0,
+        "infantry_defense": 38.0,
+        "infantry_health": 38.0,
+        "infantry_lethality": 38.0,
+        "lancer_attack": 38.0,
+        "lancer_defense": 38.0,
+        "lancer_health": 38.0,
+        "lancer_lethality": 38.0,
+        "marksman_attack": 38.0,
+        "marksman_defense": 38.0,
+        "marksman_health": 38.0,
+        "marksman_lethality": 38.0
+      },
+      "troops": {
+        "infantry": {
+          "count": 51282,
+          "fire_crystal_level": 0,
+          "tier": 10
+        },
+        "lancer": {
+          "count": 51282,
+          "fire_crystal_level": 0,
+          "tier": 10
+        },
+        "marksman": {
+          "count": 51282,
+          "fire_crystal_level": 0,
+          "tier": 10
+        }
+      }
+    }
+  },
+  "Screenshot 2026-04-15 074256.png": {
+    "left": {
+      "stat_bonuses": {
+        "infantry_attack": 1863.1,
+        "infantry_defense": 1869.1,
+        "infantry_health": 1574.8,
+        "infantry_lethality": 1523.9,
+        "lancer_attack": 1767.0,
+        "lancer_defense": 1773.0,
+        "lancer_health": 1480.7,
+        "lancer_lethality": 1580.0,
+        "marksman_attack": 1863.1,
+        "marksman_defense": 1869.1,
+        "marksman_health": 1499.0,
+        "marksman_lethality": 1597.7
+      },
+      "troops": {
+        "infantry": {
+          "count": 95296,
+          "fire_crystal_level": 8,
+          "tier": 11
+        },
+        "lancer": {
+          "count": 15817,
+          "fire_crystal_level": 8,
+          "tier": 11
+        },
+        "marksman": {
+          "count": 70124,
+          "fire_crystal_level": 8,
+          "tier": 11
+        }
+      }
+    },
+    "right": {
+      "stat_bonuses": {
+        "infantry_attack": 1023.7,
+        "infantry_defense": 957.2,
+        "infantry_health": 540.0,
+        "infantry_lethality": 558.3,
+        "lancer_attack": 718.9,
+        "lancer_defense": 696.4,
+        "lancer_health": 484.7,
+        "lancer_lethality": 502.6,
+        "marksman_attack": 1012.4,
+        "marksman_defense": 928.4,
+        "marksman_health": 530.6,
+        "marksman_lethality": 596.9
+      },
+      "troops": {
+        "infantry": {
+          "count": 54536,
+          "fire_crystal_level": 6,
+          "tier": 10
+        },
+        "lancer": {
+          "count": 54537,
+          "fire_crystal_level": 6,
+          "tier": 10
+        },
+        "marksman": {
+          "count": 54537,
+          "fire_crystal_level": 6,
+          "tier": 10
+        }
+      }
+    }
+  },
+  "Screenshot 2026-04-15 082156.png": {
+    "left": {
+      "stat_bonuses": {
+        "infantry_attack": 1382.9,
+        "infantry_defense": 1388.8,
+        "infantry_health": 987.6,
+        "infantry_lethality": 926.0,
+        "lancer_attack": 1300.0,
+        "lancer_defense": 1306.0,
+        "lancer_health": 908.8,
+        "lancer_lethality": 1004.7,
+        "marksman_attack": 1362.9,
+        "marksman_defense": 1368.8,
+        "marksman_health": 910.8,
+        "marksman_lethality": 1003.2
+      },
+      "troops": {
+        "infantry": {
+          "count": 63936,
+          "fire_crystal_level": 8,
+          "tier": 11
+        },
+        "lancer": {
+          "count": 63937,
+          "fire_crystal_level": 8,
+          "tier": 11
+        },
+        "marksman": {
+          "count": 63937,
+          "fire_crystal_level": 8,
+          "tier": 11
+        }
+      }
+    },
+    "right": {
+      "stat_bonuses": {
+        "infantry_attack": 645.1,
+        "infantry_defense": 626.3,
+        "infantry_health": 364.8,
+        "infantry_lethality": 379.7,
+        "lancer_attack": 529.3,
+        "lancer_defense": 495.8,
+        "lancer_health": 457.6,
+        "lancer_lethality": 406.8,
+        "marksman_attack": 598.0,
+        "marksman_defense": 586.7,
+        "marksman_health": 307.3,
+        "marksman_lethality": 305.6
+      },
+      "troops": {
+        "infantry": {
+          "count": 145043,
+          "fire_crystal_level": 3,
+          "tier": 10
+        },
+        "lancer": {
+          "count": 163937,
+          "fire_crystal_level": 4,
+          "tier": 10
+        },
+        "marksman": {
+          "count": 148777,
+          "fire_crystal_level": 3,
+          "tier": 10
+        }
+      }
+    }
+  },
+  "Screenshot 2026-04-18 050010.png": {
+    "left": {
+      "stat_bonuses": {
+        "infantry_attack": 219.0,
+        "infantry_defense": 219.0,
+        "infantry_health": 184.0,
+        "infantry_lethality": 184.0,
+        "lancer_attack": 219.0,
+        "lancer_defense": 219.0,
+        "lancer_health": 184.0,
+        "lancer_lethality": 184.0,
+        "marksman_attack": 219.0,
+        "marksman_defense": 219.0,
+        "marksman_health": 184.0,
+        "marksman_lethality": 184.0
+      },
+      "troops": {
+        "infantry": {
+          "count": 96000,
+          "fire_crystal_level": 0,
+          "tier": 11
+        },
+        "lancer": {
+          "count": 36000,
+          "fire_crystal_level": 0,
+          "tier": 11
+        },
+        "marksman": {
+          "count": 56200,
+          "fire_crystal_level": 0,
+          "tier": 11
+        }
+      }
+    },
+    "right": {
+      "stat_bonuses": {
+        "infantry_attack": 242.0,
+        "infantry_defense": 242.0,
+        "infantry_health": 242.0,
+        "infantry_lethality": 242.0,
+        "lancer_attack": 242.0,
+        "lancer_defense": 242.0,
+        "lancer_health": 242.0,
+        "lancer_lethality": 242.0,
+        "marksman_attack": 242.0,
+        "marksman_defense": 242.0,
+        "marksman_health": 242.0,
+        "marksman_lethality": 242.0
+      },
+      "troops": {
+        "infantry": {
+          "count": 61866,
+          "fire_crystal_level": 0,
+          "tier": 10
+        },
+        "lancer": {
+          "count": 61868,
+          "fire_crystal_level": 0,
+          "tier": 10
+        },
+        "marksman": {
+          "count": 61866,
+          "fire_crystal_level": 0,
+          "tier": 10
+        }
+      }
+    }
+  },
+  "Screenshot 2026-04-20 050746.png": {
+    "left": {
+      "stat_bonuses": {
+        "infantry_attack": 1650.3,
+        "infantry_defense": 1658.9,
+        "infantry_health": 1340.3,
+        "infantry_lethality": 1265.7,
+        "lancer_attack": 1650.3,
+        "lancer_defense": 1658.9,
+        "lancer_health": 1245.1,
+        "lancer_lethality": 1367.5,
+        "marksman_attack": 1563.6,
+        "marksman_defense": 1572.2,
+        "marksman_health": 1213.1,
+        "marksman_lethality": 1334.7
+      },
+      "troops": {
+        "infantry": {
+          "count": 143939,
+          "fire_crystal_level": 8,
+          "tier": 11
+        },
+        "lancer": {
+          "count": 104233,
+          "fire_crystal_level": 8,
+          "tier": 11
+        },
+        "marksman": {
+          "count": null,
+          "fire_crystal_level": null,
+          "tier": null
+        }
+      }
+    },
+    "right": {
+      "stat_bonuses": {
+        "infantry_attack": 1465.1,
+        "infantry_defense": 1383.1,
+        "infantry_health": 1198.4,
+        "infantry_lethality": 1354.4,
+        "lancer_attack": 1507.5,
+        "lancer_defense": 1443.1,
+        "lancer_health": 1075.9,
+        "lancer_lethality": 1224.0,
+        "marksman_attack": 1443.6,
+        "marksman_defense": 1321.9,
+        "marksman_health": 1223.6,
+        "marksman_lethality": 1347.9
+      },
+      "troops": {
+        "infantry": {
+          "count": 38432,
+          "fire_crystal_level": 8,
+          "tier": 11
+        },
+        "lancer": {
+          "count": 19262,
+          "fire_crystal_level": 8,
+          "tier": 5
+        },
+        "marksman": {
+          "count": 127047,
+          "fire_crystal_level": 8,
+          "tier": 11
+        }
+      }
+    }
+  },
+  "Screenshot 2026-04-20 050818.png": {
+    "left": {
+      "stat_bonuses": {
+        "infantry_attack": 1633.2,
+        "infantry_defense": 1518.0,
+        "infantry_health": 1261.4,
+        "infantry_lethality": 1260.9,
+        "lancer_attack": 1586.5,
+        "lancer_defense": 1474.6,
+        "lancer_health": 1152.4,
+        "lancer_lethality": 1354.1,
+        "marksman_attack": 1516.4,
+        "marksman_defense": 1409.5,
+        "marksman_health": 1117.2,
+        "marksman_lethality": 1316.1
+      },
+      "troops": {
+        "infantry": {
+          "count": 410856,
+          "fire_crystal_level": 8,
+          "tier": 11
+        },
+        "lancer": {
+          "count": 141,
+          "fire_crystal_level": 8,
+          "tier": 11
+        },
+        "marksman": {
+          "count": 713921,
+          "fire_crystal_level": 8,
+          "tier": 11
+        }
+      }
+    },
+    "right": {
+      "stat_bonuses": {
+        "infantry_attack": 1230.1,
+        "infantry_defense": 1231.9,
+        "infantry_health": 757.4,
+        "infantry_lethality": 856.5,
+        "lancer_attack": 1123.1,
+        "lancer_defense": 1157.1,
+        "lancer_health": 711.8,
+        "lancer_lethality": 756.8,
+        "marksman_attack": 1232.4,
+        "marksman_defense": 1224.1,
+        "marksman_health": 854.7,
+        "marksman_lethality": 932.4
+      },
+      "troops": {
+        "infantry": {
+          "count": 25072,
+          "fire_crystal_level": 8,
+          "tier": 11
+        },
+        "lancer": {
+          "count": 97162,
+          "fire_crystal_level": 8,
+          "tier": 11
+        },
+        "marksman": {
+          "count": 97162,
+          "fire_crystal_level": 8,
+          "tier": 11
+        }
+      }
+    }
+  },
+  "Screenshot 2026-04-20 081113.png": {
+    "left": {
+      "stat_bonuses": {
+        "infantry_attack": 1858.1,
+        "infantry_defense": 1869.1,
+        "infantry_health": 1658.1,
+        "infantry_lethality": 1594.5,
+        "lancer_attack": 1607.9,
+        "lancer_defense": 1618.9,
+        "lancer_health": 1518.0,
+        "lancer_lethality": 1611.9,
+        "marksman_attack": 1858.1,
+        "marksman_defense": 1869.1,
+        "marksman_health": 1578.2,
+        "marksman_lethality": 1671.5
+      },
+      "troops": {
+        "infantry": {
+          "count": 92068,
+          "fire_crystal_level": 8,
+          "tier": 11
+        },
+        "lancer": {
+          "count": 7673,
+          "fire_crystal_level": 8,
+          "tier": 11
+        },
+        "marksman": {
+          "count": 92069,
+          "fire_crystal_level": 8,
+          "tier": 11
+        }
+      }
+    },
+    "right": {
+      "stat_bonuses": {
+        "infantry_attack": 1426.7,
+        "infantry_defense": 1644.5,
+        "infantry_health": 1237.7,
+        "infantry_lethality": 1455.3,
+        "lancer_attack": 1379.0,
+        "lancer_defense": 1613.7,
+        "lancer_health": 1116.7,
+        "lancer_lethality": 1363.3,
+        "marksman_attack": 1387.2,
+        "marksman_defense": 1618.6,
+        "marksman_health": 1103.7,
+        "marksman_lethality": 1316.4
+      },
+      "troops": {
+        "infantry": {
+          "count": 1005074,
+          "fire_crystal_level": 6,
+          "tier": 10
+        },
+        "lancer": {
+          "count": 320200,
+          "fire_crystal_level": 6,
+          "tier": 10
+        },
+        "marksman": {
+          "count": 14730,
+          "fire_crystal_level": 6,
+          "tier": 10
+        }
+      }
+    }
+  },
+  "Screenshot 2026-04-20 213954.png": {
+    "left": {
+      "stat_bonuses": {
+        "infantry_attack": 1736.7,
+        "infantry_defense": 1746.4,
+        "infantry_health": 2016.2,
+        "infantry_lethality": 2167.7,
+        "lancer_attack": 1769.2,
+        "lancer_defense": 1778.9,
+        "lancer_health": 1926.2,
+        "lancer_lethality": 2285.5,
+        "marksman_attack": 2040.3,
+        "marksman_defense": 2049.9,
+        "marksman_health": 2004.4,
+        "marksman_lethality": 2372.8
+      },
+      "troops": {
+        "infantry": {
+          "count": 759030,
+          "fire_crystal_level": 7,
+          "tier": 10
+        },
+        "lancer": {
+          "count": 89713,
+          "fire_crystal_level": 8,
+          "tier": 10
+        },
+        "marksman": {
+          "count": 867177,
+          "fire_crystal_level": 7,
+          "tier": 10
+        }
+      }
+    },
+    "right": {
+      "stat_bonuses": {
+        "infantry_attack": 2045.0,
+        "infantry_defense": 2039.2,
+        "infantry_health": 2092.5,
+        "infantry_lethality": 2092.9,
+        "lancer_attack": 1944.2,
+        "lancer_defense": 1935.7,
+        "lancer_health": 2060.8,
+        "lancer_lethality": 2068.8,
+        "marksman_attack": 2046.1,
+        "marksman_defense": 2031.7,
+        "marksman_health": 2093.4,
+        "marksman_lethality": 2100.3
+      },
+      "troops": {
+        "infantry": {
+          "count": 731618,
+          "fire_crystal_level": 7,
+          "tier": 10
+        },
+        "lancer": {
+          "count": 319320,
+          "fire_crystal_level": 7,
+          "tier": 10
+        },
+        "marksman": {
+          "count": 433214,
+          "fire_crystal_level": 7,
+          "tier": 10
+        }
+      }
+    }
+  },
+  "Screenshot 2026-04-20 234516.png": {
+    "left": {
+      "stat_bonuses": {
+        "infantry_attack": 2000.1,
+        "infantry_defense": 1873.7,
+        "infantry_health": 1825.2,
+        "infantry_lethality": 1846.6,
+        "lancer_attack": 2024.9,
+        "lancer_defense": 1807.4,
+        "lancer_health": 1650.4,
+        "lancer_lethality": 1943.4,
+        "marksman_attack": 1852.0,
+        "marksman_defense": 1635.7,
+        "marksman_health": 1618.8,
+        "marksman_lethality": 1958.4
+      },
+      "troops": {
+        "infantry": {
+          "count": 1091893,
+          "fire_crystal_level": 7,
+          "tier": 10
+        },
+        "lancer": {
+          "count": 496576,
+          "fire_crystal_level": 7,
+          "tier": 10
+        },
+        "marksman": {
+          "count": 56879,
+          "fire_crystal_level": 8,
+          "tier": 11
+        }
+      }
+    },
+    "right": {
+      "stat_bonuses": {
+        "infantry_attack": 1927.9,
+        "infantry_defense": 1525.3,
+        "infantry_health": 1758.3,
+        "infantry_lethality": 1987.8,
+        "lancer_attack": 1965.5,
+        "lancer_defense": 1546.3,
+        "lancer_health": 1742.1,
+        "lancer_lethality": 1989.4,
+        "marksman_attack": 2158.1,
+        "marksman_defense": 1709.5,
+        "marksman_health": 1804.9,
+        "marksman_lethality": 2053.1
+      },
+      "troops": {
+        "infantry": {
+          "count": 798393,
+          "fire_crystal_level": 6,
+          "tier": 10
+        },
+        "lancer": {
+          "count": 152749,
+          "fire_crystal_level": 6,
+          "tier": 10
+        },
+        "marksman": {
+          "count": 576930,
+          "fire_crystal_level": 5,
+          "tier": 10
+        }
+      }
+    }
+  },
+  "Screenshot 2026-04-21 070955.png": {
+    "left": {
+      "stat_bonuses": {
+        "infantry_attack": 1736.7,
+        "infantry_defense": 1746.4,
+        "infantry_health": 2016.2,
+        "infantry_lethality": 2167.7,
+        "lancer_attack": 1769.2,
+        "lancer_defense": 1778.9,
+        "lancer_health": 1926.2,
+        "lancer_lethality": 2285.5,
+        "marksman_attack": 2040.3,
+        "marksman_defense": 2049.9,
+        "marksman_health": 2004.4,
+        "marksman_lethality": 2372.8
+      },
+      "troops": {
+        "infantry": {
+          "count": 759030,
+          "fire_crystal_level": 7,
+          "tier": 10
+        },
+        "lancer": {
+          "count": 89713,
+          "fire_crystal_level": 8,
+          "tier": 10
+        },
+        "marksman": {
+          "count": 867177,
+          "fire_crystal_level": 7,
+          "tier": 10
+        }
+      }
+    },
+    "right": {
+      "stat_bonuses": {
+        "infantry_attack": 2045.0,
+        "infantry_defense": 2039.2,
+        "infantry_health": 2092.5,
+        "infantry_lethality": 2092.9,
+        "lancer_attack": 1944.2,
+        "lancer_defense": 1935.7,
+        "lancer_health": 2060.8,
+        "lancer_lethality": 2068.8,
+        "marksman_attack": 2046.1,
+        "marksman_defense": 2031.7,
+        "marksman_health": 2093.4,
+        "marksman_lethality": 2100.3
+      },
+      "troops": {
+        "infantry": {
+          "count": 731618,
+          "fire_crystal_level": 7,
+          "tier": 10
+        },
+        "lancer": {
+          "count": 319320,
+          "fire_crystal_level": 7,
+          "tier": 10
+        },
+        "marksman": {
+          "count": 433214,
+          "fire_crystal_level": 7,
+          "tier": 10
+        }
+      }
+    }
+  },
+  "Screenshot 2026-04-21 081705.png": {
+    "left": {
+      "stat_bonuses": {
+        "infantry_attack": 1858.1,
+        "infantry_defense": 1869.1,
+        "infantry_health": 1658.1,
+        "infantry_lethality": 1594.5,
+        "lancer_attack": 1607.9,
+        "lancer_defense": 1618.9,
+        "lancer_health": 1518.0,
+        "lancer_lethality": 1611.9,
+        "marksman_attack": 1858.1,
+        "marksman_defense": 1869.1,
+        "marksman_health": 1578.2,
+        "marksman_lethality": 1671.5
+      },
+      "troops": {
+        "infantry": {
+          "count": 92068,
+          "fire_crystal_level": 8,
+          "tier": 11
+        },
+        "lancer": {
+          "count": 7673,
+          "fire_crystal_level": 8,
+          "tier": 11
+        },
+        "marksman": {
+          "count": 92069,
+          "fire_crystal_level": 8,
+          "tier": 11
+        }
+      }
+    },
+    "right": {
+      "stat_bonuses": {
+        "infantry_attack": 1426.7,
+        "infantry_defense": 1644.5,
+        "infantry_health": 1237.7,
+        "infantry_lethality": 1455.3,
+        "lancer_attack": 1379.0,
+        "lancer_defense": 1613.7,
+        "lancer_health": 1116.7,
+        "lancer_lethality": 1363.3,
+        "marksman_attack": 1387.2,
+        "marksman_defense": 1618.6,
+        "marksman_health": 1103.7,
+        "marksman_lethality": 1316.4
+      },
+      "troops": {
+        "infantry": {
+          "count": 788261,
+          "fire_crystal_level": 6,
+          "tier": 10
+        },
+        "lancer": {
+          "count": 322150,
+          "fire_crystal_level": 6,
+          "tier": 10
+        },
+        "marksman": {
+          "count": 26439,
+          "fire_crystal_level": 3,
+          "tier": 10
+        }
+      }
+    }
+  },
+  "Screenshot 2026-04-29 082010.png": {
+    "left": {
+      "stat_bonuses": {
+        "infantry_attack": 1736.7,
+        "infantry_defense": 1746.4,
+        "infantry_health": 2016.2,
+        "infantry_lethality": 2167.7,
+        "lancer_attack": 1769.2,
+        "lancer_defense": 1778.9,
+        "lancer_health": 1926.2,
+        "lancer_lethality": 2285.5,
+        "marksman_attack": 2040.3,
+        "marksman_defense": 2049.9,
+        "marksman_health": 2004.4,
+        "marksman_lethality": 2372.8
+      },
+      "troops": {
+        "infantry": {
+          "count": 759030,
+          "fire_crystal_level": 7,
+          "tier": 10
+        },
+        "lancer": {
+          "count": 89713,
+          "fire_crystal_level": 8,
+          "tier": 10
+        },
+        "marksman": {
+          "count": 867177,
+          "fire_crystal_level": 7,
+          "tier": 10
+        }
+      }
+    },
+    "right": {
+      "stat_bonuses": {
+        "infantry_attack": 2045.0,
+        "infantry_defense": 2039.2,
+        "infantry_health": 2092.5,
+        "infantry_lethality": 2092.9,
+        "lancer_attack": 1944.2,
+        "lancer_defense": 1935.7,
+        "lancer_health": 2060.8,
+        "lancer_lethality": 2068.8,
+        "marksman_attack": 2046.1,
+        "marksman_defense": 2031.7,
+        "marksman_health": 2093.4,
+        "marksman_lethality": 2100.3
+      },
+      "troops": {
+        "infantry": {
+          "count": 731618,
+          "fire_crystal_level": 7,
+          "tier": 10
+        },
+        "lancer": {
+          "count": 319320,
+          "fire_crystal_level": 7,
+          "tier": 10
+        },
+        "marksman": {
+          "count": 433214,
+          "fire_crystal_level": 7,
+          "tier": 10
+        }
+      }
+    }
+  },
+  "Screenshot 2026-04-29 082023.png": {
+    "left": {
+      "stat_bonuses": {
+        "infantry_attack": 1853.0,
+        "infantry_defense": 1873.6,
+        "infantry_health": 1838.8,
+        "infantry_lethality": 1784.2,
+        "lancer_attack": 2094.4,
+        "lancer_defense": 2080.8,
+        "lancer_health": 1801.6,
+        "lancer_lethality": 1922.5,
+        "marksman_attack": 1920.2,
+        "marksman_defense": 1895.2,
+        "marksman_health": 1766.1,
+        "marksman_lethality": 1875.1
+      },
+      "troops": {
+        "infantry": {
+          "count": 91204,
+          "fire_crystal_level": 8,
+          "tier": 11
+        },
+        "lancer": {
+          "count": null,
+          "fire_crystal_level": null,
+          "tier": null
+        },
+        "marksman": {
+          "count": 136808,
+          "fire_crystal_level": 8,
+          "tier": 11
+        }
+      }
+    },
+    "right": {
+      "stat_bonuses": {
+        "infantry_attack": 722.1,
+        "infantry_defense": 715.3,
+        "infantry_health": 373.7,
+        "infantry_lethality": 385.0,
+        "lancer_attack": 577.2,
+        "lancer_defense": 546.8,
+        "lancer_health": 289.9,
+        "lancer_lethality": 293.1,
+        "marksman_attack": 774.2,
+        "marksman_defense": 666.3,
+        "marksman_health": 407.9,
+        "marksman_lethality": 434.3
+      },
+      "troops": {
+        "infantry": {
+          "count": 792975,
+          "fire_crystal_level": 5,
+          "tier": 9
+        },
+        "lancer": {
+          "count": 481979,
+          "fire_crystal_level": 5,
+          "tier": 9
+        },
+        "marksman": {
+          "count": 1081525,
+          "fire_crystal_level": 5,
+          "tier": 9
+        }
+      }
+    }
+  },
+  "Screenshot 2026-04-29 082035.png": {
+    "left": {
+      "stat_bonuses": {
+        "infantry_attack": 1971.8,
+        "infantry_defense": 1459.3,
+        "infantry_health": 1938.2,
+        "infantry_lethality": 1725.1,
+        "lancer_attack": 2039.2,
+        "lancer_defense": 1431.3,
+        "lancer_health": 1760.2,
+        "lancer_lethality": 1854.6,
+        "marksman_attack": 2053.9,
+        "marksman_defense": 1431.8,
+        "marksman_health": 1777.3,
+        "marksman_lethality": 1889.0
+      },
+      "troops": {
+        "infantry": {
+          "count": 688719,
+          "fire_crystal_level": 6,
+          "tier": 10
+        },
+        "lancer": {
+          "count": 290776,
+          "fire_crystal_level": 5,
+          "tier": 10
+        },
+        "marksman": {
+          "count": 423437,
+          "fire_crystal_level": 6,
+          "tier": 10
+        }
+      }
+    },
+    "right": {
+      "stat_bonuses": {
+        "infantry_attack": 1447.1,
+        "infantry_defense": 1092.9,
+        "infantry_health": 1114.8,
+        "infantry_lethality": 1183.3,
+        "lancer_attack": 1154.3,
+        "lancer_defense": 898.4,
+        "lancer_health": 908.0,
+        "lancer_lethality": 924.1,
+        "marksman_attack": 1449.4,
+        "marksman_defense": 1110.1,
+        "marksman_health": 995.6,
+        "marksman_lethality": 1096.9
+      },
+      "troops": {
+        "infantry": {
+          "count": 671633,
+          "fire_crystal_level": 6,
+          "tier": 10
+        },
+        "lancer": {
+          "count": 487499,
+          "fire_crystal_level": 5,
+          "tier": 10
+        },
+        "marksman": {
+          "count": 260368,
+          "fire_crystal_level": 6,
+          "tier": 10
+        }
+      }
+    }
+  },
+  "Screenshot 2026-04-29 082048.png": {
+    "left": {
+      "stat_bonuses": {
+        "infantry_attack": 2000.1,
+        "infantry_defense": 1873.7,
+        "infantry_health": 1825.2,
+        "infantry_lethality": 1846.6,
+        "lancer_attack": 2024.9,
+        "lancer_defense": 1807.4,
+        "lancer_health": 1650.4,
+        "lancer_lethality": 1943.4,
+        "marksman_attack": 1852.0,
+        "marksman_defense": 1635.7,
+        "marksman_health": 1618.8,
+        "marksman_lethality": 1958.4
+      },
+      "troops": {
+        "infantry": {
+          "count": 1091893,
+          "fire_crystal_level": 7,
+          "tier": 10
+        },
+        "lancer": {
+          "count": 496576,
+          "fire_crystal_level": 7,
+          "tier": 10
+        },
+        "marksman": {
+          "count": 56879,
+          "fire_crystal_level": 8,
+          "tier": 11
+        }
+      }
+    },
+    "right": {
+      "stat_bonuses": {
+        "infantry_attack": 1927.9,
+        "infantry_defense": 1525.3,
+        "infantry_health": 1758.3,
+        "infantry_lethality": 1987.8,
+        "lancer_attack": 1965.5,
+        "lancer_defense": 1546.3,
+        "lancer_health": 1742.1,
+        "lancer_lethality": 1989.4,
+        "marksman_attack": 2158.1,
+        "marksman_defense": 1709.5,
+        "marksman_health": 1804.9,
+        "marksman_lethality": 2053.1
+      },
+      "troops": {
+        "infantry": {
+          "count": 798393,
+          "fire_crystal_level": 6,
+          "tier": 10
+        },
+        "lancer": {
+          "count": 152749,
+          "fire_crystal_level": 6,
+          "tier": 10
+        },
+        "marksman": {
+          "count": 576930,
+          "fire_crystal_level": 5,
+          "tier": 10
+        }
+      }
+    }
+  },
+  "Screenshot 2026-04-29 082105.png": {
+    "left": {
+      "stat_bonuses": {
+        "infantry_attack": 2000.1,
+        "infantry_defense": 1873.7,
+        "infantry_health": 1825.2,
+        "infantry_lethality": 1846.6,
+        "lancer_attack": 2024.9,
+        "lancer_defense": 1807.4,
+        "lancer_health": 1650.4,
+        "lancer_lethality": 1943.4,
+        "marksman_attack": 1852.0,
+        "marksman_defense": 1635.7,
+        "marksman_health": 1618.8,
+        "marksman_lethality": 1958.4
+      },
+      "troops": {
+        "infantry": {
+          "count": 1209916,
+          "fire_crystal_level": 7,
+          "tier": 10
+        },
+        "lancer": {
+          "count": 435432,
+          "fire_crystal_level": 7,
+          "tier": 10
+        },
+        "marksman": {
+          "count": null,
+          "fire_crystal_level": null,
+          "tier": null
+        }
+      }
+    },
+    "right": {
+      "stat_bonuses": {
+        "infantry_attack": 1755.0,
+        "infantry_defense": 1320.7,
+        "infantry_health": 1472.3,
+        "infantry_lethality": 1742.6,
+        "lancer_attack": 1662.2,
+        "lancer_defense": 1281.5,
+        "lancer_health": 1330.3,
+        "lancer_lethality": 1657.2,
+        "marksman_attack": 1895.5,
+        "marksman_defense": 1487.6,
+        "marksman_health": 1438.1,
+        "marksman_lethality": 1725.1
+      },
+      "troops": {
+        "infantry": {
+          "count": 680951,
+          "fire_crystal_level": 5,
+          "tier": 10
+        },
+        "lancer": {
+          "count": 176655,
+          "fire_crystal_level": 5,
+          "tier": 10
+        },
+        "marksman": {
+          "count": 498398,
+          "fire_crystal_level": 5,
+          "tier": 10
+        }
+      }
+    }
+  },
+  "Screenshot 2026-04-29 082123.png": {
+    "left": {
+      "stat_bonuses": {
+        "infantry_attack": 1705.2,
+        "infantry_defense": 1270.3,
+        "infantry_health": 1047.0,
+        "infantry_lethality": 1232.4,
+        "lancer_attack": 1772.5,
+        "lancer_defense": 1291.3,
+        "lancer_health": 1010.0,
+        "lancer_lethality": 1278.7,
+        "marksman_attack": 1992.7,
+        "marksman_defense": 1446.9,
+        "marksman_health": 1064.8,
+        "marksman_lethality": 1385.3
+      },
+      "troops": {
+        "infantry": {
+          "count": 793927,
+          "fire_crystal_level": 6,
+          "tier": 10
+        },
+        "lancer": {
+          "count": 354133,
+          "fire_crystal_level": 5,
+          "tier": 10
+        },
+        "marksman": {
+          "count": 481012,
+          "fire_crystal_level": 6,
+          "tier": 10
+        }
+      }
+    },
+    "right": {
+      "stat_bonuses": {
+        "infantry_attack": 1632.4,
+        "infantry_defense": 1852.3,
+        "infantry_health": 2029.1,
+        "infantry_lethality": 1790.1,
+        "lancer_attack": 1706.5,
+        "lancer_defense": 1925.5,
+        "lancer_health": 2025.1,
+        "lancer_lethality": 1804.1,
+        "marksman_attack": 1552.4,
+        "marksman_defense": 1762.2,
+        "marksman_health": 1990.3,
+        "marksman_lethality": 1767.0
+      },
+      "troops": {
+        "infantry": {
+          "count": 282165,
+          "fire_crystal_level": 5,
+          "tier": 10
+        },
+        "lancer": {
+          "count": 550191,
+          "fire_crystal_level": 7,
+          "tier": 10
+        },
+        "marksman": {
+          "count": null,
+          "fire_crystal_level": null,
+          "tier": null
+        }
+      }
+    }
+  },
+  "Screenshot 2026-04-29 082138.png": {
+    "left": {
+      "stat_bonuses": {
+        "infantry_attack": 1636.4,
+        "infantry_defense": 1692.0,
+        "infantry_health": 1620.2,
+        "infantry_lethality": 1569.5,
+        "lancer_attack": 1679.3,
+        "lancer_defense": 1723.7,
+        "lancer_health": 1398.6,
+        "lancer_lethality": 1634.2,
+        "marksman_attack": 1940.9,
+        "marksman_defense": 1890.4,
+        "marksman_health": 1538.9,
+        "marksman_lethality": 1880.4
+      },
+      "troops": {
+        "infantry": {
+          "count": 793603,
+          "fire_crystal_level": 4,
+          "tier": 10
+        },
+        "lancer": {
+          "count": 319891,
+          "fire_crystal_level": 4,
+          "tier": 10
+        },
+        "marksman": {
+          "count": 276436,
+          "fire_crystal_level": 4,
+          "tier": 10
+        }
+      }
+    },
+    "right": {
+      "stat_bonuses": {
+        "infantry_attack": 1651.3,
+        "infantry_defense": 1275.4,
+        "infantry_health": 1513.8,
+        "infantry_lethality": 1705.5,
+        "lancer_attack": 1633.5,
+        "lancer_defense": 1128.0,
+        "lancer_health": 1172.2,
+        "lancer_lethality": 1755.2,
+        "marksman_attack": 2019.1,
+        "marksman_defense": 1442.1,
+        "marksman_health": 1436.9,
+        "marksman_lethality": 2076.3
+      },
+      "troops": {
+        "infantry": {
+          "count": 683911,
+          "fire_crystal_level": 4,
+          "tier": 10
+        },
+        "lancer": {
+          "count": 332088,
+          "fire_crystal_level": 4,
+          "tier": 10
+        },
+        "marksman": {
+          "count": 449362,
+          "fire_crystal_level": 4,
+          "tier": 10
+        }
+      }
+    }
+  },
+  "Screenshot 2026-04-29 082153.png": {
+    "left": {
+      "stat_bonuses": {
+        "infantry_attack": 1636.4,
+        "infantry_defense": 1692.0,
+        "infantry_health": 1620.2,
+        "infantry_lethality": 1569.5,
+        "lancer_attack": 1679.3,
+        "lancer_defense": 1723.7,
+        "lancer_health": 1398.6,
+        "lancer_lethality": 1634.2,
+        "marksman_attack": 1940.9,
+        "marksman_defense": 1890.4,
+        "marksman_health": 1538.9,
+        "marksman_lethality": 1880.4
+      },
+      "troops": {
+        "infantry": {
+          "count": 755283,
+          "fire_crystal_level": 4,
+          "tier": 10
+        },
+        "lancer": {
+          "count": 441895,
+          "fire_crystal_level": 4,
+          "tier": 10
+        },
+        "marksman": {
+          "count": 279204,
+          "fire_crystal_level": 4,
+          "tier": 10
+        }
+      }
+    },
+    "right": {
+      "stat_bonuses": {
+        "infantry_attack": 1651.3,
+        "infantry_defense": 1275.4,
+        "infantry_health": 1513.8,
+        "infantry_lethality": 1705.5,
+        "lancer_attack": 1633.5,
+        "lancer_defense": 1128.0,
+        "lancer_health": 1172.2,
+        "lancer_lethality": 1755.2,
+        "marksman_attack": 2019.1,
+        "marksman_defense": 1442.1,
+        "marksman_health": 1436.9,
+        "marksman_lethality": 2076.3
+      },
+      "troops": {
+        "infantry": {
+          "count": 611613,
+          "fire_crystal_level": 4,
+          "tier": 10
+        },
+        "lancer": {
+          "count": 231200,
+          "fire_crystal_level": 4,
+          "tier": 10
+        },
+        "marksman": {
+          "count": 282588,
+          "fire_crystal_level": 4,
+          "tier": 10
+        }
+      }
+    }
+  },
+  "Screenshot 2026-04-29 082216.png": {
+    "left": {
+      "stat_bonuses": {
+        "infantry_attack": 1491.7,
+        "infantry_defense": 1542.7,
+        "infantry_health": 1706.2,
+        "infantry_lethality": 1653.0,
+        "lancer_attack": 1531.0,
+        "lancer_defense": 1571.7,
+        "lancer_health": 1473.5,
+        "lancer_lethality": 1720.9,
+        "marksman_attack": 1603.9,
+        "marksman_defense": 1554.3,
+        "marksman_health": 1571.7,
+        "marksman_lethality": 1926.1
+      },
+      "troops": {
+        "infantry": {
+          "count": 820115,
+          "fire_crystal_level": 4,
+          "tier": 10
+        },
+        "lancer": {
+          "count": 346533,
+          "fire_crystal_level": 4,
+          "tier": 10
+        },
+        "marksman": {
+          "count": 309359,
+          "fire_crystal_level": 3,
+          "tier": 10
+        }
+      }
+    },
+    "right": {
+      "stat_bonuses": {
+        "infantry_attack": 1504.9,
+        "infantry_defense": 1192.6,
+        "infantry_health": 1268.4,
+        "infantry_lethality": 1737.9,
+        "lancer_attack": 1424.6,
+        "lancer_defense": 1202.6,
+        "lancer_health": 1194.8,
+        "lancer_lethality": 1534.0,
+        "marksman_attack": 1643.3,
+        "marksman_defense": 1380.1,
+        "marksman_health": 1335.9,
+        "marksman_lethality": 1771.1
+      },
+      "troops": {
+        "infantry": {
+          "count": 631079,
+          "fire_crystal_level": 4,
+          "tier": 10
+        },
+        "lancer": {
+          "count": 294068,
+          "fire_crystal_level": 4,
+          "tier": 10
+        },
+        "marksman": {
+          "count": 400017,
+          "fire_crystal_level": 4,
+          "tier": 10
+        }
+      }
+    }
+  },
+  "Screenshot 2026-04-29 082230.png": {
+    "left": {
+      "stat_bonuses": {
+        "infantry_attack": 1836.8,
+        "infantry_defense": 1523.0,
+        "infantry_health": 1835.2,
+        "infantry_lethality": 1569.5,
+        "lancer_attack": 1884.6,
+        "lancer_defense": 1551.6,
+        "lancer_health": 1585.9,
+        "lancer_lethality": 1634.2,
+        "marksman_attack": 1973.3,
+        "marksman_defense": 1534.5,
+        "marksman_health": 1691.1,
+        "marksman_lethality": 1829.6
+      },
+      "troops": {
+        "infantry": {
+          "count": 727507,
+          "fire_crystal_level": 4,
+          "tier": 10
+        },
+        "lancer": {
+          "count": 323692,
+          "fire_crystal_level": 4,
+          "tier": 10
+        },
+        "marksman": {
+          "count": 426145,
+          "fire_crystal_level": 4,
+          "tier": 10
+        }
+      }
+    },
+    "right": {
+      "stat_bonuses": {
+        "infantry_attack": 1511.6,
+        "infantry_defense": 1467.3,
+        "infantry_health": 1261.7,
+        "infantry_lethality": 1344.6,
+        "lancer_attack": 1462.4,
+        "lancer_defense": 1383.1,
+        "lancer_health": 869.5,
+        "lancer_lethality": 1175.4,
+        "marksman_attack": 1522.7,
+        "marksman_defense": 1439.8,
+        "marksman_health": 1068.2,
+        "marksman_lethality": 1662.7
+      },
+      "troops": {
+        "infantry": {
+          "count": 765408,
+          "fire_crystal_level": 4,
+          "tier": 10
+        },
+        "lancer": {
+          "count": 328630,
+          "fire_crystal_level": 4,
+          "tier": 10
+        },
+        "marksman": {
+          "count": 371323,
+          "fire_crystal_level": 4,
+          "tier": 10
+        }
+      }
+    }
+  },
+  "WOS-278-negative-marksman-defense.png": {
+    "left": {
+      "stat_bonuses": {
+        "infantry_attack": 219.0,
+        "infantry_defense": 219.0,
+        "infantry_health": 184.0,
+        "infantry_lethality": 184.0,
+        "lancer_attack": 219.0,
+        "lancer_defense": 219.0,
+        "lancer_health": 184.0,
+        "lancer_lethality": 184.0,
+        "marksman_attack": 219.0,
+        "marksman_defense": 219.0,
+        "marksman_health": 184.0,
+        "marksman_lethality": 184.0
+      },
+      "troops": {
+        "infantry": {
+          "count": 103510,
+          "fire_crystal_level": 0,
+          "tier": 11
+        },
+        "lancer": {
+          "count": 20702,
+          "fire_crystal_level": 0,
+          "tier": 11
+        },
+        "marksman": {
+          "count": 63988,
+          "fire_crystal_level": 0,
+          "tier": 11
+        }
+      }
+    },
+    "right": {
+      "stat_bonuses": {
+        "infantry_attack": 244.0,
+        "infantry_defense": 244.0,
+        "infantry_health": 244.0,
+        "infantry_lethality": 244.0,
+        "lancer_attack": 244.0,
+        "lancer_defense": 244.0,
+        "lancer_health": 244.0,
+        "lancer_lethality": 244.0,
+        "marksman_attack": 244.0,
+        "marksman_defense": 244.0,
+        "marksman_health": 244.0,
+        "marksman_lethality": 244.0
+      },
+      "troops": {
+        "infantry": {
+          "count": 61946,
+          "fire_crystal_level": 0,
+          "tier": 10
+        },
+        "lancer": {
+          "count": 61948,
+          "fire_crystal_level": 0,
+          "tier": 10
+        },
+        "marksman": {
+          "count": 61946,
+          "fire_crystal_level": 0,
+          "tier": 10
+        }
+      }
+    }
+  }
+}

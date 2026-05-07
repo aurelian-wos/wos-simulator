@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sys
 import unittest
 from pathlib import Path
@@ -14,6 +15,7 @@ if str(SCRIPTS) not in sys.path:
 
 import report_stats_parser
 from report_stats_parser import (
+    STAT_NAMES,
     TROOP_TYPES,
     dashboard_warnings_from_result,
     extract_report_stats_and_troops,
@@ -130,49 +132,39 @@ class ReportStatsParserTests(unittest.TestCase):
         self.assertEqual(len(result["right"]["stat_bonuses"]), 12)
         self.assertEqual(result["meta"]["missing_fields"], [])
 
-    def test_dashboard_report_fixtures_fire_crystal_badges(self) -> None:
-        expected_rows = [
-            [0, 0, 0, 0, 0, 0],
-            [0, 0, 0, 0, 0, 0],
-            [0, 0, 0, 0, 0, 0],
-            [0, 0, 0, 0, 0, 0],
-            [0, 0, 0, 0, 0, 0],
-            [0, 0, 0, 0, 0, 0],
-            [8, 8, 8, 6, 6, 6],
-            [8, 8, 8, 3, 4, 3],
-            [0, 0, 0, 0, 0, 0],
-            [8, 8, None, 8, 8, 8],
-            [8, 8, 8, 8, 8, 8],
-            [8, 8, 8, 6, 6, 6],
-            [7, 8, 7, 7, 7, 7],
-            [7, 7, 8, 6, 6, 5],
-            [7, 8, 7, 7, 7, 7],
-            [8, 8, 8, 6, 6, 3],
-            [7, 8, 7, 7, 7, 7],
-            [8, None, 8, 5, 5, 5],
-            [6, 5, 6, 6, 5, 6],
-            [7, 7, 8, 6, 6, 5],
-            [7, 7, None, 5, 5, 5],
-            [6, 5, 6, 5, 7, None],
-            [4, 4, 4, 4, 4, 4],
-            [4, 4, 4, 4, 4, 4],
-            [4, 4, 3, 4, 4, 4],
-            [4, 4, 4, 4, 4, 4],
-            [0, 0, 0, 0, 0, 0],
-        ]
+    def test_dashboard_report_fixtures_parse_all_values(self) -> None:
+        expected_by_report = json.loads((ROOT / "tests" / "fixtures" / "dashboard_report_expected.json").read_text())
         report_paths = sorted((ROOT / "dashboard" / "test_reports").glob("*.png"))
         self.assertEqual([path.name for path in report_paths], sorted(path.name for path in report_paths))
-        self.assertEqual(len(report_paths), len(expected_rows))
+        self.assertEqual(set(path.name for path in report_paths), set(expected_by_report))
 
-        for path, expected in zip(report_paths, expected_rows, strict=True):
+        for path in report_paths:
             with self.subTest(path=path.name):
+                expected = expected_by_report[path.name]
                 result = extract_report_stats_and_troops(path)
-                actual = []
                 for side in ("left", "right"):
+                    typed_troops = {item["type"]: item for item in result[side]["troops"]}
                     for troop_type in TROOP_TYPES:
-                        troop = next((item for item in result[side]["troops"] if item["type"] == troop_type), None)
-                        actual.append(None if troop is None else troop.get("fire_crystal_level", 0))
-                self.assertEqual(actual, expected)
+                        expected_troop = expected[side]["troops"][troop_type]
+                        actual_troop = typed_troops.get(troop_type)
+                        actual = {
+                            "count": None if actual_troop is None else actual_troop.get("count"),
+                            "tier": None if actual_troop is None else actual_troop.get("tier"),
+                            "fire_crystal_level": (
+                                None if actual_troop is None else actual_troop.get("fire_crystal_level", 0)
+                            ),
+                        }
+                        self.assertEqual(actual, expected_troop, f"{side} {troop_type}")
+
+                    for troop_type in TROOP_TYPES:
+                        for stat_name in STAT_NAMES:
+                            field = f"{troop_type}_{stat_name}"
+                            self.assertEqual(
+                                result[side]["stat_bonuses"].get(field),
+                                expected[side]["stat_bonuses"][field],
+                                f"{side} {field}",
+                            )
+                self.assertEqual(result["meta"]["missing_fields"], [])
 
     def test_dashboard_report_fixture_rejects_negative_stat_ocr(self) -> None:
         path = ROOT / "dashboard" / "test_reports" / "WOS-278-negative-marksman-defense.png"
