@@ -56,6 +56,7 @@ MIN_TROOP_AVATAR_SCORE = 0.55
 MIN_FC_BADGE_TEMPLATE_SCORE = 0.80
 
 _rapid_ocr: Any = None
+_fast_rapid_ocr: Any = None
 _fc_badge_templates: list[tuple[int, str, np.ndarray, np.ndarray]] | None = None
 
 
@@ -92,6 +93,26 @@ def _get_rapid() -> Any:
 
         _rapid_ocr = RapidOCR(use_angle_cls=False)
     return _rapid_ocr
+
+
+def _get_fast_rapid() -> Any:
+    """RapidOCR tuned for fixed-size report screenshots.
+
+    The default server detector is accurate but slow for dashboard uploads.
+    Battle report crops are small and axis-aligned, so the mobile detector with
+    a bounded side length keeps fixture accuracy while avoiding the costly 2x
+    full-image enhancement pass in the common path.
+    """
+    global _fast_rapid_ocr
+    if _fast_rapid_ocr is None:
+        from ocr import RapidOCR
+        from rapidocr import ModelType
+
+        _fast_rapid_ocr = RapidOCR(
+            use_angle_cls=False,
+            params={"Det.model_type": ModelType.MOBILE, "Det.limit_side_len": 416},
+        )
+    return _fast_rapid_ocr
 
 
 def _normalize_label_text(text: str) -> str:
@@ -166,9 +187,16 @@ def _preprocess_image(img_bgr: np.ndarray, *, scale: float = 1.0, sharpen: bool 
     return processed
 
 
-def _ocr_pass(img_bgr: np.ndarray, *, scale: float = 1.0, sharpen: bool = False, clahe: bool = False) -> list[OCRItem]:
+def _ocr_pass(
+    img_bgr: np.ndarray,
+    *,
+    scale: float = 1.0,
+    sharpen: bool = False,
+    clahe: bool = False,
+    fast: bool = False,
+) -> list[OCRItem]:
     processed = _preprocess_image(img_bgr, scale=scale, sharpen=sharpen, clahe=clahe)
-    result = _get_rapid()(processed)
+    result = (_get_fast_rapid() if fast else _get_rapid())(processed)
     if not result or not result[0]:
         return []
     items: list[OCRItem] = []
@@ -1152,17 +1180,27 @@ def extract_report_stats_and_troops(image_path: str | Path, *, debug_outdir: str
         raise FileNotFoundError(f"Could not read image: {image_path}")
     image_height, image_width = img_bgr.shape[:2]
 
-    # Enhancement is only for OCR text boxes. Template matching must use the
-    # original image so avatar and badge colours stay comparable to templates.
-    enhanced = _ocr_pass(img_bgr, scale=2.0, sharpen=True, clahe=True)
-    strategies = ["rapidocr:enhanced"]
+    # Template matching must use the original image so avatar and badge colours
+    # stay comparable to templates. The common OCR path uses a faster detector
+    # on the original report; enhanced/server OCR is retained as a fallback for
+    # noisy or unfamiliar crops.
+    fast_original = _ocr_pass(img_bgr, fast=True)
+    strategies = ["rapidocr:fast-original"]
     try:
-        result = extract_values_from_ocr_items(enhanced, image_width=image_width, image_height=image_height)
+        result = extract_values_from_ocr_items(fast_original, image_width=image_width, image_height=image_height)
     except ValueError:
         result = None
 
     if result is None:
-        strategies.append("targeted-fallback")
+        strategies.append("rapidocr:enhanced")
+        enhanced = _ocr_pass(img_bgr, scale=2.0, sharpen=True, clahe=True)
+        try:
+            result = extract_values_from_ocr_items(enhanced, image_width=image_width, image_height=image_height)
+        except ValueError:
+            result = None
+
+    if result is None:
+        strategies.append("rapidocr:original")
         original = _ocr_pass(img_bgr)
         result = extract_values_from_ocr_items(original, image_width=image_width, image_height=image_height)
 
