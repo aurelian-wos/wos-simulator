@@ -22,11 +22,21 @@ export interface SimulateSidePayload {
   troop_types: Record<TroopCategory, string>;
   heroes: Record<TroopCategory, SimulateHeroPayload>;
   joiners: SimulateJoinerPayload[];
+  stat_modifiers?: SimulateStatModifiersPayload;
   stats: {
     inf: [number, number, number, number];
     lanc: [number, number, number, number];
     mark: [number, number, number, number];
   };
+}
+
+export interface SimulateStatModifiersPayload {
+  attack: number;
+  defense: number;
+  lethality: number;
+  health: number;
+  enemy_attack: number;
+  enemy_defense: number;
 }
 
 export interface SimulateRequestPayload {

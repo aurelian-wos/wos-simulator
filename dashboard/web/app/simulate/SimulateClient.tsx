@@ -58,6 +58,7 @@ import {
   SimulateApiResponse,
   SimulateRequestPayload,
   SimulateSidePayload,
+  SimulateStatModifiersPayload,
 } from "@/lib/simulate-run";
 import type { PlayerStatPreset, StatPresetValues } from "@/lib/stat-presets";
 
@@ -75,6 +76,25 @@ const STAT_SHORT_LABELS: Record<StatName, string> = {
   defense: "Def",
   lethality: "Leth",
   health: "HP",
+};
+const STAT_MODIFIER_NAMES = [
+  "attack",
+  "defense",
+  "lethality",
+  "health",
+  "enemy_attack",
+  "enemy_defense",
+] as const;
+type StatModifierName = (typeof STAT_MODIFIER_NAMES)[number];
+type StatModifierState = Record<StatModifierName, number>;
+const STAT_MODIFIER_OPTIONS = [0, 10, 20] as const;
+const STAT_MODIFIER_LABELS: Record<StatModifierName, string> = {
+  attack: "Attack",
+  defense: "Defense",
+  lethality: "Lethality",
+  health: "Health",
+  enemy_attack: "Enemy Atk",
+  enemy_defense: "Enemy Def",
 };
 const JOINER_COUNT = 4;
 const SIDE_LABELS: Record<Side, string> = {
@@ -104,6 +124,7 @@ interface SideState {
   joiners: JoinerSlotState[]; // always length JOINER_COUNT
   // stats: 3 unit categories x 4 stats, stored as percentage numbers
   stats: Record<TroopCategory, Record<string, number>>;
+  statModifiers: StatModifierState;
 }
 
 interface SavedRunMeta {
@@ -159,6 +180,31 @@ function defaultSide(): SideState {
       lancer: { attack: 100, defense: 100, lethality: 100, health: 100 },
       marksman: { attack: 100, defense: 100, lethality: 100, health: 100 },
     },
+    statModifiers: defaultStatModifiers(),
+  };
+}
+
+function defaultStatModifiers(): StatModifierState {
+  return {
+    attack: 0,
+    defense: 0,
+    lethality: 0,
+    health: 0,
+    enemy_attack: 0,
+    enemy_defense: 0,
+  };
+}
+
+function toStatModifiersPayload(
+  modifiers: StatModifierState,
+): SimulateStatModifiersPayload {
+  return {
+    attack: modifiers.attack,
+    defense: modifiers.defense,
+    lethality: modifiers.lethality,
+    health: modifiers.health,
+    enemy_attack: -modifiers.enemy_attack,
+    enemy_defense: -modifiers.enemy_defense,
   };
 }
 
@@ -191,6 +237,7 @@ function toApiPayload(
           j.name ? [{ name: j.name, skill_1: 5 }] : [],
         )
       : [],
+    stat_modifiers: toStatModifiersPayload(s.statModifiers),
     stats: {
       inf: [
         s.stats.infantry.attack,
@@ -257,6 +304,33 @@ function parseStatTuple(
   };
 }
 
+function parseStatModifiers(
+  value: SimulateSidePayload["stat_modifiers"] | undefined,
+): StatModifierState {
+  const defaults = defaultStatModifiers();
+  return {
+    attack: clampValue(value?.attack ?? defaults.attack, defaults.attack),
+    defense: clampValue(value?.defense ?? defaults.defense, defaults.defense),
+    lethality: clampValue(
+      value?.lethality ?? defaults.lethality,
+      defaults.lethality,
+    ),
+    health: clampValue(value?.health ?? defaults.health, defaults.health),
+    enemy_attack: Math.abs(
+      clampValue(
+        value?.enemy_attack ?? defaults.enemy_attack,
+        defaults.enemy_attack,
+      ),
+    ),
+    enemy_defense: Math.abs(
+      clampValue(
+        value?.enemy_defense ?? defaults.enemy_defense,
+        defaults.enemy_defense,
+      ),
+    ),
+  };
+}
+
 function sideFromPayload(side: SimulateSidePayload): SideState {
   return {
     troops: {
@@ -291,6 +365,7 @@ function sideFromPayload(side: SimulateSidePayload): SideState {
       lancer: parseStatTuple(side.stats?.lanc),
       marksman: parseStatTuple(side.stats?.mark),
     },
+    statModifiers: parseStatModifiers(side.stat_modifiers),
   };
 }
 
@@ -396,6 +471,10 @@ function effectiveStatPreview(baseValue: number, bonusPercent: number): string {
   return formatStatNumber(baseValue * (1 + bonusPercent / 100));
 }
 
+function signedPercent(value: number): string {
+  return `${value > 0 ? "+" : ""}${value.toFixed(1)}%`;
+}
+
 /**
  * Sum of skill_4 bonus percents applied to a given stat on a side, from
  * the three main heroes (one per troop type). Skill_4 affects all troop
@@ -419,6 +498,37 @@ function sideSkill4BonusPercent(
     total += skill4PercentAt(level);
   }
   return total;
+}
+
+function manualStatModifierPercent(
+  ownModifiers: StatModifierState,
+  opponentModifiers: StatModifierState,
+  stat: StatName,
+): number {
+  let total = ownModifiers[stat] ?? 0;
+  if (stat === "attack") total -= opponentModifiers.enemy_attack;
+  if (stat === "defense") total -= opponentModifiers.enemy_defense;
+  return total;
+}
+
+function effectiveStatBonusPercent(
+  side: SideState,
+  opponent: SideState,
+  which: Side,
+  stat: StatName,
+  rallyMode: boolean,
+): number {
+  return (
+    sideSkill4BonusPercent(side, which, stat as Skill4Stat, rallyMode) +
+    manualStatModifierPercent(side.statModifiers, opponent.statModifiers, stat)
+  );
+}
+
+function statModifierDescription(name: StatModifierName, value: number): string {
+  if (name === "enemy_attack" || name === "enemy_defense") {
+    return value === 0 ? "Off" : `-${value}%`;
+  }
+  return value === 0 ? "Off" : `+${value}%`;
 }
 
 /**
@@ -1664,6 +1774,7 @@ export default function SimulateClient({
             title="Attacker"
             which="attacker"
             state={attacker}
+            opponent={defender}
             setState={
               setSide("attacker") as (
                 updater: (prev: SideState) => SideState,
@@ -1705,6 +1816,7 @@ export default function SimulateClient({
             title="Defender"
             which="defender"
             state={defender}
+            opponent={attacker}
             setState={
               setSide("defender") as (
                 updater: (prev: SideState) => SideState,
@@ -2709,6 +2821,7 @@ function SidePanel({
   title,
   which,
   state,
+  opponent,
   setState,
   rallyMode,
   syncStatsOnHeroChange,
@@ -2719,6 +2832,7 @@ function SidePanel({
   title: string;
   which: Side;
   state: SideState;
+  opponent: SideState;
   setState: (updater: (prev: SideState) => SideState) => void;
   rallyMode: boolean;
   syncStatsOnHeroChange: boolean;
@@ -2874,15 +2988,37 @@ function SidePanel({
             </span>
             <div className="grid grid-cols-2 gap-x-1.5 gap-y-1.5">
               {STAT_NAMES.map((stat) => {
-                const bonus = sideSkill4BonusPercent(
+                const skill4Bonus = sideSkill4BonusPercent(
                   state,
                   which,
                   stat as Skill4Stat,
                   rallyMode,
                 );
+                const manualBonus = manualStatModifierPercent(
+                  state.statModifiers,
+                  opponent.statModifiers,
+                  stat,
+                );
+                const bonus = effectiveStatBonusPercent(
+                  state,
+                  opponent,
+                  which,
+                  stat,
+                  rallyMode,
+                );
                 const baseValue = state.stats[cat][stat];
                 const previewValue =
-                  bonus > 0 ? effectiveStatPreview(baseValue, bonus) : null;
+                  bonus !== 0 ? effectiveStatPreview(baseValue, bonus) : null;
+                const sourceText = [
+                  skill4Bonus !== 0
+                    ? `skill 4 ${signedPercent(skill4Bonus)}`
+                    : null,
+                  manualBonus !== 0
+                    ? `manual ${signedPercent(manualBonus)}`
+                    : null,
+                ]
+                  .filter(Boolean)
+                  .join(", ");
                 return (
                   <label
                     key={stat}
@@ -2914,19 +3050,100 @@ function SidePanel({
                       <span
                         className="flex flex-col items-center justify-start text-center font-mono text-[9px] leading-tight sm:text-[10px]"
                         style={{
-                          color: "#a6e3a1",
+                          color: bonus > 0 ? "#a6e3a1" : "#f38ba8",
                         }}
                       >
                         <span
-                          title={`Skill 4 will add +${bonus.toFixed(1)}% to this stat before battle, for an effective stat of ${previewValue}.`}
+                          title={`${sourceText || "Manual modifiers"} combine to ${signedPercent(bonus)} before battle, for an effective stat of ${previewValue}.`}
                           data-testid={`stat-preview-${which}-${cat}-${stat}`}
                         >
                           <span>[{previewValue}]</span>
-                          <span>+{bonus.toFixed(1)}%</span>
+                          <span>{signedPercent(bonus)}</span>
                         </span>
                       </span>
                     ) : null}
                   </label>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+      <StatModifierControls
+        which={which}
+        modifiers={state.statModifiers}
+        onChange={(name, value) => {
+          setState((prev) => ({
+            ...prev,
+            statModifiers: {
+              ...prev.statModifiers,
+              [name]: value,
+            },
+          }));
+        }}
+      />
+    </div>
+  );
+}
+
+function StatModifierControls({
+  which,
+  modifiers,
+  onChange,
+}: {
+  which: Side;
+  modifiers: StatModifierState;
+  onChange: (name: StatModifierName, value: number) => void;
+}) {
+  return (
+    <div
+      className="mt-3 rounded border p-2.5"
+      style={{
+        borderColor: "var(--border-color)",
+        backgroundColor: "var(--main-bg)",
+      }}
+    >
+      <h4 className="mb-2 text-xs font-bold uppercase tracking-wider opacity-60">
+        Extra Buffs / Debuffs
+      </h4>
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        {STAT_MODIFIER_NAMES.map((name) => (
+          <div
+            key={name}
+            className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2"
+          >
+            <span className="min-w-0 truncate text-[10px] uppercase tracking-wider opacity-60">
+              {STAT_MODIFIER_LABELS[name]}
+            </span>
+            <div
+              className="inline-grid grid-cols-3 overflow-hidden rounded border"
+              style={{ borderColor: "var(--border-color)" }}
+            >
+              {STAT_MODIFIER_OPTIONS.map((value) => {
+                const selected = modifiers[name] === value;
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    aria-label={`${which} ${STAT_MODIFIER_LABELS[name]} ${statModifierDescription(name, value)}`}
+                    aria-pressed={selected}
+                    data-testid={`stat-modifier-${which}-${name}-${value}`}
+                    onClick={() => onChange(name, value)}
+                    className="min-h-[30px] px-2 text-[10px] font-bold"
+                    style={{
+                      backgroundColor: selected
+                        ? "var(--sidebar-active)"
+                        : "var(--sidebar-bg)",
+                      color: selected ? "#111827" : "var(--main-text)",
+                      borderRight:
+                        value === 20
+                          ? "0"
+                          : "1px solid var(--border-color)",
+                    }}
+                    title={`${STAT_MODIFIER_LABELS[name]} ${statModifierDescription(name, value)}`}
+                  >
+                    {statModifierDescription(name, value)}
+                  </button>
                 );
               })}
             </div>

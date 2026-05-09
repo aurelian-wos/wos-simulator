@@ -15,6 +15,17 @@ from Base_classes.Fight import Fight
 from Base_classes.Fighter import Fighter
 from Base_classes.JsonUtil import JsonUtil
 from Base_classes.StatsBonus import StatsBonus
+from Base_classes.UnitType import UnitType
+
+
+STAT_MODIFIER_NAMES = ("attack", "defense", "lethality", "health")
+
+
+def _numeric(value: Any) -> float:
+    try:
+        return float(value or 0)
+    except (TypeError, ValueError):
+        return 0.0
 
 
 def canonical_hero_name(name: str) -> str:
@@ -59,7 +70,22 @@ def prepare_simulation_environment() -> None:
                     patched_effect = dict(effect_dict)
                     patched_effect["special"] = patched_special
                     self.stat_bonus_effects[idx] = (skill, patched_effect)
-        return original_apply(self)
+        original_apply(self)
+
+        manual_modifiers = getattr(self, "dashboard_manual_stat_modifiers", {}) or {}
+        for stat in STAT_MODIFIER_NAMES:
+            try:
+                pct = float(manual_modifiers.get(stat, 0) or 0)
+            except (TypeError, ValueError):
+                pct = 0
+            if not pct:
+                continue
+            for unit_type in UnitType:
+                base_stats = getattr(self.stats, unit_type.name)
+                base = getattr(base_stats, stat, None)
+                if base is None:
+                    continue
+                self.effective_stats.add_bonus(unit_type, stat, base * pct / 100.0)
 
     Fighter._apply_prebattle_stat_bonuses = _patched_apply
     Fighter._dashboard_rally_patch_applied = True
@@ -139,9 +165,31 @@ def outcome_from_remaining(attacker_remaining: int, defender_remaining: int) -> 
 def run_fight(attacker_cfg: Dict[str, Any], defender_cfg: Dict[str, Any], rally_mode: bool):
     attacker = build_fighter("attacker", attacker_cfg, rally_mode)
     defender = build_fighter("defender", defender_cfg, rally_mode)
+    attacker.dashboard_manual_stat_modifiers = _combined_manual_stat_modifiers(
+        attacker_cfg,
+        defender_cfg,
+    )
+    defender.dashboard_manual_stat_modifiers = _combined_manual_stat_modifiers(
+        defender_cfg,
+        attacker_cfg,
+    )
     fight = Fight(attacker, defender, max_round=1500, dont_save=True)
     attacker_remaining, defender_remaining = fight.battle()
     return attacker, defender, int(attacker_remaining), int(defender_remaining)
+
+
+def _combined_manual_stat_modifiers(
+    own_cfg: Dict[str, Any],
+    opponent_cfg: Dict[str, Any],
+) -> Dict[str, float]:
+    own = own_cfg.get("stat_modifiers", {}) or {}
+    opponent = opponent_cfg.get("stat_modifiers", {}) or {}
+    return {
+        "attack": _numeric(own.get("attack")) + _numeric(opponent.get("enemy_attack")),
+        "defense": _numeric(own.get("defense")) + _numeric(opponent.get("enemy_defense")),
+        "lethality": _numeric(own.get("lethality")),
+        "health": _numeric(own.get("health")),
+    }
 
 
 def fight_once(attacker_cfg: Dict[str, Any], defender_cfg: Dict[str, Any], rally_mode: bool) -> Dict[str, int]:

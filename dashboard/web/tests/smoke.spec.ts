@@ -583,6 +583,48 @@ test.describe("Dashboard smoke tests", () => {
     expect(errors).toHaveLength(0);
   });
 
+  test("/simulate — manual stat toggles combine with skill 4 and opponent debuffs", async ({
+    page,
+  }) => {
+    const errors = await assertNoConsoleErrors(page);
+
+    const response = await page.goto("/simulate");
+    expect(response?.status()).toBe(200);
+
+    await page.getByLabel("Rally mode").first().check();
+    await page
+      .locator('select[aria-label="marksman hero"]')
+      .first()
+      .selectOption("Alonso");
+    await page
+      .locator('[data-testid="stat-modifier-attacker-lethality-10"]')
+      .click();
+
+    const lethalityPreview = page.locator(
+      '[data-testid="stat-preview-attacker-infantry-lethality"]',
+    );
+    await expect(lethalityPreview).toBeVisible();
+    await expect(lethalityPreview).toContainText("[125]");
+    await expect(lethalityPreview).toContainText("+25.0%");
+
+    await page
+      .locator('[data-testid="stat-modifier-attacker-attack-10"]')
+      .click();
+    await page
+      .locator('[data-testid="stat-modifier-defender-enemy_attack-20"]')
+      .click();
+    const attackInput = page.getByLabel("Infantry Attack").first();
+    await expect(attackInput).toHaveValue("100");
+
+    const attackPreview = page.locator(
+      '[data-testid="stat-preview-attacker-infantry-attack"]',
+    );
+    await expect(attackPreview).toContainText("[90]");
+    await expect(attackPreview).toContainText("-10.0%");
+
+    expect(errors).toHaveLength(0);
+  });
+
   test("/simulate — stat bonus inputs accept typed decimals", async ({
     page,
   }) => {
