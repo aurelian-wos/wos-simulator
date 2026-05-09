@@ -126,6 +126,33 @@ class MemoriesTests(unittest.TestCase):
         self.assertTrue(memories._solo_start_visible(screen))
         self.assertEqual(memories._visible_start_tap(screen), memories.SOLO_START_TAP)
 
+    def test_solo_stage_uses_three_label_slots_if_reference_screenshot_available(self) -> None:
+        screenshot = Path("/mnt/c/Users/ppamm/Documents/MuMuSharedFolder/Screenshots/MuMu-20260508-190217-146.png")
+        if not screenshot.exists():
+            self.skipTest("reference MuMu screenshot is not available")
+
+        import cv2
+
+        memories = importlib.import_module("memories")
+        screen = cv2.imread(str(screenshot))
+        strip = memories._crop_label_strip_bgr(screen)
+        items = memories._ocr_strip_items(strip)
+        label_layout = memories._label_layout(screen)
+        visible = memories._visible_labels_from_items(items, label_layout)
+
+        self.assertEqual(label_layout, "solo")
+        self.assertFalse(memories._should_complete(label_layout, 0, memories.EMPTY_LABEL_COMPLETION_LOOPS))
+        self.assertFalse(memories._should_complete(label_layout, 1, memories.EMPTY_LABEL_COMPLETION_LOOPS - 1))
+        self.assertTrue(memories._should_complete(label_layout, 1, memories.EMPTY_LABEL_COMPLETION_LOOPS))
+        self.assertEqual([item["text"] for item in visible], ["Goggles", "Wrench", "Shovel"])
+
+    def test_solo_label_layout_persists_after_progress_bar_disappears(self) -> None:
+        memories = importlib.import_module("memories")
+
+        self.assertEqual(memories._update_label_layout("team", "solo"), "solo")
+        self.assertEqual(memories._update_label_layout("solo", "team"), "solo")
+        self.assertEqual(memories._update_label_layout("team", "team"), "team")
+
     def test_prepared_label_index_matches_without_renormalizing_labels(self) -> None:
         memories = importlib.import_module("memories")
         labels = {"Crystal Hammer": (100, 200)}

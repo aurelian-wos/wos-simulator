@@ -22,23 +22,26 @@ TEAM_ROOM_START_REGION = (360, 840, 690, 940)
 TEAM_ROOM_START_TAP = (520, 895)
 SOLO_START_REGION = (320, 1125, 655, 1245)
 SOLO_START_TAP = (490, 1192)
+SOLO_PROGRESS_REGION = (20, 1215, 700, 1260)
 START_BUTTON_MASK_RATIO = 0.12
 TEAM_ROOM_START_RETRY_SEC = 1.0
 ROW_COUNT = 2
 COL_COUNT = 3
+TEAM_ROOM_TARGET_CLICK_COUNT = 26
 MATCH_THRESHOLD = 0.68
 MIN_MATCH_CHARS = 2
 POST_TAP_DELAY_SEC = 0.03
 POST_TAP_DELAY_MAX_SEC = 0.06
 LOOP_DELAY_SEC = 0.1
 MAX_RUNTIME_SEC = 60.0
-TARGET_CLICK_COUNT = 26
 VISIBLE_RETRY_DELAY_SEC = 0.8
 MAX_TAP_ATTEMPTS_PER_LABEL = 3
+EMPTY_LABEL_COMPLETION_LOOPS = 3
 DIAGNOSTICS_ROOT = Path(__file__).resolve().parents[1] / "tmp" / "memories"
 OCR_SCALE = 1.6
 TESSERACT_PSM = "11"
 TAP_MODES = {"threaded", "inline"}
+LABEL_LAYOUTS = {"team", "solo"}
 
 _rapid_ocr = None
 
@@ -222,6 +225,42 @@ def _solo_start_visible(screen_bgr) -> bool:
     return _purple_start_region_visible(screen_bgr, (x1, y1, x2, y2))
 
 
+def _solo_progress_visible(screen_bgr) -> bool:
+    x1, y1, x2, y2 = SOLO_PROGRESS_REGION
+    region = screen_bgr[y1:y2, x1:x2, :]
+    if region.size == 0:
+        return False
+    blue, green, red = cv2.split(region)
+    progress_pixels = (blue > 140) & (green > 100) & (red > 70) & (red < 190)
+    return float(progress_pixels.mean()) >= 0.55
+
+
+def _label_layout(screen_bgr) -> str:
+    if _solo_start_visible(screen_bgr) or _solo_progress_visible(screen_bgr):
+        return "solo"
+    return "team"
+
+
+def _update_label_layout(current_layout: str, detected_layout: str) -> str:
+    if current_layout not in LABEL_LAYOUTS or detected_layout not in LABEL_LAYOUTS:
+        raise ValueError(f"label layout must be one of {sorted(LABEL_LAYOUTS)}")
+    if current_layout == "solo" or detected_layout == "solo":
+        return "solo"
+    return "team"
+
+
+def _target_click_count(label_layout: str) -> int:
+    if label_layout not in LABEL_LAYOUTS:
+        raise ValueError(f"label_layout must be one of {sorted(LABEL_LAYOUTS)}")
+    return TEAM_ROOM_TARGET_CLICK_COUNT
+
+
+def _should_complete(label_layout: str, used_count: int, empty_label_loops: int) -> bool:
+    if label_layout == "solo":
+        return used_count > 0 and empty_label_loops >= EMPTY_LABEL_COMPLETION_LOOPS
+    return used_count >= _target_click_count(label_layout)
+
+
 def _purple_start_region_visible(screen_bgr, region_bounds: tuple[int, int, int, int]) -> bool:
     x1, y1, x2, y2 = region_bounds
     region = screen_bgr[y1:y2, x1:x2, :]
@@ -258,9 +297,19 @@ def _adb_tap_batch(serial: str, coords: list[tuple[int, int]]) -> None:
             adb_tap(serial, x, y)
 
 
-def _slot_bounds(index: int) -> tuple[int, int, int, int]:
+def _slot_bounds(index: int, label_layout: str = "team") -> tuple[int, int, int, int]:
+    if label_layout not in LABEL_LAYOUTS:
+        raise ValueError(f"label_layout must be one of {sorted(LABEL_LAYOUTS)}")
+
     w = LABEL_REGION[2] - LABEL_REGION[0]
     h = LABEL_REGION[3] - LABEL_REGION[1]
+
+    if label_layout == "solo":
+        slot_w = w // COL_COUNT
+        sx1 = index * slot_w
+        sx2 = (index + 1) * slot_w if index < COL_COUNT - 1 else w
+        return (sx1 + 10, 20, sx2 - 10, 90)
+
     col = index % COL_COUNT
     row = index // COL_COUNT
     slot_w = w // COL_COUNT
@@ -346,12 +395,13 @@ def _ocr_strip_items(strip_bgr) -> list[dict]:
     return _tesseract_ocr_items(enlarged)
 
 
-def _visible_labels_from_items(items: list[dict]) -> list[dict]:
+def _visible_labels_from_items(items: list[dict], label_layout: str = "team") -> list[dict]:
     slot_texts: dict[int, list[tuple[int, str]]] = {}
+    slot_count = COL_COUNT if label_layout == "solo" else ROW_COUNT * COL_COUNT
     for item in items:
         slot = None
-        for idx in range(ROW_COUNT * COL_COUNT):
-            sx1, sy1, sx2, sy2 = _slot_bounds(idx)
+        for idx in range(slot_count):
+            sx1, sy1, sx2, sy2 = _slot_bounds(idx, label_layout)
             if sx1 <= item["x"] <= sx2 and sy1 <= item["y"] <= sy2:
                 slot = idx
                 break
@@ -518,6 +568,8 @@ def run_memories(serial: str, map_path: str | Path, tap_mode: str = "threaded") 
     tap_worker = _TapWorker(serial, clicked, timing, started_at) if tap_mode == "threaded" else None
     last_start_tap_at = 0.0
     first_match_batch_tapped = False
+    empty_label_loops = 0
+    label_layout = "team"
 
     while True:
         if time.monotonic() - started_at >= MAX_RUNTIME_SEC:
@@ -547,15 +599,20 @@ def run_memories(serial: str, map_path: str | Path, tap_mode: str = "threaded") 
         before_capture = time.monotonic()
         screen = _capture_screen_bgr(serial)
         strip = _crop_label_strip_bgr(screen)
+        label_layout = _update_label_layout(label_layout, _label_layout(screen))
         timing["capture_sec"] += time.monotonic() - before_capture
 
         before_ocr = time.monotonic()
         raw_ocr_items = _ocr_strip_items(strip)
-        visible = _visible_labels_from_items(raw_ocr_items)
+        visible = _visible_labels_from_items(raw_ocr_items, label_layout)
         visible_known_labels = _visible_known_labels(visible, label_index)
+        if visible_known_labels:
+            empty_label_loops = 0
+        else:
+            empty_label_loops += 1
         timing["ocr_sec"] += time.monotonic() - before_ocr
 
-        if not visible_known_labels and len(used_labels) >= TARGET_CLICK_COUNT:
+        if not visible_known_labels and _should_complete(label_layout, len(used_labels), empty_label_loops):
             buffered_diagnostics.append(
                 _buffer_loop_diagnostics(timing["loops"], screen, strip, raw_ocr_items, visible, [])
             )
@@ -584,7 +641,7 @@ def run_memories(serial: str, map_path: str | Path, tap_mode: str = "threaded") 
         start_tap = _visible_start_tap(screen)
         if (
             not visible_known_labels
-            and len(used_labels) < TARGET_CLICK_COUNT
+            and not _should_complete(label_layout, len(used_labels), empty_label_loops)
             and start_tap is not None
             and now - last_start_tap_at >= TEAM_ROOM_START_RETRY_SEC
         ):
@@ -599,7 +656,7 @@ def run_memories(serial: str, map_path: str | Path, tap_mode: str = "threaded") 
             continue
 
         if not visible:
-            if len(used_labels) >= TARGET_CLICK_COUNT:
+            if _should_complete(label_layout, len(used_labels), empty_label_loops):
                 if tap_worker is not None:
                     tap_worker.close()
                 output_dir = _new_diagnostics_dir()
