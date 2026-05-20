@@ -1,0 +1,26 @@
+{
+  "test_id": "greg_only_defender_current",
+  "description": "Greg/Mia Batch 1 Greg-only defender full current kit. Not isolated skill evidence. WIP attacks clean; minxxx defends with Greg.",
+  "emulator": {
+    "attacker": { "instance": "WIP" },
+    "defender": { "instance": "minxxx" }
+  },
+  "attacker": {
+    "heroes": {},
+    "troops": {
+      "infantry_t6": 1400,
+      "lancer_t6": 1069,
+      "marksman_t6": 1500
+    }
+  },
+  "defender": {
+    "heroes": {
+      "Greg": {}
+    },
+    "troops": {
+      "infantry_t6": 200,
+      "lancer_t6": 200,
+      "marksman_t6": 200
+    }
+  }
+}

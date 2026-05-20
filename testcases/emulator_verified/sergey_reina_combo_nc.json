@@ -1,0 +1,82 @@
+[
+  {
+    "test_id": "sergey_reina_combo_nc",
+    "description": "Sergey+Reina 2-hero combo \u2014 Inf+Lanc class heroes, both NC (no chance skills), single run definitive. Sergey S1/S2 infantry buffs; Reina S1/S2 lancer buffs. WIP attacks (no hero, t6 600/600/600), minxxx defends with Sergey+Reina.",
+    "attacker": {
+      "name": "[BBQ]XxWIPxX",
+      "heroes": {},
+      "troops": {
+        "infantry_t6": 600,
+        "lancer_t6": 600,
+        "marksman_t6": 600
+      },
+      "stats": {
+        "inf": {
+          "attack": 164.2,
+          "defense": 169.0,
+          "lethality": 124.2,
+          "health": 136.6
+        },
+        "lanc": {
+          "attack": 149.7,
+          "defense": 152.0,
+          "lethality": 121.2,
+          "health": 109.8
+        },
+        "mark": {
+          "attack": 162.2,
+          "defense": 156.5,
+          "lethality": 126.5,
+          "health": 123.4
+        }
+      },
+      "joiner_heroes": {}
+    },
+    "defender": {
+      "name": "[ARK]Piddlyminxxx",
+      "heroes": {
+        "Sergey": {
+          "skill_1": 4,
+          "skill_2": 4
+        },
+        "Reina": {
+          "skill_1": 2,
+          "skill_2": 2,
+          "skill_3": 0
+        }
+      },
+      "troops": {
+        "infantry_t6": 200,
+        "lancer_t6": 200,
+        "marksman_t6": 200
+      },
+      "stats": {
+        "inf": {
+          "attack": 347.2,
+          "defense": 338.0,
+          "lethality": 178.3,
+          "health": 184.1
+        },
+        "lanc": {
+          "attack": 315.1,
+          "defense": 305.9,
+          "lethality": 172.0,
+          "health": 173.0
+        },
+        "mark": {
+          "attack": 254.4,
+          "defense": 237.2,
+          "lethality": 182.4,
+          "health": 177.4
+        }
+      },
+      "joiner_heroes": {}
+    },
+    "game_report_result": [
+      {
+        "attacker": 0,
+        "defender": 295
+      }
+    ]
+  }
+]

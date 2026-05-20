@@ -1,0 +1,83 @@
+[
+  {
+    "test_id": "flint_zinman_combo_nc",
+    "description": "Flint (Infantry) + Zinman (Marksman) combo \u2014 both heroes fully deterministic, single run sufficient. Tests Infantry+Marksman stacking with no RNG variance.",
+    "attacker": {
+      "name": "[BBQ]XxWIPxX",
+      "heroes": {},
+      "troops": {
+        "infantry_t6": 600,
+        "lancer_t6": 600,
+        "marksman_t6": 600
+      },
+      "stats": {
+        "inf": {
+          "attack": 164.2,
+          "defense": 169.0,
+          "lethality": 124.2,
+          "health": 136.6
+        },
+        "lanc": {
+          "attack": 149.7,
+          "defense": 152.0,
+          "lethality": 121.2,
+          "health": 109.8
+        },
+        "mark": {
+          "attack": 162.2,
+          "defense": 156.5,
+          "lethality": 126.5,
+          "health": 123.4
+        }
+      },
+      "joiner_heroes": {}
+    },
+    "defender": {
+      "name": "[ARK]Piddlyminxxx",
+      "heroes": {
+        "Flint": {
+          "skill_1": 2,
+          "skill_2": 2,
+          "skill_3": 1
+        },
+        "Zinman": {
+          "skill_1": 1,
+          "skill_2": 0,
+          "skill_3": 0
+        }
+      },
+      "troops": {
+        "infantry_t6": 200,
+        "lancer_t6": 200,
+        "marksman_t6": 200
+      },
+      "stats": {
+        "inf": {
+          "attack": 343.0,
+          "defense": 333.8,
+          "lethality": 178.3,
+          "health": 184.1
+        },
+        "lanc": {
+          "attack": 238.9,
+          "defense": 229.7,
+          "lethality": 172.0,
+          "health": 173.0
+        },
+        "mark": {
+          "attack": 279.6,
+          "defense": 262.4,
+          "lethality": 182.4,
+          "health": 177.4
+        }
+      },
+      "joiner_heroes": {}
+    },
+    "game_report_result": [
+      {
+        "attacker": 1005,
+        "defender": 0
+      }
+    ]
+  }
+]

@@ -1,6 +1,6 @@
 {
   "test_id": "gordon_solo_nc",
-  "description": "Gordon solo defender — all skills deterministic (no chance), single run sufficient. Gordon is Lancer class on minxxx with only S1 unlocked (S1=1/S2=0/S3=0). S1 'Venom Infusion': every 2 attacks, Lancers deal extra DamageUp (op=101) and apply OppDamageDown (op=201) for 1 turn. First emulator validation of Gordon's simulator implementation.",
+  "description": "Gordon solo defender — all skills deterministic (no chance), single run sufficient. Gordon is Lancer class on minxxx with S1=2/S2=2/S3=0. S1 'Venom Infusion': every 2 attacks, Lancers deal extra DamageUp (op=101) and apply OppDamageDown (op=201) for 1 turn. First emulator validation of Gordon's simulator implementation.",
   "emulator": {
     "attacker": { "instance": "WIP" },
     "defender": { "instance": "minxxx" }

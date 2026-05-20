@@ -26,6 +26,7 @@ All public functions accept ``WosEmulator`` rather than a raw ``serial: str``.
 from __future__ import annotations
 
 import logging
+import math
 import re
 import time
 from pathlib import Path
@@ -50,6 +51,11 @@ logger = logging.getLogger(__name__)
 _SKILL_DIR = Path(__file__).resolve().parent.parent
 _TPL = _SKILL_DIR / "templates"
 _HEROES_DIR = _TPL / "heroes"
+_HERO_TEMPLATE_ALIASES = {
+    # The simulator/account data uses Sergey, while the current in-game picker
+    # card is represented by the legacy Sergei template.
+    "Sergey": "Sergei",
+}
 
 # ─── Templates ─────────────────────────────────────────────────────────────────
 TPL_OCCUPY            = str(_TPL / "tile_occupy_button.png")
@@ -60,6 +66,7 @@ TPL_RECALL_CONFIRM    = str(_TPL / "recall_confirm_button.png")
 TPL_PRESET1           = str(_TPL / "deploy_preset1_tab.png")
 TPL_SAVE_FLAG         = str(_TPL / "save_flag.png")
 TPL_FLAG_7            = str(_TPL / "flag_7.png")
+TPL_FLAG_7_ALERT      = str(_TPL / "flag_7_alert.png")
 TPL_FLAG_7_SELECTED   = str(_TPL / "flag_7_selected.png")
 TPL_HERO_ASSIGN       = str(_TPL / "hero_picker_assign_btn.png")
 TPL_HERO_REMOVE       = str(_TPL / "hero_picker_remove_btn.png")
@@ -111,6 +118,9 @@ _SCROLL_DOWN_FROM_Y = 880   # drag start (scroll DOWN to see later heroes)
 _SCROLL_DOWN_TO_Y   = 640
 _SCROLL_X           = 360
 _HERO_SWIPE_DUR_MS  = 750   # slower = less momentum/overshoot
+_HERO_PICKER_AREA   = (0, 560, 720, 380)  # x, y, w, h: scrollable hero-grid area
+_HERO_PICKER_UNCHANGED_MEAN_THRESHOLD = 1.5
+_HERO_PICKER_DIAG_DIR = Path("/tmp/wosctl_hero_picker_diag")
 
 # Hero slot tap positions (on deploy screen, blank preset)
 _HERO_SLOTS = [(165, 420), (360, 420), (555, 420)]
@@ -128,9 +138,30 @@ _TILE_PROBE_COORDS = [
     (250, 480), (470, 480),
 ]
 
+_RELOCATE_DISTANCE_THRESHOLD = 30.0
+
+# Candidate empty tiles around the target after the map has been centred on the
+# defender's occupied tile. Avoid the exact centre because that is the defender.
+_TELEPORT_PROBE_COORDS = [
+    (250, 560), (470, 560),
+    (250, 720), (470, 720),
+    (360, 500), (360, 780),
+    (180, 640), (540, 640),
+    (150, 500), (570, 500),
+    (150, 780), (570, 780),
+]
+
 # ─── Exceptions ────────────────────────────────────────────────────────────────
 class WosDispatchError(WosError):
     """Raised when dispatch cannot complete."""
+
+
+class WosTroopAvailabilityError(WosDispatchError):
+    """Raised when the requested army cannot be filled with available troops."""
+
+
+class WosPresetTroopShortageError(WosTroopAvailabilityError):
+    """Raised when a saved preset shows the red troop-shortage badge."""
 
 
 # ─── Internal helpers ──────────────────────────────────────────────────────────
@@ -145,6 +176,31 @@ def _find_and_tap(emulator: WosEmulator, template_path: str, label: str, thresho
     return cx, cy
 
 
+def _template_score(screenshot_bgr: np.ndarray, template_path: str) -> float:
+    template = cv2.imread(template_path)
+    if template is None:
+        raise FileNotFoundError(f"Template not found: {template_path}")
+    result = cv2.matchTemplate(screenshot_bgr, template, cv2.TM_CCOEFF_NORMED)
+    return float(cv2.minMaxLoc(result)[1])
+
+
+def _hero_picker_crop(img: np.ndarray) -> tuple[np.ndarray, tuple[int, int]]:
+    x, y, w, h = _HERO_PICKER_AREA
+    return img[y:y + h, x:x + w], (x, y)
+
+
+def _find_template_in_hero_picker_area(
+    img: np.ndarray,
+    template_path: str,
+    threshold: float = 0.75,
+) -> tuple[bool, tuple[int, int]]:
+    crop, (x_offset, y_offset) = _hero_picker_crop(img)
+    found, (cx, cy) = find_template(crop, template_path, threshold=threshold)
+    if not found:
+        return False, (0, 0)
+    return True, (cx + x_offset, cy + y_offset)
+
+
 def _verify_preset7_selected(emulator: WosEmulator) -> None:
     """Fail unless deploy preset slot 7 is visibly selected."""
     img = emulator.screencap_bgr()
@@ -154,7 +210,51 @@ def _verify_preset7_selected(emulator: WosEmulator) -> None:
 
 
 def _select_preset7(emulator: WosEmulator, label: str = "Preset7") -> None:
-    _find_and_tap(emulator, TPL_FLAG_7, label)
+    img = emulator.screencap_bgr()
+    matched_template = None
+    templates = (
+        ((TPL_FLAG_7_ALERT, 0.85), (TPL_FLAG_7, 0.85))
+        if label == "LoadPreset7"
+        else ((TPL_FLAG_7, 0.85), (TPL_FLAG_7_ALERT, 0.85))
+    )
+    for template_path, threshold in templates:
+        found, (cx, cy) = find_template(img, template_path, threshold=threshold)
+        if found:
+            matched_template = Path(template_path).name
+            if label == "LoadPreset7" and template_path == TPL_FLAG_7_ALERT:
+                screenshot_path = f"/tmp/wosctl_{label}_preset7_troop_shortage.png"
+                cv2.imwrite(screenshot_path, img)
+                flag_score = _template_score(img, TPL_FLAG_7)
+                alert_score = _template_score(img, TPL_FLAG_7_ALERT)
+                selected_score = _template_score(img, TPL_FLAG_7_SELECTED)
+                raise WosPresetTroopShortageError(
+                    f"{label}: preset 7 has red troop-shortage badge; "
+                    f"not enough available troops for the saved preset "
+                    f"(flag_7 score={flag_score:.3f} threshold=0.850; "
+                    f"flag_7_alert score={alert_score:.3f} threshold=0.850; "
+                    f"selected score={selected_score:.3f} threshold=0.700; "
+                    f"screenshot={screenshot_path})"
+                )
+            break
+    if matched_template is None:
+        selected, _ = find_template(img, TPL_FLAG_7_SELECTED, threshold=0.70)
+        if selected:
+            logger.info("%s: preset 7 already selected", label)
+            return
+        screenshot_path = f"/tmp/wosctl_{label}_preset7_not_found.png"
+        cv2.imwrite(screenshot_path, img)
+        flag_score = _template_score(img, TPL_FLAG_7)
+        alert_score = _template_score(img, TPL_FLAG_7_ALERT)
+        selected_score = _template_score(img, TPL_FLAG_7_SELECTED)
+        raise WosDispatchError(
+            f"{label}: preset 7 flag not found "
+            f"(flag_7 score={flag_score:.3f} threshold=0.850; "
+            f"flag_7_alert score={alert_score:.3f} threshold=0.850; "
+            f"selected score={selected_score:.3f} threshold=0.700; "
+            f"screenshot={screenshot_path})"
+        )
+    logger.info("%s: tapping (%d,%d) via %s", label, cx, cy, matched_template)
+    emulator.tap(cx, cy)
     time.sleep(0.8)
     _verify_preset7_selected(emulator)
 
@@ -179,28 +279,122 @@ def _deploy_preset7(emulator: WosEmulator) -> dict:
     return {"ok": True, "preset": 7, "time": time.time()}
 
 
-def _find_hero_on_screen(emulator: WosEmulator, hero_name: str) -> Optional[tuple[int, int]]:
-    """Return tap coords if hero template found on current screen, else None."""
-    tpl_path = str(_HEROES_DIR / f"{hero_name.replace(' ', '_')}.png")
+def _hero_template_path(hero_name: str) -> str:
+    template_name = _HERO_TEMPLATE_ALIASES.get(hero_name, hero_name)
+    tpl_path = str(_HEROES_DIR / f"{template_name.replace(' ', '_')}.png")
     if not Path(tpl_path).exists():
         raise WosDispatchError(f"No template for hero '{hero_name}' at {tpl_path}")
+    return tpl_path
+
+
+def _find_hero_on_screen(emulator: WosEmulator, hero_name: str) -> Optional[tuple[int, int]]:
+    """Return tap coords if hero template found on current screen, else None."""
+    tpl_path = _hero_template_path(hero_name)
     img = emulator.screencap_bgr()
-    found, (cx, cy) = find_template(img, tpl_path, threshold=0.75)
+    found, (cx, cy) = _find_template_in_hero_picker_area(img, tpl_path, threshold=0.75)
     return (cx, cy) if found else None
 
 
-def _scroll_hero_list(emulator: WosEmulator, direction: str = "up") -> None:
+def _find_visible_requested_hero(
+    emulator: WosEmulator,
+    hero_names: list[str],
+) -> Optional[tuple[str, tuple[int, int]]]:
+    """Inspect the current picker screen for any requested hero."""
+    img = emulator.screencap_bgr()
+    for hero_name in hero_names:
+        tpl_path = _hero_template_path(hero_name)
+        found, (cx, cy) = _find_template_in_hero_picker_area(img, tpl_path, threshold=0.75)
+        if found:
+            return hero_name, (cx, cy)
+    return None
+
+
+def _tap_assign_for_visible_hero(emulator: WosEmulator, hero_name: str, coords: tuple[int, int]) -> None:
+    cx, cy = coords
+    logger.info("assign_hero '%s': found at (%d,%d), tapping", hero_name, cx, cy)
+    emulator.tap(cx, cy)
+    time.sleep(0.8)
+    _find_and_tap(emulator, TPL_HERO_ASSIGN, f"Assign ({hero_name})")
+    time.sleep(1.5)
+    logger.info("assign_hero '%s': assigned", hero_name)
+
+
+def _focus_hero_slot(emulator: WosEmulator, slot_idx: int) -> None:
+    if slot_idx < 0 or slot_idx >= len(_HERO_SLOTS):
+        raise WosDispatchError(f"Hero slot index out of range: {slot_idx}")
+    slot_x, slot_y = _HERO_SLOTS[slot_idx]
+    logger.info("assign_heroes: focusing empty hero slot %d at (%d,%d)", slot_idx + 1, slot_x, slot_y)
+    emulator.tap(slot_x, slot_y)
+    time.sleep(1.5)
+
+
+def _capture_hero_picker_area(emulator: WosEmulator) -> np.ndarray:
+    img = emulator.screencap_bgr()
+    x, y, w, h = _HERO_PICKER_AREA
+    return img[y:y + h, x:x + w].copy()
+
+
+def _hero_picker_areas_changed(before: np.ndarray, after: np.ndarray) -> bool:
+    if before.shape != after.shape:
+        return True
+    mean_diff = float(np.mean(cv2.absdiff(before, after)))
+    return mean_diff > _HERO_PICKER_UNCHANGED_MEAN_THRESHOLD
+
+
+def _write_hero_picker_diagnostics(
+    emulator: WosEmulator,
+    hero_names: list[str],
+    reason: str,
+) -> Path:
+    img = emulator.screencap_bgr()
+    crop, _ = _hero_picker_crop(img)
+    safe_reason = re.sub(r"[^a-z0-9_]+", "_", reason.lower()).strip("_") or "unknown"
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    out_dir = _HERO_PICKER_DIAG_DIR / f"{stamp}_{safe_reason}"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    screenshot_path = out_dir / "screen.png"
+    crop_path = out_dir / "picker_crop.png"
+    cv2.imwrite(str(screenshot_path), img)
+    cv2.imwrite(str(crop_path), crop)
+
+    scores: list[str] = []
+    for hero_name in hero_names:
+        tpl_path = _hero_template_path(hero_name)
+        score = _template_score(crop, tpl_path)
+        template_name = Path(tpl_path).stem.replace("_", " ")
+        label = hero_name if template_name == hero_name else f"{hero_name}({template_name})"
+        scores.append(f"{label}={score:.3f}")
+    logger.warning(
+        "hero picker diagnostics (%s): screenshot=%s crop=%s area=%s template_scores=%s",
+        reason,
+        screenshot_path,
+        crop_path,
+        _HERO_PICKER_AREA,
+        ", ".join(scores),
+    )
+    return out_dir
+
+
+def _scroll_hero_list(emulator: WosEmulator, direction: str = "up") -> bool:
     """
     Scroll the hero picker list.
     direction='up'  → reveals earlier heroes (drag finger downward)
     direction='down'→ reveals later heroes (drag finger upward)
+
+    Returns True when the visible picker grid changed after the swipe.
     """
+    before = _capture_hero_picker_area(emulator)
     if direction == "up":
         fy, ty = _SCROLL_UP_FROM_Y, _SCROLL_UP_TO_Y
     else:
         fy, ty = _SCROLL_DOWN_FROM_Y, _SCROLL_DOWN_TO_Y
     emulator.shell(f"input swipe {_SCROLL_X} {fy} {_SCROLL_X} {ty} {_HERO_SWIPE_DUR_MS}")
     time.sleep(1)
+    after = _capture_hero_picker_area(emulator)
+    changed = _hero_picker_areas_changed(before, after)
+    if not changed:
+        logger.info("hero picker scroll %s did not change visible hero area", direction)
+    return changed
 
 
 def _assign_hero(emulator: WosEmulator, hero_name: str, max_scrolls: int = 10) -> None:
@@ -208,17 +402,11 @@ def _assign_hero(emulator: WosEmulator, hero_name: str, max_scrolls: int = 10) -
     Find hero by template (scrolling if needed) and tap Assign.
     Scrolls down first, then if not found scrolls back up from the bottom.
     """
-    # Phase 1: scroll down
+    # Phase 1: scroll down to find lower-ranked heroes
     for scroll_num in range(max_scrolls):
         coords = _find_hero_on_screen(emulator, hero_name)
         if coords:
-            cx, cy = coords
-            logger.info("assign_hero '%s': found at (%d,%d), tapping", hero_name, cx, cy)
-            emulator.tap(cx, cy)
-            time.sleep(0.8)
-            _find_and_tap(emulator, TPL_HERO_ASSIGN, f"Assign ({hero_name})")
-            time.sleep(1.5)
-            logger.info("assign_hero '%s': assigned", hero_name)
+            _tap_assign_for_visible_hero(emulator, hero_name, coords)
             return
         logger.info("assign_hero '%s': not visible (scroll %d/%d down), scrolling down", hero_name, scroll_num + 1, max_scrolls)
         _scroll_hero_list(emulator, direction="down")
@@ -227,18 +415,95 @@ def _assign_hero(emulator: WosEmulator, hero_name: str, max_scrolls: int = 10) -
     for scroll_num in range(max_scrolls * 2):
         coords = _find_hero_on_screen(emulator, hero_name)
         if coords:
-            cx, cy = coords
-            logger.info("assign_hero '%s': found at (%d,%d) on scroll up, tapping", hero_name, cx, cy)
-            emulator.tap(cx, cy)
-            time.sleep(0.8)
-            _find_and_tap(emulator, TPL_HERO_ASSIGN, f"Assign ({hero_name})")
-            time.sleep(1.5)
-            logger.info("assign_hero '%s': assigned", hero_name)
+            _tap_assign_for_visible_hero(emulator, hero_name, coords)
             return
         logger.info("assign_hero '%s': not visible (scroll %d/%d up), scrolling up", hero_name, scroll_num + 1, max_scrolls * 2)
         _scroll_hero_list(emulator, direction="up")
 
     raise WosDispatchError(f"Hero '{hero_name}' not found after {max_scrolls * 3} scrolls (down+up)")
+
+
+def _assign_heroes(emulator: WosEmulator, hero_names: list[str], max_scrolls: int = 10) -> None:
+    """
+    Assign requested heroes from the open picker.
+
+    Inspect all remaining requested templates on each visible picker screen
+    before scrolling again, so nearby requested heroes can be assigned in one
+    traversal. This same scan/assign/scroll path is used for both one-hero and
+    multi-hero specs.
+    """
+    if not hero_names:
+        return
+
+    remaining = list(hero_names)
+    assigned_count = 0
+
+    def _assign_visible_until_none(phase: str) -> bool:
+        nonlocal assigned_count
+        assigned_any = False
+        while remaining:
+            match = _find_visible_requested_hero(emulator, remaining)
+            if not match:
+                return assigned_any
+            hero_name, coords = match
+            logger.info(
+                "assign_heroes: %s found requested hero '%s' (%d remaining before assign)",
+                phase,
+                hero_name,
+                len(remaining),
+            )
+            _tap_assign_for_visible_hero(emulator, hero_name, coords)
+            remaining.remove(hero_name)
+            assigned_count += 1
+            assigned_any = True
+            if remaining:
+                _focus_hero_slot(emulator, assigned_count)
+        return assigned_any
+
+    max_swipes = max_scrolls * 3
+    direction = "down"
+    stalled_directions: set[str] = set()
+
+    for swipe_num in range(max_swipes + 1):
+        _assign_visible_until_none(f"scroll {direction}")
+        if not remaining:
+            return
+        if swipe_num >= max_swipes:
+            break
+        logger.info(
+            "assign_heroes: %d hero(s) not visible (swipe %d/%d %s), scrolling %s: %s",
+            len(remaining),
+            swipe_num + 1,
+            max_swipes,
+            direction,
+            direction,
+            remaining,
+        )
+        changed = _scroll_hero_list(emulator, direction=direction)
+        if not changed:
+            stalled_directions.add(direction)
+            direction = "up" if direction == "down" else "down"
+            logger.info("assign_heroes: reversing hero picker scroll direction to %s", direction)
+            if len(stalled_directions) >= 2:
+                _write_hero_picker_diagnostics(
+                    emulator,
+                    remaining,
+                    f"stalled_slot_{assigned_count + 1}",
+                )
+                logger.info(
+                    "assign_heroes: both scroll directions stalled; refocusing hero slot %d",
+                    assigned_count + 1,
+                )
+                _focus_hero_slot(emulator, assigned_count)
+                stalled_directions.clear()
+                direction = "down"
+        else:
+            stalled_directions.clear()
+
+    _write_hero_picker_diagnostics(emulator, remaining, "not_found")
+    raise WosDispatchError(
+        f"Hero(s) not found after {max_swipes} swipes: {remaining}"
+    )
 
 
 def _normalize_troop_text(text: str) -> str:
@@ -312,11 +577,12 @@ def _ocr_troop_rows(emulator: WosEmulator) -> dict[str, int]:
 
     img = emulator.screencap_bgr()
     ocr = RapidOCR()
-    # Crop troop section (below hero slots, above deploy button)
-    # Make this slightly taller to reduce "one row just outside crop" issues.
-    troop_area = img[520:1040, 0:720]
+    # Crop troop section (below hero slots, above deploy button).
+    # Extended to 610px height (490:1100) to capture bottom-edge rows
+    # such as T6 Heroic troops which appear at the bottom of the list.
+    troop_area = img[490:1100, 0:720]
     result, _ = ocr(troop_area)
-    rows = _troop_rows_from_ocr_lines(result or [], y_offset=520)
+    rows = _troop_rows_from_ocr_lines(result or [], y_offset=490)
     logger.info("OCR troop rows: %s", rows)
     return rows
 
@@ -355,6 +621,156 @@ def recall_camp(emulator: WosEmulator) -> None:
     except WosDispatchError:
         logger.info("recall_camp: camp recall button not found — no troops to recall")
     goto_world_map(emulator)
+
+
+def _parse_world_coords_from_text(text: str) -> tuple[int, int] | None:
+    """Parse a WOS world coordinate pair from OCR text."""
+    normalized = str(text).replace("：", ":")
+    mx = re.search(r"\bX\s*:\s*(\d{2,4})\b", normalized, flags=re.IGNORECASE)
+    my = re.search(r"\bY\s*:\s*(\d{2,4})\b", normalized, flags=re.IGNORECASE)
+    if not (mx and my):
+        return None
+
+    x, y = int(mx.group(1)), int(my.group(1))
+    if 100 <= x <= 1100 and 100 <= y <= 1100:
+        return x, y
+    return None
+
+
+def _ocr_current_world_coords(emulator: WosEmulator) -> tuple[int, int] | None:
+    """Read the current map coordinates shown to the right of the search icon."""
+    try:
+        from ocr import RapidOCR
+        from navigation import TEMPLATE_COORD_SEARCH_ICON
+    except ImportError as e:
+        raise WosDispatchError(f"RapidOCR not available: {e}")
+
+    img = emulator.screencap_bgr()
+    found, (search_x, search_y) = find_template(img, TEMPLATE_COORD_SEARCH_ICON)
+    if not found:
+        raise WosDispatchError("current coord OCR: coordinate search icon not found on world map")
+
+    h, w = img.shape[:2]
+    x1 = max(0, search_x + 20)
+    x2 = min(w, search_x + 330)
+    y1 = max(0, search_y - 45)
+    y2 = min(h, search_y + 45)
+    crop = img[y1:y2, x1:x2]
+
+    ocr_result, _ = RapidOCR()(crop)
+    lines = []
+    if ocr_result:
+        for _box, text, conf in ocr_result:
+            lines.append((str(text), float(conf)))
+            coords = _parse_world_coords_from_text(str(text))
+            if coords:
+                logger.info("current coord OCR: parsed X=%d Y=%d from %r", coords[0], coords[1], text)
+                return coords
+
+        joined = " ".join(text for text, _conf in lines)
+        coords = _parse_world_coords_from_text(joined)
+        if coords:
+            logger.info("current coord OCR: parsed X=%d Y=%d from joined OCR", coords[0], coords[1])
+            return coords
+
+    logger.warning(
+        "current coord OCR: could not parse coordinates from region right of search icon; lines=%s",
+        lines,
+    )
+    return None
+
+
+def _find_ocr_text_center(img_bgr: np.ndarray, pattern: str, *, min_conf: float = 0.35) -> tuple[int, int] | None:
+    """Return the centre of the first OCR text box matching pattern."""
+    try:
+        from ocr import RapidOCR
+    except ImportError as e:
+        raise WosDispatchError(f"RapidOCR not available: {e}")
+
+    regex = re.compile(pattern, flags=re.IGNORECASE)
+    result, _ = RapidOCR()(img_bgr)
+    if not result:
+        return None
+
+    for box, text, conf in result:
+        if float(conf) < min_conf or not regex.search(str(text)):
+            continue
+        xs = [point[0] for point in box]
+        ys = [point[1] for point in box]
+        return int(sum(xs) / len(xs)), int(sum(ys) / len(ys))
+    return None
+
+
+def _tap_ocr_text(emulator: WosEmulator, pattern: str, label: str) -> bool:
+    img = emulator.screencap_bgr()
+    center = _find_ocr_text_center(img, pattern)
+    if center is None:
+        logger.info("%s: OCR text %r not found", label, pattern)
+        return False
+    x, y = center
+    logger.info("%s: tapping OCR text at (%d,%d)", label, x, y)
+    emulator.tap(x, y)
+    return True
+
+
+def _try_teleport_near_target(emulator: WosEmulator) -> bool:
+    """Try nearby empty tiles until WOS offers and confirms a green Teleport placement."""
+    for tap_x, tap_y in _TELEPORT_PROBE_COORDS:
+        logger.info("relocate: probing nearby tile (%d,%d)", tap_x, tap_y)
+        emulator.tap(tap_x, tap_y)
+        time.sleep(2)
+
+        if not _tap_ocr_text(emulator, r"\bTeleport\b", "relocate popup"):
+            emulator.shell("input keyevent 4")
+            time.sleep(0.5)
+            continue
+
+        time.sleep(2)
+        if _tap_ocr_text(emulator, r"\bTeleport\b", "relocate confirm"):
+            time.sleep(5)
+            logger.info("relocate: teleport confirmed near target")
+            return True
+
+        logger.info("relocate: placement not confirmable at (%d,%d), trying another tile", tap_x, tap_y)
+        emulator.shell("input keyevent 4")
+        time.sleep(0.8)
+
+    return False
+
+
+def _ensure_attacker_near_target(emulator: WosEmulator, world_x: int, world_y: int) -> bool:
+    """Relocate the attacker city near the target when the march would be excessive."""
+    from navigation import goto_coord, goto_world_map
+
+    goto_world_map(emulator)
+    time.sleep(1)
+
+    current = _ocr_current_world_coords(emulator)
+    if current is None:
+        logger.warning("relocate: skipping far-distance check because current coords could not be read")
+        return False
+
+    current_x, current_y = current
+    distance = math.hypot(current_x - world_x, current_y - world_y)
+    logger.info(
+        "relocate: attacker current X=%d Y=%d, target X=%d Y=%d, straight-line distance=%.1f",
+        current_x, current_y, world_x, world_y, distance,
+    )
+    if distance <= _RELOCATE_DISTANCE_THRESHOLD:
+        return False
+
+    logger.warning(
+        "relocate: distance %.1f exceeds %.1f; attempting nearby teleport before attack",
+        distance, _RELOCATE_DISTANCE_THRESHOLD,
+    )
+    goto_coord(emulator, world_x, world_y)
+    time.sleep(1)
+    if not _try_teleport_near_target(emulator):
+        raise WosDispatchError(
+            f"relocate: target X={world_x} Y={world_y} is {distance:.1f} tiles away "
+            "and no nearby teleport tile could be confirmed"
+        )
+    return True
 
 # ─── Tile finding ─────────────────────────────────────────────────────────────
 def find_empty_tile(emulator: WosEmulator) -> tuple[int, int]:
@@ -543,6 +959,7 @@ def attack_when_ready(
     deadline = time.time() + timeout_sec
 
     while time.time() < deadline:
+        _ensure_attacker_near_target(emulator, world_x, world_y)
         # Always re-centre on the target coord; this is cheap and avoids drift.
         goto_coord(emulator, world_x, world_y)
         time.sleep(1)
@@ -655,11 +1072,10 @@ def deploy_army(emulator: WosEmulator, army_spec: dict, preset_mode: Optional[st
     time.sleep(2)
 
     # ── Step 5: Assign heroes ─────────────────────────────────────────────────
-    for slot_idx, (hero_name, _hero_levels) in enumerate(heroes.items()):
-        logger.info("deploy_army: assigning hero %d/%d: %s", slot_idx + 1, len(heroes), hero_name)
-
-        # Find and assign the hero
-        _assign_hero(emulator, hero_name)
+    hero_names = list(heroes.keys())
+    if hero_names:
+        logger.info("deploy_army: assigning %d hero(s): %s", len(hero_names), hero_names)
+        _assign_heroes(emulator, hero_names)
         time.sleep(1)
 
     # Close hero picker
@@ -737,6 +1153,13 @@ def deploy_army(emulator: WosEmulator, army_spec: dict, preset_mode: Optional[st
             scroll_attempts += 1
 
         if row_cy is None:
+            try:
+                debug_path = f"/tmp/wosctl_troop_not_found_{display_name.replace(' ', '_')}.png"
+                import cv2 as _cv2
+                _cv2.imwrite(debug_path, emulator.screencap_bgr())
+                logger.warning("deploy_army: saved troop-not-found debug screenshot to %s", debug_path)
+            except Exception as _dbg_exc:
+                logger.warning("deploy_army: could not save debug screenshot: %s", _dbg_exc)
             raise WosDispatchError(
                 f"Troop '{display_name}' not found on deploy screen after scrolling. OCR found: {list(troop_rows.keys())}"
             )
@@ -751,7 +1174,7 @@ def deploy_army(emulator: WosEmulator, army_spec: dict, preset_mode: Optional[st
                     avail_count = v
                     break
         if avail_count is not None and count > avail_count:
-            raise WosDispatchError(
+            raise WosTroopAvailabilityError(
                 f"Troop '{display_name}': requested {count} but only {avail_count} available. "
                 f"Reduce the testcase spec or train more troops."
             )

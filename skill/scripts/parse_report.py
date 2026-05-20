@@ -12,6 +12,7 @@ Usage:
 from __future__ import annotations
 
 import json
+import logging
 import re
 import sys
 from pathlib import Path
@@ -21,6 +22,8 @@ import numpy as np
 import onnxruntime as ort
 from PIL import Image
 from ocr import RapidOCR
+
+logger = logging.getLogger(__name__)
 
 # ── Paths ──────────────────────────────────────────────────────────────────────
 SKILL_DIR  = Path(__file__).resolve().parent.parent
@@ -259,7 +262,9 @@ def parse_battle_report(
     if stats_source_path:
         from report_stats_parser import extract_report_stats_and_troops
 
+        logger.info("Parsing report stats/troops from %s", stats_source_path)
         parsed_stats = extract_report_stats_and_troops(stats_source_path, debug_outdir=debug_outdir)
+        logger.info("Parsed report stats/troops from %s", stats_source_path)
         parsed_stats.setdefault("meta", {})["sources"] = {
             "stats": str(stats_source_path),
             "troops": str(stats_source_path),

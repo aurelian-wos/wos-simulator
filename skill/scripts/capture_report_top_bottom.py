@@ -77,12 +77,16 @@ def _write_bottom_detection_debug(debug_dir: Path, stem: str, img_bgr: np.ndarra
 
 
 def contains_report_end(img_bgr) -> tuple[bool, str]:
-    """Detect report bottom by template-matching the Battle Details button."""
+    """Detect report bottom via template match, with OCR fallback for the Battle Details button."""
     match = _find_battle_details_button(img_bgr)
-    if match is None:
-        return False, "battle_details_button not found"
-    x, y, score = match
-    return True, f"battle_details_button found at ({x},{y}) score={score:.3f}"
+    if match is not None:
+        x, y, score = match
+        return True, f"battle_details_button found at ({x},{y}) score={score:.3f}"
+    # OCR fallback: template match can miss due to rendering variance across runs
+    box = _find_text_box(img_bgr, "Battle Details")
+    if box is not None:
+        return True, f"battle_details_button OCR fallback y=({box[0]},{box[1]}) conf={box[2]:.3f}"
+    return False, "battle_details_button not found"
 
 
 def _find_text_box(img_bgr: np.ndarray, needle: str) -> tuple[int, int, float] | None:
@@ -242,14 +246,8 @@ def scroll_to_bottom(
     debug_dir: Path | None = None,
     diagnostic_events: list[dict[str, object]] | None = None,
 ) -> bool:
-    """Repeatedly swipe up until detect_fn confirms the report end.
-
-    Image stability only means scrolling stopped. It is diagnostic context, not
-    proof that the report-end marker is visible.
-    """
-    prev_hash = None
-
-    for step in range(max_steps):
+    """Swipe down the report until detect_fn confirms the report-end marker."""
+    for step in range(max_steps + 1):
         img = emulator.screencap_bgr()
         hit, snippet = detect_fn(img)
         event = {"step": step, "event": "detect", "end_found": hit, "snippet": snippet}
@@ -262,43 +260,11 @@ def scroll_to_bottom(
         if hit:
             return True
 
-        # Check if content stopped scrolling (image unchanged)
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        curr_hash = gray[200:-200, :].mean()
-        if prev_hash is not None and abs(curr_hash - prev_hash) < 0.5:
-            if debug:
-                print(f'step {step:02d}: content stopped scrolling')
-            if diagnostic_events is not None:
-                diagnostic_events.append({
-                    "step": step,
-                    "event": "scroll_stopped",
-                    "previous_mean": prev_hash,
-                    "current_mean": curr_hash,
-                    "delta": abs(curr_hash - prev_hash),
-                })
+        if step == max_steps:
             break
-        prev_hash = curr_hash
 
         emulator.swipe(360, 1120, 360, 120, 700)
         time.sleep(0.55)
-
-    for retry in range(1, 4):
-        img = emulator.screencap_bgr()
-        hit, snippet = detect_fn(img)
-        if debug_dir is not None:
-            _write_bottom_detection_debug(debug_dir, f"bottom_retry_{retry:02d}", img)
-        if diagnostic_events is not None:
-            diagnostic_events.append({
-                "retry": retry,
-                "event": "confirm_retry",
-                "end_found": hit,
-                "snippet": snippet,
-            })
-        if debug:
-            print(f'retry {retry}: end={hit} text="{snippet}"')
-        if hit:
-            return True
-        time.sleep(0.35)
 
     return False
 

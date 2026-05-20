@@ -1,0 +1,82 @@
+[
+  {
+    "test_id": "bahiti_norah_combo_nc",
+    "description": "Bahiti (Marksman) + Norah (Lancer) combo \u2014 both heroes fully deterministic, single run sufficient. Tests Marksman+Lancer pairing and Norah's splash interaction with Bahiti's buffs.",
+    "attacker": {
+      "name": "[BBQ]XxWIPxX",
+      "heroes": {},
+      "troops": {
+        "infantry_t6": 600,
+        "lancer_t6": 600,
+        "marksman_t6": 600
+      },
+      "stats": {
+        "inf": {
+          "attack": 164.2,
+          "defense": 169.0,
+          "lethality": 124.2,
+          "health": 136.6
+        },
+        "lanc": {
+          "attack": 149.7,
+          "defense": 152.0,
+          "lethality": 121.2,
+          "health": 109.8
+        },
+        "mark": {
+          "attack": 162.2,
+          "defense": 156.5,
+          "lethality": 126.5,
+          "health": 123.4
+        }
+      },
+      "joiner_heroes": {}
+    },
+    "defender": {
+      "name": "[ARK]Piddlyminxxx",
+      "heroes": {
+        "Norah": {
+          "skill_1": 1,
+          "skill_2": 1,
+          "skill_3": 1
+        },
+        "Bahiti": {
+          "skill_1": 2,
+          "skill_2": 2
+        }
+      },
+      "troops": {
+        "infantry_t6": 200,
+        "lancer_t6": 200,
+        "marksman_t6": 200
+      },
+      "stats": {
+        "inf": {
+          "attack": 250.1,
+          "defense": 240.9,
+          "lethality": 178.3,
+          "health": 184.1
+        },
+        "lanc": {
+          "attack": 380.1,
+          "defense": 370.9,
+          "lethality": 172.0,
+          "health": 173.0
+        },
+        "mark": {
+          "attack": 351.5,
+          "defense": 334.3,
+          "lethality": 187.3,
+          "health": 181.8
+        }
+      },
+      "joiner_heroes": {}
+    },
+    "game_report_result": [
+      {
+        "attacker": 269,
+        "defender": 0
+      }
+    ]
+  }
+]

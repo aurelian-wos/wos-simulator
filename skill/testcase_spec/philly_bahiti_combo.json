@@ -1,0 +1,31 @@
+{
+  "test_id": "philly_bahiti_combo",
+  "description": "2-hero combo: Philly+Bahiti on minxxx defender. WIP attacking no heroes. Tests multi-hero defensive interaction with RNG (Bahiti 50% chance, Philly 40% chance + 25% extra).",
+  "emulator": {
+    "attacker": {
+      "instance": "WIP"
+    },
+    "defender": {
+      "instance": "minxxx"
+    }
+  },
+  "attacker": {
+    "heroes": {},
+    "troops": {
+      "infantry_t6": 400,
+      "lancer_t6": 400,
+      "marksman_t6": 400
+    }
+  },
+  "defender": {
+    "heroes": {
+      "Philly": {},
+      "Bahiti": {}
+    },
+    "troops": {
+      "infantry_t6": 200,
+      "lancer_t6": 200,
+      "marksman_t6": 200
+    }
+  }
+}

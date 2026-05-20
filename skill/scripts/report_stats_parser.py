@@ -1275,9 +1275,15 @@ def _troop_type_key(troop_type: str, tier: Any, fire_crystal_level: Any) -> str 
     return f"{troop_type}_t{tier}"
 
 
-def shape_dashboard_side(side_data: dict[str, Any]) -> dict[str, Any]:
+def shape_dashboard_side(
+    side_data: dict[str, Any],
+    *,
+    troop_slots_present: bool = False,
+) -> dict[str, Any]:
     """Map parser-native side data to the dashboard upload contract."""
-    troops: dict[str, int | None] = {troop_type: None for troop_type in TROOP_TYPES}
+    troops: dict[str, int | None] = {
+        troop_type: 0 if troop_slots_present else None for troop_type in TROOP_TYPES
+    }
     troop_types: dict[str, str | None] = {troop_type: None for troop_type in TROOP_TYPES}
     stats: dict[str, dict[str, float | None]] = {
         troop_type: {stat: None for stat in STAT_NAMES} for troop_type in TROOP_TYPES
@@ -1335,9 +1341,10 @@ def dashboard_warnings_from_result(result: dict[str, Any]) -> list[str]:
 
 def shape_dashboard_report_result(result: dict[str, Any]) -> dict[str, Any]:
     strategies = result.get("meta", {}).get("ocr_strategy", [])
+    troop_slots_present = result.get("meta", {}).get("troop_slots_present") is True
     return {
-        "attacker": shape_dashboard_side(result["left"]),
-        "defender": shape_dashboard_side(result["right"]),
+        "attacker": shape_dashboard_side(result["left"], troop_slots_present=troop_slots_present),
+        "defender": shape_dashboard_side(result["right"], troop_slots_present=troop_slots_present),
         "raw_text": "",
         "warnings": dashboard_warnings_from_result(result),
         "ocr_retried": len(strategies) > 1,

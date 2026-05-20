@@ -78,5 +78,97 @@
         "defender": 556
       }
     ]
+  },
+  {
+    "test_id": "philly_bahiti_combo",
+    "description": "2-hero combo: Philly+Bahiti on minxxx defender. WIP attacking no heroes. Tests multi-hero defensive interaction with RNG (Bahiti 50% chance, Philly 40% chance + 25% extra).",
+    "attacker": {
+      "name": "[BBQ]XxWIPxX",
+      "heroes": {},
+      "troops": {
+        "infantry_t6": 400,
+        "lancer_t6": 400,
+        "marksman_t6": 400
+      },
+      "stats": {
+        "inf": {
+          "attack": 140.7,
+          "defense": 148.2,
+          "lethality": 117.0,
+          "health": 131.9
+        },
+        "lanc": {
+          "attack": 149.2,
+          "defense": 148.2,
+          "lethality": 116.5,
+          "health": 105.1
+        },
+        "mark": {
+          "attack": 153.7,
+          "defense": 143.2,
+          "lethality": 121.9,
+          "health": 112.3
+        }
+      },
+      "joiner_heroes": {}
+    },
+    "defender": {
+      "name": "[ARK]Piddlyminxxx",
+      "heroes": {
+        "Philly": {
+          "skill_1": 2,
+          "skill_2": 2,
+          "skill_3": 1
+        },
+        "Bahiti": {
+          "skill_1": 2,
+          "skill_2": 2
+        }
+      },
+      "troops": {
+        "infantry_t6": 200,
+        "lancer_t6": 200,
+        "marksman_t6": 200
+      },
+      "stats": {
+        "inf": {
+          "attack": 245.9,
+          "defense": 240.7,
+          "lethality": 177.2,
+          "health": 183.3
+        },
+        "lanc": {
+          "attack": 320.1,
+          "defense": 320.9,
+          "lethality": 171.7,
+          "health": 171.7
+        },
+        "mark": {
+          "attack": 343.3,
+          "defense": 338.1,
+          "lethality": 186.6,
+          "health": 180.9
+        }
+      },
+      "joiner_heroes": {}
+    },
+    "game_report_result": [
+      {
+        "attacker": 0,
+        "defender": 463
+      },
+      {
+        "attacker": 0,
+        "defender": 456
+      },
+      {
+        "attacker": 0,
+        "defender": 455
+      },
+      {
+        "attacker": 0,
+        "defender": 459
+      }
+    ]
   }
 ]

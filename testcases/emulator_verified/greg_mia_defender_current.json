@@ -1,0 +1,151 @@
+[
+  {
+    "test_id": "greg_mia_defender_current",
+    "description": "Greg/Mia Batch 1 Greg+Mia defender full current kits. Chance-heavy stacking fixture. WIP attacks clean; minxxx defends with Greg and Mia.",
+    "attacker": {
+      "name": "[BBQ]XxWIPxX",
+      "heroes": {},
+      "troops": {
+        "infantry_t6": 1400,
+        "lancer_t6": 1069,
+        "marksman_t6": 1500
+      },
+      "stats": {
+        "inf": {
+          "attack": 140.7,
+          "defense": 148.2,
+          "lethality": 117.0,
+          "health": 131.9
+        },
+        "lanc": {
+          "attack": 149.2,
+          "defense": 148.2,
+          "lethality": 116.5,
+          "health": 105.1
+        },
+        "mark": {
+          "attack": 153.7,
+          "defense": 143.2,
+          "lethality": 121.9,
+          "health": 112.3
+        }
+      },
+      "joiner_heroes": {}
+    },
+    "defender": {
+      "name": "[ARK]Piddlyminxxx",
+      "heroes": {
+        "Mia": {
+          "skill_1": 3,
+          "skill_2": 2,
+          "skill_3": 2
+        },
+        "Greg": {
+          "skill_1": 1,
+          "skill_2": 1,
+          "skill_3": 0
+        }
+      },
+      "troops": {
+        "infantry_t6": 200,
+        "lancer_t6": 200,
+        "marksman_t6": 200
+      },
+      "stats": {
+        "inf": {
+          "attack": 237.9,
+          "defense": 240.7,
+          "lethality": 177.2,
+          "health": 183.3
+        },
+        "lanc": {
+          "attack": 316.9,
+          "defense": 325.7,
+          "lethality": 176.0,
+          "health": 176.5
+        },
+        "mark": {
+          "attack": 317.0,
+          "defense": 319.8,
+          "lethality": 181.7,
+          "health": 176.5
+        }
+      },
+      "joiner_heroes": {}
+    },
+    "game_report_result": [
+      {
+        "attacker": 3345,
+        "defender": 0
+      },
+      {
+        "attacker": 3390,
+        "defender": 0
+      },
+      {
+        "attacker": 3320,
+        "defender": 0
+      },
+      {
+        "attacker": 3367,
+        "defender": 0
+      },
+      {
+        "attacker": 3363,
+        "defender": 0
+      },
+      {
+        "attacker": 3341,
+        "defender": 0
+      },
+      {
+        "attacker": 3360,
+        "defender": 0
+      },
+      {
+        "attacker": 3355,
+        "defender": 0
+      },
+      {
+        "attacker": 3339,
+        "defender": 0
+      },
+      {
+        "attacker": 3346,
+        "defender": 0
+      },
+      {
+        "attacker": 3344,
+        "defender": 0
+      },
+      {
+        "attacker": 3341,
+        "defender": 0
+      },
+      {
+        "attacker": 3373,
+        "defender": 0
+      },
+      {
+        "attacker": 3344,
+        "defender": 0
+      },
+      {
+        "attacker": 3329,
+        "defender": 0
+      },
+      {
+        "attacker": 3354,
+        "defender": 0
+      },
+      {
+        "attacker": 3351,
+        "defender": 0
+      },
+      {
+        "attacker": 3366,
+        "defender": 0
+      }
+    ]
+  }
+]

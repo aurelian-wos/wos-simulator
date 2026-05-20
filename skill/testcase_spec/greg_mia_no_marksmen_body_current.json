@@ -1,0 +1,27 @@
+{
+  "test_id": "greg_mia_no_marksmen_body_current",
+  "description": "Greg/Mia Batch 1 attacker-body gate with no WIP marksmen. Greg+Mia defender full current kits. Not isolated skill evidence.",
+  "emulator": {
+    "attacker": { "instance": "WIP" },
+    "defender": { "instance": "minxxx" }
+  },
+  "attacker": {
+    "heroes": {},
+    "troops": {
+      "infantry_t6": 1400,
+      "lancer_t6": 1069,
+      "marksman_t6": 0
+    }
+  },
+  "defender": {
+    "heroes": {
+      "Greg": {},
+      "Mia": {}
+    },
+    "troops": {
+      "infantry_t6": 200,
+      "lancer_t6": 200,
+      "marksman_t6": 200
+    }
+  }
+}

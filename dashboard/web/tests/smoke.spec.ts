@@ -35,7 +35,7 @@ async function assertNoConsoleErrors(page: Page) {
   return errors;
 }
 
-const SAVED_SIMULATION_ID = "run-share-123";
+const SAVED_SIMULATION_ID = "run-share-wos-357";
 const SAVED_SIMULATION_REQUEST = {
   attacker: {
     troops: { infantry: 1111, lancer: 222, marksman: 333 },
@@ -50,6 +50,7 @@ const SAVED_SIMULATION_REQUEST = {
       marksman: { name: "Alonso", skills: [5, 5, 5, 5] },
     },
     joiners: [{ name: "Jessie", skill_1: 5 }],
+    stat_profile_name: "Attacker archived profile",
     stats: {
       inf: [110, 111, 112, 113],
       lanc: [120, 121, 122, 123],
@@ -69,6 +70,7 @@ const SAVED_SIMULATION_REQUEST = {
       marksman: { name: "Wayne", skills: [5, 5, 5, 0] },
     },
     joiners: [{ name: "Patrick", skill_1: 5 }],
+    stat_profile_name: "Defender archived profile",
     stats: {
       inf: [140, 141, 142, 143],
       lanc: [150, 151, 152, 153],
@@ -473,16 +475,23 @@ test.describe("Dashboard smoke tests", () => {
     page.on("pageerror", (err) => errors.push(err.message));
 
     await page.route("**/api/simulate", async (route) => {
+      const payload = route.request().postDataJSON();
+      expect(payload.attacker.stat_profile_name).toBeNull();
+      expect(payload.defender.stat_profile_name).toBeNull();
       await route.fulfill({
         status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({
-          ...SAVED_SIMULATION_RESULT,
-          saved_run_id: SAVED_SIMULATION_ID,
-          saved_at: "2026-04-23T08:30:00.000Z",
-          saved_kind: "simulate",
-          share_url: `/simulate?run=${SAVED_SIMULATION_ID}`,
-        }),
+        contentType: "application/x-ndjson",
+        body:
+          JSON.stringify({
+            type: "result",
+            data: {
+              ...SAVED_SIMULATION_RESULT,
+              saved_run_id: SAVED_SIMULATION_ID,
+              saved_at: "2026-04-23T08:30:00.000Z",
+              saved_kind: "simulate",
+              share_url: `/simulate?run=${SAVED_SIMULATION_ID}`,
+            },
+          }) + "\n",
       });
     });
 
@@ -502,6 +511,82 @@ test.describe("Dashboard smoke tests", () => {
     await expect(page.getByTestId("saved-run-banner")).toContainText(
       SAVED_SIMULATION_ID,
     );
+
+    expect(errors).toHaveLength(0);
+  });
+
+  test("/simulate — loaded stat profile names are included in run snapshots", async ({
+    page,
+  }) => {
+    const errors: string[] = [];
+    page.on("console", (msg) => {
+      if (msg.type() === "error") errors.push(msg.text());
+    });
+    page.on("pageerror", (err) => errors.push(err.message));
+
+    await page.route("**/api/simulate/stat-presets", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          presets: [
+            {
+              id: "attacker-profile",
+              name: "Attacker saved profile",
+              created_at: "2026-04-23T08:00:00.000Z",
+              updated_at: "2026-04-23T08:00:00.000Z",
+              stats: {
+                infantry: {
+                  attack: 201,
+                  defense: 202,
+                  lethality: 203,
+                  health: 204,
+                },
+                lancer: {
+                  attack: 211,
+                  defense: 212,
+                  lethality: 213,
+                  health: 214,
+                },
+                marksman: {
+                  attack: 221,
+                  defense: 222,
+                  lethality: 223,
+                  health: 224,
+                },
+              },
+            },
+          ],
+        }),
+      });
+    });
+
+    await page.route("**/api/simulate", async (route) => {
+      const payload = route.request().postDataJSON();
+      expect(payload.attacker.stat_profile_name).toBe("Attacker saved profile");
+      expect(payload.defender.stat_profile_name).toBeNull();
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(SAVED_SIMULATION_RESULT),
+      });
+    });
+
+    const response = await page.goto("/simulate");
+    expect(response?.status()).toBe(200);
+
+    await page.getByLabel("attacker player profile").click();
+    const dialog = page.getByTestId("stat-profile-modal");
+    await expect(dialog).toBeVisible();
+    await dialog.getByLabel("attacker stat profile").selectOption("attacker-profile");
+    await dialog.getByRole("button", { name: "Done" }).click();
+    await expect(dialog).toBeHidden();
+    await expect(page.locator("body")).toContainText("Attacker saved profile");
+
+    await page.getByRole("button", { name: /^Simulate$/i }).click();
+    await expect(
+      page.locator("h3").filter({ hasText: /Results \(222 replicates\)/ }),
+    ).toBeVisible();
 
     expect(errors).toHaveLength(0);
   });
@@ -544,6 +629,12 @@ test.describe("Dashboard smoke tests", () => {
     await expect(
       page.locator('select[aria-label="infantry hero"]').first(),
     ).toHaveValue("Logan");
+    await expect(page.locator("body")).toContainText(
+      "Attacker archived profile",
+    );
+    await expect(page.locator("body")).toContainText(
+      "Defender archived profile",
+    );
     await expect(
       page.locator("h3").filter({ hasText: /Results \(222 replicates\)/ }),
     ).toBeVisible();
@@ -1096,6 +1187,65 @@ test.describe("Dashboard smoke tests", () => {
     ).toHaveValue("Alonso");
     await expect(
       page.locator('select[aria-label="marksman skill 4"]').first(),
+    ).toHaveValue("0");
+
+    expect(errors).toHaveLength(0);
+  });
+
+  test("/simulate upload — zero troop counts clear previous values", async ({
+    page,
+  }) => {
+    const errors: string[] = [];
+    page.on("console", (msg) => {
+      if (msg.type() === "error") errors.push(msg.text());
+    });
+    page.on("pageerror", (err) => errors.push(err.message));
+
+    await page.route("**/api/ocr-report", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          attacker: {
+            troops: { infantry: 321, lancer: 0, marksman: 0 },
+            stats: { infantry: {}, lancer: {}, marksman: {} },
+          },
+          defender: {
+            troops: { infantry: 654, lancer: 987, marksman: 123 },
+            stats: { infantry: {}, lancer: {}, marksman: {} },
+          },
+          warnings: [],
+        }),
+      });
+    });
+
+    const response = await page.goto("/simulate");
+    expect(response?.status()).toBe(200);
+
+    await page.getByRole("button", { name: /Upload report/i }).click();
+    const dialog = page.getByRole("dialog", { name: "Upload battle report" });
+    await expect(dialog).toBeVisible();
+
+    await dialog.locator('input[type="file"]').setInputFiles({
+      name: "report.png",
+      mimeType: "image/png",
+      buffer: Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9WnS2GAAAAAASUVORK5CYII=",
+        "base64",
+      ),
+    });
+
+    await dialog.getByRole("button", { name: /Parse and apply/i }).click();
+    await expect(dialog).toBeHidden();
+
+    await expect(
+      page.locator('input[aria-label="infantry troop count"]').first(),
+    ).toHaveValue("321");
+    await expect(
+      page.locator('input[aria-label="lancer troop count"]').first(),
+    ).toHaveValue("0");
+    await expect(
+      page.locator('input[aria-label="marksman troop count"]').first(),
     ).toHaveValue("0");
 
     expect(errors).toHaveLength(0);

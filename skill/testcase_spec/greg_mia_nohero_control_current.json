@@ -1,0 +1,24 @@
+{
+  "test_id": "greg_mia_nohero_control_current",
+  "description": "Greg/Mia Batch 1 exact paired no-hero control. WIP attacks clean; minxxx defends clean. Same troop counts and report path as Greg/Mia full-kit fixtures.",
+  "emulator": {
+    "attacker": { "instance": "WIP" },
+    "defender": { "instance": "minxxx" }
+  },
+  "attacker": {
+    "heroes": {},
+    "troops": {
+      "infantry_t6": 1400,
+      "lancer_t6": 1069,
+      "marksman_t6": 1500
+    }
+  },
+  "defender": {
+    "heroes": {},
+    "troops": {
+      "infantry_t6": 200,
+      "lancer_t6": 200,
+      "marksman_t6": 200
+    }
+  }
+}

@@ -37,8 +37,8 @@ TPL_ALLIANCE_JOIN_BTN  = str(_TPL / "alliance_join_btn.png")
 
 # ─── Constants ─────────────────────────────────────────────────────────────────
 _CONFIG_FILE = Path(__file__).resolve().parent.parent / "config.json"
-# Alliance name OCR region (top of alliance screen)
-_ALLIANCE_NAME_REGION = (0, 90, 720, 140)
+# Alliance name OCR region (top-left banner on the alliance member screen)
+_ALLIANCE_NAME_REGION = (264, 93, 693, 145)
 
 # ─── Exceptions ────────────────────────────────────────────────────────────────
 class WosAllianceError(WosError):
@@ -126,7 +126,13 @@ def _leave_current_alliance(emulator: WosEmulator) -> None:
     img = emulator.screencap_bgr()
     found, (cx, cy) = find_template(img, TPL_LEAVE_ALLIANCE, threshold=0.80)
     if not found:
-        raise WosAllianceError("Leave Alliance button not found — need template clipped")
+        try:
+            import cv2 as _cv2
+            _cv2.imwrite("/tmp/wosctl_leave_alliance_not_found.png", img)
+            logger.warning("_leave_current_alliance: saved debug screenshot to /tmp/wosctl_leave_alliance_not_found.png")
+        except Exception as _e:
+            logger.warning("_leave_current_alliance: could not save debug screenshot: %s", _e)
+        raise WosAllianceError("Leave Alliance button not found (threshold=0.80) — check /tmp/wosctl_leave_alliance_not_found.png")
     emulator.tap(cx, cy)
     time.sleep(2)
 
@@ -230,4 +236,3 @@ def ensure_in_alliance(emulator: WosEmulator, tag: str, name_hint: str = "") -> 
     logger.info("ensure_in_alliance: no alliance detected, joining [%s]", tag)
     _join_alliance(emulator, tag, name_hint=name_hint)
     return ""
-

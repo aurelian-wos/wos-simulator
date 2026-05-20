@@ -56,19 +56,19 @@ class ReportCaptureContractTests(unittest.TestCase):
         self.assertEqual(calls, 3)
         self.assertEqual(len(emulator.swipes), 2)
 
-    def test_scroll_to_bottom_does_not_treat_stable_image_as_success(self) -> None:
+    def test_scroll_to_bottom_keeps_swiping_down_until_marker_or_limit(self) -> None:
         emulator = FakeEmulator([frame(10), frame(10), frame(10), frame(10), frame(10)])
 
         def detect(_img: np.ndarray) -> tuple[bool, str]:
             return False, "footer text without marker"
 
         events: list[dict[str, object]] = []
-        self.assertFalse(scroll_to_bottom(emulator, detect, diagnostic_events=events))
-        self.assertTrue(any(event["event"] == "scroll_stopped" for event in events))
+        self.assertFalse(scroll_to_bottom(emulator, detect, max_steps=4, diagnostic_events=events))
         self.assertEqual(
-            sum(1 for event in events if event["event"] == "confirm_retry"),
-            3,
+            emulator.swipes,
+            [(360, 1120, 360, 120, 700)] * 4,
         )
+        self.assertEqual([event["event"] for event in events], ["detect"] * 5)
 
     def test_parse_captured_report_refuses_unconfirmed_bottom(self) -> None:
         with self.assertRaisesRegex(

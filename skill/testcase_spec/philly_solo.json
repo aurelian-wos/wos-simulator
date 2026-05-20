@@ -1,0 +1,30 @@
+{
+  "test_id": "philly_solo",
+  "description": "Philly solo defender test. WIP attacking no heroes 1500/1500/1500, minxxx defending with Philly (2/2/1). Stats populated from war report.",
+  "emulator": {
+    "attacker": {
+      "instance": "WIP"
+    },
+    "defender": {
+      "instance": "minxxx"
+    }
+  },
+  "attacker": {
+    "heroes": {},
+    "troops": {
+      "infantry_t6": 1500,
+      "lancer_t6": 1069,
+      "marksman_t6": 1500
+    }
+  },
+  "defender": {
+    "heroes": {
+      "Philly": {}
+    },
+    "troops": {
+      "infantry_t6": 200,
+      "lancer_t6": 200,
+      "marksman_t6": 200
+    }
+  }
+}

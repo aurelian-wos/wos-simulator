@@ -48,7 +48,6 @@ from __future__ import annotations
 
 import json
 import logging
-import subprocess
 import sys
 import time
 from datetime import datetime, timezone
@@ -138,16 +137,41 @@ def _validate_hero_names(spec_heroes: dict, actual_heroes: dict, side: str) -> N
 
 def _wosctl(*args: str, timeout: int = 180) -> dict:
     """Run wosctl and return parsed JSON output."""
+    import subprocess
+
     cmd = [_WOSCTL] + list(args)
     logger.info("wosctl %s", " ".join(args))
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+    except subprocess.TimeoutExpired as exc:
+        stdout = (exc.stdout or "") if isinstance(exc.stdout, str) else (exc.stdout or b"").decode(errors="replace")
+        stderr = (exc.stderr or "") if isinstance(exc.stderr, str) else (exc.stderr or b"").decode(errors="replace")
+        raise RuntimeError(
+            f"wosctl {' '.join(args)} timed out after {timeout}s\n"
+            f"STDOUT: {stdout[:500]}\nSTDERR: {stderr[:500]}"
+        ) from exc
     try:
         return json.loads(result.stdout)
     except json.JSONDecodeError:
         raise RuntimeError(f"wosctl non-JSON output:\nSTDOUT: {result.stdout[:500]}\nSTDERR: {result.stderr[:200]}")
 
 
-def _map_stats(stat_bonuses: dict) -> dict:
+def _capture_war_report(emulator, *, debug: bool = False) -> dict:
+    """Capture the latest war report in-process so testcase progress stays visible."""
+    from report_reader import read_battle_report
+
+    logger.info("Reading latest war report via report_reader")
+    report = read_battle_report(emulator, tab="war", index=1, debug=debug)
+    logger.info("Latest war report captured and parsed")
+    return report
+
+
+def _map_stats(stat_bonuses: dict, side: str = "") -> dict:
+    if not stat_bonuses:
+        raise ValueError(
+            f"stat_bonuses empty{f' for {side}' if side else ''} — stats OCR produced no output. "
+            "Re-run with --debug to inspect the stats capture frame."
+        )
     return {
         sim_key: {f: stat_bonuses.get(f"{troop}_{f}", 0.0) for f in _STAT_FIELDS}
         for troop, sim_key in _STAT_MAP.items()
@@ -181,7 +205,8 @@ def run_testcase(
     # Import emulator / dispatch / navigation
     from dispatch import (
         find_empty_tile, attack_when_ready, wait_for_battle_complete,
-        deploy_army, TROOP_DISPLAY_NAMES, recall_camp, WosDispatchError
+        deploy_army, TROOP_DISPLAY_NAMES, recall_camp, WosDispatchError,
+        WosTroopAvailabilityError, WosPresetTroopShortageError,
     )
     from emulator import resolve_instance, WosEmulator
 
@@ -194,6 +219,33 @@ def run_testcase(
     from alliance import ensure_in_alliance, load_player_alliance_config
     def_cfg = load_player_alliance_config(def_instance)
     atk_cfg = load_player_alliance_config(atk_instance)
+
+    def _manual_preset_mode_after_shortage() -> str | None:
+        return "save" if preset_mode == "load" else preset_mode
+
+    def _raise_after_heal_shortage(role: str, exc: WosTroopAvailabilityError) -> None:
+        raise WosDispatchError(
+            f"{role} troop shortage remains after healing; manual deployment could not meet the spec: {exc}"
+        ) from exc
+
+    def _deploy_after_heal(role: str, emulator: WosEmulator, army_spec: dict) -> dict:
+        try:
+            return deploy_army(emulator, army_spec, preset_mode=preset_mode)
+        except WosPresetTroopShortageError as exc:
+            logger.warning(
+                "%s preset 7 still shows the troop-shortage badge after healing — rebuilding from spec",
+                role,
+            )
+            try:
+                return deploy_army(
+                    emulator,
+                    army_spec,
+                    preset_mode=_manual_preset_mode_after_shortage(),
+                )
+            except WosTroopAvailabilityError as manual_exc:
+                _raise_after_heal_shortage(role, manual_exc)
+        except WosTroopAvailabilityError as exc:
+            _raise_after_heal_shortage(role, exc)
 
     # ── Step 1b: Recall any existing troops before starting ───────────────────
     logger.info("Recalling any existing marching troops before testcase...")
@@ -223,32 +275,29 @@ def run_testcase(
     logger.info("Deploying defender army...")
     try:
         def_result = deploy_army(def_emulator, def_army_spec, preset_mode=preset_mode)
-    except WosDispatchError as e:
-        if "available" in str(e):
-            from heal import heal_troops
-            from navigation import goto_coord, find_template
-            from dispatch import _find_and_tap, TPL_OCCUPY
-            logger.info("Defender has insufficient troops — healing and retrying...")
-            heal_troops(def_emulator, home_tag=def_cfg.get("battle_alliance", ""))
-            # Heal leaves us on world map; navigate to tile and reopen Occupy with retry
-            goto_coord(def_emulator, world_x, world_y)
-            time.sleep(1)
-            _occ_found = False
-            for _attempt in range(1, 4):
-                def_emulator.tap(360, 640)
-                time.sleep(2)
-                _img = def_emulator.screencap_bgr()
-                _occ_found, _ = find_template(_img, TPL_OCCUPY)
-                if _occ_found:
-                    break
-                logger.warning("Defender tile popup not opened (attempt %d/3) — retrying tap", _attempt)
-            if not _occ_found:
-                raise WosDispatchError("Occupy popup did not appear after 3 taps following defender heal")
-            _find_and_tap(def_emulator, TPL_OCCUPY, "Occupy")
-            time.sleep(3)
-            def_result = deploy_army(def_emulator, def_army_spec, preset_mode=preset_mode)
-        else:
-            raise
+    except WosTroopAvailabilityError:
+        from heal import heal_troops
+        from navigation import goto_coord, find_template
+        from dispatch import _find_and_tap, TPL_OCCUPY
+        logger.info("Defender has insufficient troops — healing and retrying...")
+        heal_troops(def_emulator, home_tag=def_cfg.get("battle_alliance", ""))
+        # Heal leaves us on world map; navigate to tile and reopen Occupy with retry.
+        goto_coord(def_emulator, world_x, world_y)
+        time.sleep(1)
+        _occ_found = False
+        for _attempt in range(1, 4):
+            def_emulator.tap(360, 640)
+            time.sleep(2)
+            _img = def_emulator.screencap_bgr()
+            _occ_found, _ = find_template(_img, TPL_OCCUPY)
+            if _occ_found:
+                break
+            logger.warning("Defender tile popup not opened (attempt %d/3) — retrying tap", _attempt)
+        if not _occ_found:
+            raise WosDispatchError("Occupy popup did not appear after 3 taps following defender heal")
+        _find_and_tap(def_emulator, TPL_OCCUPY, "Occupy")
+        time.sleep(3)
+        def_result = _deploy_after_heal("Defender", def_emulator, def_army_spec)
     if not def_result.get("ok"):
         raise RuntimeError(f"Defender deploy failed: {def_result}")
     logger.info("Defender army deployed, marching... waiting 5s before proceeding to attacker steps")
@@ -278,12 +327,12 @@ def run_testcase(
             poll_sec=5,
             preset_mode=preset_mode,
         )
-    except WosDispatchError as e:
-        if "available" in str(e):
-            from heal import heal_troops
-            logger.info("Attacker has insufficient troops — healing and retrying...")
-            heal_troops(atk_emulator, home_tag=atk_cfg.get("battle_alliance", ""))
-            # attack_when_ready handles its own navigation back to the tile
+    except WosTroopAvailabilityError:
+        from heal import heal_troops
+        logger.info("Attacker has insufficient troops — healing and retrying...")
+        heal_troops(atk_emulator, home_tag=atk_cfg.get("battle_alliance", ""))
+        # attack_when_ready handles its own navigation back to the tile.
+        try:
             atk_result = attack_when_ready(
                 atk_emulator,
                 world_x,
@@ -293,8 +342,20 @@ def run_testcase(
                 poll_sec=5,
                 preset_mode=preset_mode,
             )
-        else:
-            raise
+        except WosPresetTroopShortageError:
+            logger.warning(
+                "Attacker preset 7 still shows the troop-shortage badge after healing — rebuilding from spec"
+            )
+            try:
+                atk_result = deploy_army(
+                    atk_emulator,
+                    atk_army_spec,
+                    preset_mode=_manual_preset_mode_after_shortage(),
+                )
+            except WosTroopAvailabilityError as manual_exc:
+                _raise_after_heal_shortage("Attacker", manual_exc)
+        except WosTroopAvailabilityError as retry_exc:
+            _raise_after_heal_shortage("Attacker", retry_exc)
     if not atk_result.get("ok"):
         raise RuntimeError(f"Attacker deploy failed: {atk_result}")
     logger.info("Attacker army deployed, battle underway...")
@@ -310,11 +371,7 @@ def run_testcase(
 
     # ── Step 8: Capture war report (first in list) ────────────────────────────
     logger.info("Capturing war report (first in list)...")
-    report_args = ["--instance", atk_instance]
-    if debug:
-        report_args.append("--debug")
-    report_args.extend(["report", "--tab", "war"])
-    report = _wosctl(*report_args)
+    report = _capture_war_report(atk_emulator, debug=debug)
     if "left" not in report or "right" not in report:
         raise RuntimeError(f"Could not capture war report: {report}")
 
@@ -328,8 +385,8 @@ def run_testcase(
         "tile": {"x": world_x, "y": world_y},
         "attacker": atk_rep.get("survivors", 0),
         "defender": def_rep.get("survivors", 0),
-        "attacker_stats": _map_stats(atk_rep.get("stat_bonuses", {})),
-        "defender_stats": _map_stats(def_rep.get("stat_bonuses", {})),
+        "attacker_stats": _map_stats(atk_rep.get("stat_bonuses", {}), side="attacker"),
+        "defender_stats": _map_stats(def_rep.get("stat_bonuses", {}), side="defender"),
         "attacker_heroes": atk_rep.get("heroes", []),
         "defender_heroes": def_rep.get("heroes", []),
     }

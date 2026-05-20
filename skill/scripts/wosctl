@@ -75,8 +75,10 @@ if _VENV_PYTHON.exists() and sys.prefix != str(_VENV_DIR):
 
 # ── stdlib imports ─────────────────────────────────────────────────────────────
 import argparse
+from datetime import datetime, timezone
 import json
 import logging
+import traceback
 
 # ── onboarding: runs BEFORE any emulator imports ─────────────────────────────
 _CONFIG_PATH = _SKILL_DIR / "config.json"
@@ -220,7 +222,8 @@ if str(_ENTRY_DIR) not in sys.path:
 if str(_SKILL_DIR) not in sys.path:
     sys.path.insert(0, str(_SKILL_DIR))
 
-from logging_setup import configure_daily_file_logging
+from logging_setup import add_stderr_logging, configure_daily_file_logging
+from instance_lock import InstanceLockError, lock_instances, testcase_instance_names
 from emulator import (
     WosError,
     WosEmulator,
@@ -276,6 +279,111 @@ def _fail(message: str, exit_code: int = 1, error_type: str = "error", **extra: 
 def _success(**payload: object) -> int:
     _emit({"ok": True, **payload})
     return 0
+
+
+def _safe_repr(value: object, limit: int = 500) -> str:
+    try:
+        rendered = repr(value)
+    except Exception as exc:
+        rendered = f"<repr failed: {type(exc).__name__}: {exc}>"
+    if len(rendered) > limit:
+        rendered = rendered[:limit] + "...<truncated>"
+    return rendered
+
+
+def _write_exception_diagnostics(exc: BaseException) -> dict[str, object]:
+    debug_dir = (
+        _SKILL_DIR
+        / "tmp"
+        / "wosctl_errors"
+        / f"{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}_{os.getpid()}"
+    )
+    debug_dir.mkdir(parents=True, exist_ok=True)
+
+    saved_images: list[str] = []
+    diagnostic_errors: list[str] = []
+    frames: list[dict[str, object]] = []
+    screenshot_saved = False
+
+    tb = exc.__traceback__
+    frame_index = 0
+    while tb is not None:
+        frame = tb.tb_frame
+        frame_locals = dict(frame.f_locals)
+        frames.append(
+            {
+                "file": frame.f_code.co_filename,
+                "line": tb.tb_lineno,
+                "function": frame.f_code.co_name,
+                "locals": {
+                    key: _safe_repr(value)
+                    for key, value in sorted(frame_locals.items())
+                    if not key.startswith("__")
+                },
+            }
+        )
+
+        for name, value in frame_locals.items():
+            if name.startswith("__"):
+                continue
+            if not screenshot_saved and name in {"emulator", "_emu"} and hasattr(value, "screencap"):
+                screenshot_path = debug_dir / "emulator_screenshot.png"
+                try:
+                    value.screencap(str(screenshot_path))
+                    saved_images.append(str(screenshot_path))
+                    screenshot_saved = True
+                except Exception as screenshot_exc:
+                    diagnostic_errors.append(
+                        f"emulator screenshot failed for local {name}: {screenshot_exc}"
+                    )
+            shape = getattr(value, "shape", None)
+            dtype = getattr(value, "dtype", None)
+            if shape is None or dtype is None:
+                continue
+            try:
+                if len(shape) not in {2, 3}:
+                    continue
+                if len(shape) == 3 and shape[2] not in {1, 3, 4}:
+                    continue
+                image_path = debug_dir / f"frame{frame_index}_{name}.png"
+                import cv2 as _cv2
+
+                if _cv2.imwrite(str(image_path), value):
+                    saved_images.append(str(image_path))
+            except Exception as image_exc:
+                diagnostic_errors.append(
+                    f"image local save failed for frame {frame_index} local {name}: {image_exc}"
+                )
+
+        tb = tb.tb_next
+        frame_index += 1
+
+    diagnostic_path = debug_dir / "exception.json"
+    diagnostic = {
+        "argv": sys.argv,
+        "cwd": os.getcwd(),
+        "error_type": type(exc).__name__,
+        "error": str(exc),
+        "traceback": "".join(traceback.format_exception(type(exc), exc, exc.__traceback__)),
+        "frames": frames,
+        "saved_images": saved_images,
+        "diagnostic_errors": diagnostic_errors,
+    }
+    diagnostic_path.write_text(json.dumps(diagnostic, indent=2, default=str) + "\n")
+    return {
+        "debug_dir": str(debug_dir),
+        "diagnostic_path": str(diagnostic_path),
+        "saved_images": saved_images,
+        "diagnostic_errors": diagnostic_errors,
+    }
+
+
+def _exception_diagnostics_or_error(exc: BaseException) -> dict[str, object]:
+    try:
+        return _write_exception_diagnostics(exc)
+    except Exception as diagnostic_exc:
+        logger.exception("Failed to write wosctl exception diagnostics")
+        return {"diagnostic_errors": [f"failed to write diagnostics: {diagnostic_exc}"]}
 
 
 def _positive_int(value: str) -> int:
@@ -842,43 +950,64 @@ def cmd_shell(instance_name: str, shell_cmd: str) -> int:
 
 def cmd_run_testcase(spec: str, dry_run: bool = False, repeat: int = 1, debug: bool = False) -> int:
     try:
+        instance_names = testcase_instance_names(spec)
+    except Exception as exc:
+        return _fail(str(exc), command="run-testcase", spec=spec)
+
+    try:
         from run_testcase import run_testcase
     except Exception as exc:
         return _fail(f"run-testcase import failed: {exc}", command="run-testcase")
 
-    results: list[dict] = []
-    for run_number in range(1, repeat + 1):
-        preset_mode = None
-        if repeat > 1:
-            preset_mode = "save" if run_number == 1 else "load"
-        try:
-            result = run_testcase(spec, dry_run=dry_run, debug=debug, preset_mode=preset_mode)
-        except Exception as exc:
-            return _fail(
-                str(exc),
-                command="run-testcase",
-                spec=spec,
-                repeat=repeat,
-                completed=len(results),
-                results=results,
-            )
+    try:
+        lock_context = lock_instances(instance_names, _SKILL_DIR / "tmp" / "wosctl_locks")
+        with lock_context:
+            results: list[dict] = []
+            for run_number in range(1, repeat + 1):
+                preset_mode = None
+                if repeat > 1:
+                    preset_mode = "save" if run_number == 1 else "load"
+                try:
+                    result = run_testcase(spec, dry_run=dry_run, debug=debug, preset_mode=preset_mode)
+                except Exception as exc:
+                    return _fail(
+                        str(exc),
+                        command="run-testcase",
+                        spec=spec,
+                        repeat=repeat,
+                        completed=len(results),
+                        results=results,
+                    )
 
-        if repeat == 1:
-            _emit(result)
+                if repeat == 1:
+                    _emit(result)
+                    return 0
+
+                result["run_number"] = run_number
+                results.append(result)
+
+            _emit({
+                "ok": True,
+                "command": "run-testcase",
+                "spec": spec,
+                "repeat": repeat,
+                "completed": len(results),
+                "results": results,
+            })
             return 0
-
-        result["run_number"] = run_number
-        results.append(result)
-
-    _emit({
-        "ok": True,
-        "command": "run-testcase",
-        "spec": spec,
-        "repeat": repeat,
-        "completed": len(results),
-        "results": results,
-    })
-    return 0
+    except InstanceLockError as exc:
+        return _fail(str(exc), command="run-testcase", spec=spec, error_type="instance_locked")
+    except Exception as exc:
+        try:
+            diagnostics = _exception_diagnostics_or_error(exc)
+        except Exception:
+            diagnostics = {}
+        return _fail(
+            f"run-testcase failed: {exc}",
+            command="run-testcase",
+            spec=spec,
+            **diagnostics,
+        )
 
 
 # ─── Argument parsing ──────────────────────────────────────────────────────────
@@ -962,6 +1091,9 @@ def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
 
+    if args.command == "run-testcase":
+        add_stderr_logging()
+
     if args.command == "status":
         return cmd_status(args.instance)
 
@@ -973,50 +1105,69 @@ def main() -> int:
     except WosError as exc:
         return _fail(str(exc), exit_code=2, error_type="usage_error", command=args.command)
 
-    if args.command == "ensure-ready":
-        return cmd_ensure_ready(instance_name)
+    try:
+        with lock_instances([instance_name], _SKILL_DIR / "tmp" / "wosctl_locks"):
+            if args.command == "ensure-ready":
+                return cmd_ensure_ready(instance_name)
 
-    if args.command == "goto":
-        return cmd_goto(instance_name, args.destination, getattr(args, "pet_name", ""), getattr(args, "coord_y", ""))
+            if args.command == "goto":
+                return cmd_goto(instance_name, args.destination, getattr(args, "pet_name", ""), getattr(args, "coord_y", ""))
 
-    if args.command == "report":
-        return cmd_report(instance_name, args.tab, args.index, debug=args.debug)
+            if args.command == "report":
+                return cmd_report(instance_name, args.tab, args.index, debug=args.debug)
 
-    if args.command == "reports":
-        return cmd_reports(
-            instance_name,
-            args.tab,
-            args.count,
-            debug=args.debug,
-            full_json=getattr(args, "full_json", False),
-        )
+            if args.command == "reports":
+                return cmd_reports(
+                    instance_name,
+                    args.tab,
+                    args.count,
+                    debug=args.debug,
+                    full_json=getattr(args, "full_json", False),
+                )
 
-    if args.command == "memories":
-        return cmd_memories(instance_name, args.map, args.tap_mode)
+            if args.command == "memories":
+                return cmd_memories(instance_name, args.map, args.tap_mode)
 
-    if args.command == "screencap":
-        return cmd_screencap(instance_name, args.path)
+            if args.command == "screencap":
+                return cmd_screencap(instance_name, args.path)
 
-    if args.command == "capture-hero-skills":
-        return cmd_capture_hero_skills(instance_name)
+            if args.command == "capture-hero-skills":
+                return cmd_capture_hero_skills(instance_name)
 
-    if args.command == "ensure-alliance":
-        return cmd_ensure_alliance(instance_name, args.tag)
+            if args.command == "ensure-alliance":
+                return cmd_ensure_alliance(instance_name, args.tag)
 
-    if args.command == "recall-camp":
-        return cmd_recall_camp(instance_name)
+            if args.command == "recall-camp":
+                return cmd_recall_camp(instance_name)
 
-    if args.command == "heal":
-        return cmd_heal(instance_name, home_alliance=getattr(args, "home_alliance", ""))
+            if args.command == "heal":
+                return cmd_heal(instance_name, home_alliance=getattr(args, "home_alliance", ""))
 
-    if args.command == "shell":
-        shell_cmd = " ".join(args.cmd)
-        if not shell_cmd:
-            return _fail("shell: no command provided", exit_code=2, error_type="usage_error", command="shell")
-        return cmd_shell(instance_name, shell_cmd)
+            if args.command == "shell":
+                shell_cmd = " ".join(args.cmd)
+                if not shell_cmd:
+                    return _fail("shell: no command provided", exit_code=2, error_type="usage_error", command="shell")
+                return cmd_shell(instance_name, shell_cmd)
+    except InstanceLockError as exc:
+        return _fail(str(exc), command=args.command, instance_name=instance_name, error_type="instance_locked")
 
     return _fail(f"Unknown command: {args.command}", exit_code=2, error_type="usage_error")
 
 
+def cli_main() -> int:
+    try:
+        return main()
+    except KeyboardInterrupt:
+        return _fail("Interrupted", exit_code=130, error_type="interrupted")
+    except WosError as exc:
+        logger.exception("Unhandled WOS error")
+        diagnostics = _exception_diagnostics_or_error(exc)
+        return _fail(str(exc), error_type="wos_error", **diagnostics)
+    except Exception as exc:
+        logger.exception("Unhandled wosctl error")
+        diagnostics = _exception_diagnostics_or_error(exc)
+        return _fail(f"Unexpected error: {exc}", error_type="internal_error", **diagnostics)
+
+
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(cli_main())

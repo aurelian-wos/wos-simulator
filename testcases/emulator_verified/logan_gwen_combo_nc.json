@@ -1,0 +1,83 @@
+[
+  {
+    "test_id": "logan_gwen_combo_nc",
+    "description": "Logan (Infantry) + Gwen (Marksman) combo \u2014 both heroes fully deterministic (no chance skills), single run sufficient. Tests Infantry+Marksman DamageUp stacking for two of the highest-tier NC heroes. minxxx defends with Logan (S1=3/S2=3/S3=3) + Gwen (S1=1/S2=1/S3=0). First validation of Logan+Gwen interaction.",
+    "attacker": {
+      "name": "[BBQ]XxWIPxX",
+      "heroes": {},
+      "troops": {
+        "infantry_t6": 600,
+        "lancer_t6": 600,
+        "marksman_t6": 600
+      },
+      "stats": {
+        "inf": {
+          "attack": 164.2,
+          "defense": 169.0,
+          "lethality": 124.2,
+          "health": 136.6
+        },
+        "lanc": {
+          "attack": 149.7,
+          "defense": 152.0,
+          "lethality": 121.2,
+          "health": 109.8
+        },
+        "mark": {
+          "attack": 162.2,
+          "defense": 156.5,
+          "lethality": 126.5,
+          "health": 123.4
+        }
+      },
+      "joiner_heroes": {}
+    },
+    "defender": {
+      "name": "[ARK]Piddlyminxxx",
+      "heroes": {
+        "Logan": {
+          "skill_1": 3,
+          "skill_2": 3,
+          "skill_3": 3
+        },
+        "Gwen": {
+          "skill_1": 1,
+          "skill_2": 1,
+          "skill_3": 0
+        }
+      },
+      "troops": {
+        "infantry_t6": 200,
+        "lancer_t6": 200,
+        "marksman_t6": 200
+      },
+      "stats": {
+        "inf": {
+          "attack": 342.3,
+          "defense": 333.1,
+          "lethality": 186.8,
+          "health": 236.5
+        },
+        "lanc": {
+          "attack": 238.9,
+          "defense": 229.7,
+          "lethality": 172.0,
+          "health": 173.0
+        },
+        "mark": {
+          "attack": 360.5,
+          "defense": 343.3,
+          "lethality": 182.4,
+          "health": 177.4
+        }
+      },
+      "joiner_heroes": {}
+    },
+    "game_report_result": [
+      {
+        "attacker": 0,
+        "defender": 403
+      }
+    ]
+  }
+]

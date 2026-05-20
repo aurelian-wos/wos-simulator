@@ -1,0 +1,87 @@
+[
+  {
+    "test_id": "sergey_norah_zinman_combo_nc",
+    "description": "Sergey+Norah+Zinman 3-hero combo \u2014 Inf+Lanc+Mark class heroes, all NC (no chance skills), single run definitive. Tests 3-class buff stacking with deterministic skills. WIP attacks (no hero, t6 800/800/800), minxxx defends with all three heroes.",
+    "attacker": {
+      "name": "[BBQ]XxWIPxX",
+      "heroes": {},
+      "troops": {
+        "infantry_t6": 800,
+        "lancer_t6": 800,
+        "marksman_t6": 800
+      },
+      "stats": {
+        "inf": {
+          "attack": 164.2,
+          "defense": 169.0,
+          "lethality": 124.2,
+          "health": 136.6
+        },
+        "lanc": {
+          "attack": 149.7,
+          "defense": 152.0,
+          "lethality": 121.2,
+          "health": 109.8
+        },
+        "mark": {
+          "attack": 162.2,
+          "defense": 156.5,
+          "lethality": 126.5,
+          "health": 123.4
+        }
+      },
+      "joiner_heroes": {}
+    },
+    "defender": {
+      "name": "[ARK]Piddlyminxxx",
+      "heroes": {
+        "Sergey": {
+          "skill_1": 4,
+          "skill_2": 4
+        },
+        "Norah": {
+          "skill_1": 1,
+          "skill_2": 1,
+          "skill_3": 1
+        },
+        "Zinman": {
+          "skill_1": 1,
+          "skill_2": 0,
+          "skill_3": 0
+        }
+      },
+      "troops": {
+        "infantry_t6": 200,
+        "lancer_t6": 200,
+        "marksman_t6": 200
+      },
+      "stats": {
+        "inf": {
+          "attack": 347.2,
+          "defense": 338.0,
+          "lethality": 178.3,
+          "health": 184.1
+        },
+        "lanc": {
+          "attack": 380.1,
+          "defense": 370.9,
+          "lethality": 172.0,
+          "health": 173.0
+        },
+        "mark": {
+          "attack": 279.6,
+          "defense": 262.4,
+          "lethality": 182.4,
+          "health": 177.4
+        }
+      },
+      "joiner_heroes": {}
+    },
+    "game_report_result": [
+      {
+        "attacker": 1372,
+        "defender": 0
+      }
+    ]
+  }
+]

@@ -53,6 +53,7 @@ TPL_HEAL_BTN           = str(_TPL / "heal_heal_btn.png")
 TPL_HEAL_INJURED_TITLE = str(_TPL / "heal_injured.png")
 
 HEAL_BATCH_SIZE = 85
+MIN_VISIBLE_ZERO_PILLS_AFTER_QUICK_SELECT = 2
 
 # Hospital icon search region on world map (x1, y1, x2, y2)
 _HOSPITAL_SEARCH_REGION = (440, 980, 680, 1090)
@@ -151,7 +152,8 @@ def _double_tap_quick_select(emulator: WosEmulator, max_attempts: int = 3) -> No
     In practice one tap can leave the popup in the "all selected / max counts"
     state, while a second tap flips it back to zero. So do not trust a blind
     double-tap; inspect the visible pill state after each tap and stop only when
-    at least three visible zero-count boxes are present.
+    multiple visible zero-count boxes are present. Some accounts can have only
+    two wounded troop rows visible, so do not require all three troop classes.
 
     Raises WosHealError if the button is not found or the visible rows never
     reach the zero state after max_attempts tap-pairs.
@@ -172,7 +174,7 @@ def _double_tap_quick_select(emulator: WosEmulator, max_attempts: int = 3) -> No
             attempt,
             zero_count,
         )
-        if zero_count >= 3:
+        if zero_count >= MIN_VISIBLE_ZERO_PILLS_AFTER_QUICK_SELECT:
             logger.info("_double_tap_quick_select: visible pills reset to 0 ✓")
             return
 
@@ -185,7 +187,7 @@ def _double_tap_quick_select(emulator: WosEmulator, max_attempts: int = 3) -> No
             attempt,
             zero_count,
         )
-        if zero_count >= 3:
+        if zero_count >= MIN_VISIBLE_ZERO_PILLS_AFTER_QUICK_SELECT:
             logger.info("_double_tap_quick_select: visible pills reset to 0 ✓")
             return
 
@@ -198,7 +200,7 @@ def _double_tap_quick_select(emulator: WosEmulator, max_attempts: int = 3) -> No
             attempt,
             zero_count,
         )
-        if zero_count >= 3:
+        if zero_count >= MIN_VISIBLE_ZERO_PILLS_AFTER_QUICK_SELECT:
             logger.info("_double_tap_quick_select: visible pills reset to 0 ✓")
             return
 

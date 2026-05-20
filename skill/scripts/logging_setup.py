@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import sys
 from datetime import datetime
 from pathlib import Path
 
@@ -19,3 +20,17 @@ def configure_daily_file_logging(base_dir: Path, *, level: int = logging.INFO) -
         force=True,
     )
     return log_path
+
+
+def add_stderr_logging(*, level: int = logging.INFO) -> None:
+    """Mirror root logs to stderr without disturbing JSON stdout."""
+    root = logging.getLogger()
+    for handler in root.handlers:
+        if getattr(handler, "_wos_stderr_handler", False):
+            return
+
+    handler = logging.StreamHandler(sys.stderr)
+    handler.setLevel(level)
+    handler.setFormatter(logging.Formatter("[%(asctime)s] [%(levelname)s] %(message)s", datefmt="%H:%M:%S"))
+    handler._wos_stderr_handler = True
+    root.addHandler(handler)

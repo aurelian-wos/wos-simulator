@@ -1,0 +1,266 @@
+[
+  {
+    "test_id": "mia_only_defender_current",
+    "description": "Greg/Mia Batch 1 Mia-only defender full current kit. Not isolated skill evidence. WIP attacks clean; minxxx defends with Mia.",
+    "attacker": {
+      "name": "[BBQ]XxWIPxX",
+      "heroes": {},
+      "troops": {
+        "infantry_t6": 1500,
+        "lancer_t6": 1069,
+        "marksman_t6": 1500
+      },
+      "stats": {
+        "inf": {
+          "attack": 140.7,
+          "defense": 148.2,
+          "lethality": 117.0,
+          "health": 131.9
+        },
+        "lanc": {
+          "attack": 149.2,
+          "defense": 148.2,
+          "lethality": 116.5,
+          "health": 105.1
+        },
+        "mark": {
+          "attack": 153.7,
+          "defense": 143.2,
+          "lethality": 121.9,
+          "health": 112.3
+        }
+      },
+      "joiner_heroes": {}
+    },
+    "defender": {
+      "name": "[ARK]Piddlyminxxx",
+      "heroes": {
+        "Mia": {
+          "skill_1": 3,
+          "skill_2": 2,
+          "skill_3": 2
+        }
+      },
+      "troops": {
+        "infantry_t6": 200,
+        "lancer_t6": 200,
+        "marksman_t6": 200
+      },
+      "stats": {
+        "inf": {
+          "attack": 245.9,
+          "defense": 240.7,
+          "lethality": 177.2,
+          "health": 183.3
+        },
+        "lanc": {
+          "attack": 324.9,
+          "defense": 325.7,
+          "lethality": 176.0,
+          "health": 176.5
+        },
+        "mark": {
+          "attack": 246.2,
+          "defense": 241.0,
+          "lethality": 181.7,
+          "health": 176.5
+        }
+      },
+      "joiner_heroes": {}
+    },
+    "game_report_result": [
+      {
+        "attacker": 3560,
+        "defender": 0
+      },
+      {
+        "attacker": 3539,
+        "defender": 0
+      },
+      {
+        "attacker": 3556,
+        "defender": 0
+      },
+      {
+        "attacker": 3525,
+        "defender": 0
+      },
+      {
+        "attacker": 3551,
+        "defender": 0
+      },
+      {
+        "attacker": 3564,
+        "defender": 0
+      },
+      {
+        "attacker": 3546,
+        "defender": 0
+      },
+      {
+        "attacker": 3540,
+        "defender": 0
+      },
+      {
+        "attacker": 3528,
+        "defender": 0
+      },
+      {
+        "attacker": 3530,
+        "defender": 0
+      }
+    ]
+  },
+  {
+    "test_id": "mia_only_defender_current",
+    "description": "Greg/Mia Batch 1 Mia-only defender full current kit. Not isolated skill evidence. WIP attacks clean; minxxx defends with Mia.",
+    "attacker": {
+      "name": "[BBQ]XxWIPxX",
+      "heroes": {},
+      "troops": {
+        "infantry_t6": 1400,
+        "lancer_t6": 1069,
+        "marksman_t6": 1500
+      },
+      "stats": {
+        "inf": {
+          "attack": 140.7,
+          "defense": 148.2,
+          "lethality": 117.0,
+          "health": 131.9
+        },
+        "lanc": {
+          "attack": 149.2,
+          "defense": 148.2,
+          "lethality": 116.5,
+          "health": 105.1
+        },
+        "mark": {
+          "attack": 153.7,
+          "defense": 143.2,
+          "lethality": 121.9,
+          "health": 112.3
+        }
+      },
+      "joiner_heroes": {}
+    },
+    "defender": {
+      "name": "[ARK]Piddlyminxxx",
+      "heroes": {
+        "Mia": {
+          "skill_1": 3,
+          "skill_2": 2,
+          "skill_3": 2
+        }
+      },
+      "troops": {
+        "infantry_t6": 200,
+        "lancer_t6": 200,
+        "marksman_t6": 200
+      },
+      "stats": {
+        "inf": {
+          "attack": 245.9,
+          "defense": 240.7,
+          "lethality": 177.2,
+          "health": 183.3
+        },
+        "lanc": {
+          "attack": 324.9,
+          "defense": 325.7,
+          "lethality": 176.0,
+          "health": 176.5
+        },
+        "mark": {
+          "attack": 246.2,
+          "defense": 241.0,
+          "lethality": 181.7,
+          "health": 176.5
+        }
+      },
+      "joiner_heroes": {}
+    },
+    "game_report_result": [
+      {
+        "attacker": 3461,
+        "defender": 0
+      },
+      {
+        "attacker": 3451,
+        "defender": 0
+      },
+      {
+        "attacker": 3442,
+        "defender": 0
+      },
+      {
+        "attacker": 3462,
+        "defender": 0
+      },
+      {
+        "attacker": 3436,
+        "defender": 0
+      },
+      {
+        "attacker": 3460,
+        "defender": 0
+      },
+      {
+        "attacker": 3431,
+        "defender": 0
+      },
+      {
+        "attacker": 3469,
+        "defender": 0
+      },
+      {
+        "attacker": 3460,
+        "defender": 0
+      },
+      {
+        "attacker": 3434,
+        "defender": 0
+      },
+      {
+        "attacker": 3449,
+        "defender": 0
+      },
+      {
+        "attacker": 3434,
+        "defender": 0
+      },
+      {
+        "attacker": 3445,
+        "defender": 0
+      },
+      {
+        "attacker": 3452,
+        "defender": 0
+      },
+      {
+        "attacker": 3422,
+        "defender": 0
+      },
+      {
+        "attacker": 3453,
+        "defender": 0
+      },
+      {
+        "attacker": 3479,
+        "defender": 0
+      },
+      {
+        "attacker": 3472,
+        "defender": 0
+      },
+      {
+        "attacker": 3438,
+        "defender": 0
+      },
+      {
+        "attacker": 3433,
+        "defender": 0
+      }
+    ]
+  }
+]

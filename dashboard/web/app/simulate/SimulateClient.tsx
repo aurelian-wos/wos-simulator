@@ -213,8 +213,9 @@ function toApiPayload(
   defender: SideState,
   replicates: number,
   rallyMode: boolean,
+  statProfileNames?: Record<Side, string | null>,
 ): SimulateRequestPayload {
-  const mkSide = (s: SideState): SimulateSidePayload => ({
+  const mkSide = (side: Side, s: SideState): SimulateSidePayload => ({
     troops: s.troops,
     troop_types: {
       infantry: `infantry_${s.tiers.infantry}`,
@@ -237,6 +238,7 @@ function toApiPayload(
           j.name ? [{ name: j.name, skill_1: 5 }] : [],
         )
       : [],
+    stat_profile_name: statProfileNames?.[side] ?? null,
     stat_modifiers: toStatModifiersPayload(s.statModifiers),
     stats: {
       inf: [
@@ -260,8 +262,8 @@ function toApiPayload(
     },
   });
   return {
-    attacker: mkSide(attacker),
-    defender: mkSide(defender),
+    attacker: mkSide("attacker", attacker),
+    defender: mkSide("defender", defender),
     replicates,
     rally_mode: rallyMode,
   };
@@ -670,6 +672,7 @@ interface SimulateClientProps {
 interface InitialSavedRunState {
   attacker: SideState;
   defender: SideState;
+  loadedPresetNames: Record<Side, string | null>;
   replicates: number;
   rallyMode: boolean;
   result: SimulateApiResponse | null;
@@ -692,6 +695,7 @@ function buildInitialSavedRunState(
     return {
       attacker: defaultSide(),
       defender: defaultSide(),
+      loadedPresetNames: { attacker: null, defender: null },
       replicates: 1000,
       rallyMode: false,
       result: null,
@@ -711,6 +715,16 @@ function buildInitialSavedRunState(
   const base = {
     attacker: sideFromPayload(request.attacker),
     defender: sideFromPayload(request.defender),
+    loadedPresetNames: {
+      attacker:
+        typeof request.attacker?.stat_profile_name === "string"
+          ? request.attacker.stat_profile_name
+          : null,
+      defender:
+        typeof request.defender?.stat_profile_name === "string"
+          ? request.defender.stat_profile_name
+          : null,
+    },
     replicates: Math.max(
       1,
       Math.min(5000, clampValue(request.replicates, 1000)),
@@ -856,6 +870,9 @@ export default function SimulateClient({
     attacker: null,
     defender: null,
   });
+  const [loadedPresetNames, setLoadedPresetNames] = useState<
+    Record<Side, string | null>
+  >(() => initialState.loadedPresetNames);
   const [presetModalSide, setPresetModalSide] = useState<Side | null>(null);
   const [presetDraftName, setPresetDraftName] = useState("");
   const [presetStatus, setPresetStatus] = useState<PresetStatus>(null);
@@ -866,6 +883,7 @@ export default function SimulateClient({
   const toastIdRef = useRef(0);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loadedRunIdRef = useRef<string | null>(initialSavedRun?.id ?? null);
+  const previousInitialRunIdRef = useRef<string | null>(initialRunId);
   const pendingSimulateRequestRef = useRef<SimulateRequestPayload | null>(null);
   const pendingOptimizeRequestRef = useRef<OptimizeRatioRequestPayload | null>(
     null,
@@ -973,6 +991,17 @@ export default function SimulateClient({
     const request = saved.request as SimulateRequestPayload;
     setAttacker(sideFromPayload(request.attacker));
     setDefender(sideFromPayload(request.defender));
+    setLoadedPresetIds({ attacker: null, defender: null });
+    setLoadedPresetNames({
+      attacker:
+        typeof request.attacker?.stat_profile_name === "string"
+          ? request.attacker.stat_profile_name
+          : null,
+      defender:
+        typeof request.defender?.stat_profile_name === "string"
+          ? request.defender.stat_profile_name
+          : null,
+    });
     setReplicates(
       Math.max(1, Math.min(5000, clampValue(request.replicates, 1000))),
     );
@@ -1069,6 +1098,12 @@ export default function SimulateClient({
       shareUrl,
       title,
     });
+    if (
+      typeof window !== "undefined" &&
+      `${window.location.pathname}${window.location.search}` !== shareUrl
+    ) {
+      window.history.pushState(null, "", shareUrl);
+    }
     router.push(shareUrl, { scroll: false });
     setRecentRuns((prev) => [
       {
@@ -1083,10 +1118,18 @@ export default function SimulateClient({
   }
 
   useEffect(() => {
+    const previousInitialRunId = previousInitialRunIdRef.current;
+    previousInitialRunIdRef.current = initialRunId;
     if (!initialRunId) {
+      if (!previousInitialRunId) {
+        setLoadingSavedRun(false);
+        return;
+      }
       setLoadingSavedRun(false);
       setSavedRunMeta(null);
       setSavedRunError(null);
+      setLoadedPresetIds({ attacker: null, defender: null });
+      setLoadedPresetNames({ attacker: null, defender: null });
       loadedRunIdRef.current = null;
       return;
     }
@@ -1189,6 +1232,14 @@ export default function SimulateClient({
     const prevDefender = defender;
     setAttacker(prevDefender);
     setDefender(prevAttacker);
+    setLoadedPresetIds((prev) => ({
+      attacker: prev.defender,
+      defender: prev.attacker,
+    }));
+    setLoadedPresetNames((prev) => ({
+      attacker: prev.defender,
+      defender: prev.attacker,
+    }));
     setSidesSwapped((v) => !v);
     dismissToast();
   }
@@ -1199,12 +1250,6 @@ export default function SimulateClient({
   const activePresetId = presetModalSide
     ? loadedPresetIds[presetModalSide] ?? ""
     : "";
-  const loadedPresetNames: Record<Side, string | null> = {
-    attacker:
-      statPresets.find((p) => p.id === loadedPresetIds.attacker)?.name ?? null,
-    defender:
-      statPresets.find((p) => p.id === loadedPresetIds.defender)?.name ?? null,
-  };
 
   function upsertPreset(preset: PlayerStatPreset, side: Side) {
     setStatPresets((prev) => {
@@ -1214,13 +1259,18 @@ export default function SimulateClient({
       );
     });
     setLoadedPresetIds((prev) => ({ ...prev, [side]: preset.id }));
+    setLoadedPresetNames((prev) => ({ ...prev, [side]: preset.name }));
     setPresetDraftName(preset.name);
   }
 
   function openStatPresetModal(side: Side) {
     const loadedPreset = statPresets.find((p) => p.id === loadedPresetIds[side]);
     setPresetModalSide(side);
-    setPresetDraftName(loadedPreset?.name ?? `${SIDE_LABELS[side]} profile`);
+    setPresetDraftName(
+      loadedPreset?.name ??
+        loadedPresetNames[side] ??
+        `${SIDE_LABELS[side]} profile`,
+    );
     setPresetStatus(null);
   }
 
@@ -1270,6 +1320,7 @@ export default function SimulateClient({
     if (!presetModalSide) return;
     if (!id) {
       setLoadedPresetIds((prev) => ({ ...prev, [presetModalSide]: null }));
+      setLoadedPresetNames((prev) => ({ ...prev, [presetModalSide]: null }));
       setPresetDraftName(`${SIDE_LABELS[presetModalSide]} profile`);
       setPresetStatus({
         kind: "ok",
@@ -1285,6 +1336,10 @@ export default function SimulateClient({
     const setter = presetModalSide === "attacker" ? setAttacker : setDefender;
     setter((prev) => sideWithPresetStats(prev, selectedPreset));
     setLoadedPresetIds((prev) => ({ ...prev, [presetModalSide]: selectedPreset.id }));
+    setLoadedPresetNames((prev) => ({
+      ...prev,
+      [presetModalSide]: selectedPreset.name,
+    }));
     setPresetDraftName(selectedPreset.name);
     setPresetStatus({
       kind: "ok",
@@ -1340,7 +1395,13 @@ export default function SimulateClient({
     setSavedRunError(null);
     setSimulateProgress({ done: 0, total: replicates });
     try {
-      const payload = toApiPayload(attacker, defender, replicates, rallyMode);
+      const payload = toApiPayload(
+        attacker,
+        defender,
+        replicates,
+        rallyMode,
+        loadedPresetNames,
+      );
       pendingSimulateRequestRef.current = payload;
       const res = await fetch("/api/simulate", {
         method: "POST",
@@ -1404,7 +1465,13 @@ export default function SimulateClient({
       setResult(event.data);
       const request =
         pendingSimulateRequestRef.current ??
-        toApiPayload(attacker, defender, replicates, rallyMode);
+        toApiPayload(
+          attacker,
+          defender,
+          replicates,
+          rallyMode,
+          loadedPresetNames,
+        );
       maybeActivateSavedRun(event.data, request);
     } else if (event.type === "error") {
       setError(event.message ?? "Unknown error");
@@ -1420,8 +1487,15 @@ export default function SimulateClient({
     setSavedRunError(null);
     setOptimizeProgress({ done: 0, total: estimatedOptimizeCompositions });
     try {
+      const basePayload = toApiPayload(
+        attacker,
+        defender,
+        replicates,
+        rallyMode,
+        loadedPresetNames,
+      );
       const payload = {
-        ...toApiPayload(attacker, defender, replicates, rallyMode),
+        ...basePayload,
         grid_step: resolvedOptimizeStep,
         search_replicates: optimizeReplicates,
         infantry_min_pct: resolvedInfantryBounds.minPct,
@@ -1494,7 +1568,13 @@ export default function SimulateClient({
       const request =
         pendingOptimizeRequestRef.current ??
         ({
-          ...toApiPayload(attacker, defender, replicates, rallyMode),
+          ...toApiPayload(
+            attacker,
+            defender,
+            replicates,
+            rallyMode,
+            loadedPresetNames,
+          ),
           grid_step: resolvedOptimizeStep,
           search_replicates: optimizeReplicates,
           infantry_min_pct: resolvedInfantryBounds.minPct,

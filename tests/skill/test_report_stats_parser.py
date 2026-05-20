@@ -20,6 +20,7 @@ from report_stats_parser import (
     dashboard_warnings_from_result,
     extract_report_stats_and_troops,
     extract_values_from_ocr_items,
+    shape_dashboard_report_result,
     shape_dashboard_side,
 )
 
@@ -81,6 +82,34 @@ class ReportStatsParserTests(unittest.TestCase):
 
         self.assertEqual(result["troops"]["lancer"], 600)
         self.assertEqual(result["troop_types"]["lancer"], "lancer_t9")
+
+    def test_dashboard_report_shapes_absent_parsed_troop_slots_as_zero(self) -> None:
+        result = {
+            "left": {
+                "troops": [{"type": "infantry", "tier": 11, "count": 1200}],
+                "troop_counts": {"infantry": 1200},
+                "levels": {"infantry": {"tier": 11, "fire_crystal_level": 0}},
+                "stat_bonuses": {},
+            },
+            "right": {
+                "troops": [{"type": "marksman", "tier": 10, "count": 800}],
+                "troop_counts": {"marksman": 800},
+                "levels": {"marksman": {"tier": 10, "fire_crystal_level": 0}},
+                "stat_bonuses": {},
+            },
+            "meta": {"troop_slots_present": True, "missing_fields": []},
+        }
+
+        shaped = shape_dashboard_report_result(result)
+
+        self.assertEqual(
+            shaped["attacker"]["troops"],
+            {"infantry": 1200, "lancer": 0, "marksman": 0},
+        )
+        self.assertEqual(
+            shaped["defender"]["troops"],
+            {"infantry": 0, "lancer": 0, "marksman": 800},
+        )
 
     def test_dashboard_adapter_missing_fields_become_warning(self) -> None:
         warnings = dashboard_warnings_from_result(

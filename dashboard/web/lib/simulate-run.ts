@@ -22,6 +22,7 @@ export interface SimulateSidePayload {
   troop_types: Record<TroopCategory, string>;
   heroes: Record<TroopCategory, SimulateHeroPayload>;
   joiners: SimulateJoinerPayload[];
+  stat_profile_name?: string | null;
   stat_modifiers?: SimulateStatModifiersPayload;
   stats: {
     inf: [number, number, number, number];
