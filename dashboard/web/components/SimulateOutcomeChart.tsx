@@ -13,6 +13,9 @@ import {
 
 interface Props {
   outcomes: number[];
+  attackerArmy: number;
+  defenderArmy: number;
+  attackerOnLeft: boolean;
   bins?: number;
 }
 
@@ -23,60 +26,33 @@ function compactNumber(v: number): string {
   return String(Math.round(v));
 }
 
-export default function SimulateOutcomeChart({ outcomes, bins = 30 }: Props) {
+export default function SimulateOutcomeChart({
+  outcomes,
+  attackerArmy,
+  defenderArmy,
+  attackerOnLeft,
+  bins = 30,
+}: Props) {
   if (outcomes.length === 0) {
     return <p className="text-sm opacity-50">No outcomes to plot.</p>;
   }
 
   const min = Math.min(...outcomes);
   const max = Math.max(...outcomes);
-  const range = max - min;
-
-  // Degenerate case — all outcomes equal.
-  if (range === 0) {
-    const data = [{ bucket: min, count: outcomes.length }];
-    return (
-      <div style={{ height: 260 }}>
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={data}>
-            <CartesianGrid stroke="var(--border-color)" strokeDasharray="2 2" />
-            <XAxis
-              dataKey="bucket"
-              tick={{ fontSize: 10, fill: "var(--sidebar-text)", opacity: 0.6 }}
-              tickFormatter={compactNumber}
-            />
-            <YAxis
-              tick={{ fontSize: 10, fill: "var(--sidebar-text)", opacity: 0.6 }}
-              width={40}
-            />
-            <Tooltip
-              contentStyle={{
-                backgroundColor: "var(--sidebar-bg)",
-                border: "1px solid var(--border-color)",
-                borderRadius: 4,
-                fontSize: 12,
-              }}
-            />
-            <Line
-              type="monotone"
-              dataKey="count"
-              stroke="var(--sidebar-active)"
-              strokeWidth={2}
-              dot={{ r: 4 }}
-            />
-          </LineChart>
-        </ResponsiveContainer>
-      </div>
-    );
-  }
-
-  const binWidth = Math.max(1, Math.ceil(range / bins));
-  const binStart = Math.floor(min / binWidth) * binWidth;
-  const binCount = Math.ceil((max - binStart) / binWidth) + 1;
+  const axisLimit = Math.max(
+    1,
+    attackerArmy,
+    defenderArmy,
+    Math.abs(min),
+    Math.abs(max),
+  );
+  const binCount = Math.max(1, bins);
+  const binStart = -axisLimit;
+  const binWidth = (axisLimit * 2) / binCount;
   const counts = new Array(binCount).fill(0);
   for (const v of outcomes) {
     const idx = Math.min(binCount - 1, Math.floor((v - binStart) / binWidth));
-    counts[idx] += 1;
+    counts[Math.max(0, idx)] += 1;
   }
 
   const data = counts.map((count, i) => {
@@ -85,16 +61,26 @@ export default function SimulateOutcomeChart({ outcomes, bins = 30 }: Props) {
     const mid = Math.round((low + high) / 2);
     return { bucket: mid, low, high, count };
   });
+  const attackerBoundary =
+    attackerArmy > 0 && attackerArmy < axisLimit ? attackerArmy : null;
+  const defenderBoundary =
+    defenderArmy > 0 && defenderArmy < axisLimit ? -defenderArmy : null;
 
   return (
-    <div style={{ height: 260 }}>
+    <div
+      data-testid="simulate-outcome-chart"
+      data-axis-limit={axisLimit}
+      data-axis-reversed={attackerOnLeft}
+      style={{ height: 260 }}
+    >
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={data}>
           <CartesianGrid stroke="var(--border-color)" strokeDasharray="2 2" />
           <XAxis
             dataKey="bucket"
             type="number"
-            domain={["dataMin", "dataMax"]}
+            domain={[-axisLimit, axisLimit]}
+            reversed={attackerOnLeft}
             tick={{ fontSize: 10, fill: "var(--sidebar-text)", opacity: 0.6 }}
             tickFormatter={compactNumber}
             allowDecimals={false}
@@ -115,6 +101,32 @@ export default function SimulateOutcomeChart({ outcomes, bins = 30 }: Props) {
               fontSize: 10,
             }}
           />
+          {attackerBoundary !== null && (
+            <ReferenceLine
+              x={attackerBoundary}
+              stroke="#a6e3a1"
+              strokeDasharray="2 2"
+              label={{
+                value: "attacker army",
+                position: "top",
+                fill: "#a6e3a1",
+                fontSize: 10,
+              }}
+            />
+          )}
+          {defenderBoundary !== null && (
+            <ReferenceLine
+              x={defenderBoundary}
+              stroke="#89b4fa"
+              strokeDasharray="2 2"
+              label={{
+                value: "defender army",
+                position: "top",
+                fill: "#89b4fa",
+                fontSize: 10,
+              }}
+            />
+          )}
           <Tooltip
             contentStyle={{
               backgroundColor: "var(--sidebar-bg)",

@@ -2387,9 +2387,15 @@ export default function SimulateClient({
           </h4>
           <p className="text-xs opacity-60 mb-2">
             Positive = attacker wins with that many survivors; negative =
-            defender wins.
+            defender wins. The axis is centered on 0 and spans the larger army
+            size on both sides.
           </p>
-          <SimulateOutcomeChart outcomes={result.outcomes} />
+          <SimulateOutcomeChart
+            outcomes={result.outcomes}
+            attackerArmy={attackerTotalTroops}
+            defenderArmy={defenderTotalTroops}
+            attackerOnLeft={!sidesSwapped}
+          />
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
             <SkillUseTable
               title="Attacker skills"

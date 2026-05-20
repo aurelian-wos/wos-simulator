@@ -548,6 +548,14 @@ test.describe("Dashboard smoke tests", () => {
       page.locator("h3").filter({ hasText: /Results \(222 replicates\)/ }),
     ).toBeVisible();
     await expect(page.locator("body")).toContainText("82 (attacker)");
+    const chart = page.getByTestId("simulate-outcome-chart");
+    await expect(chart).toHaveAttribute("data-axis-limit", "1666");
+    await expect(chart).toHaveAttribute("data-axis-reversed", "true");
+
+    await page
+      .getByRole("button", { name: "Swap attacker and defender" })
+      .click();
+    await expect(chart).toHaveAttribute("data-axis-reversed", "false");
 
     expect(errors).toHaveLength(0);
   });
