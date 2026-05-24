@@ -46,7 +46,9 @@ export default function SimulateOutcomeChart({
     Math.abs(min),
     Math.abs(max),
   );
-  const binCount = Math.max(1, bins);
+  const requestedBinCount = Math.max(1, bins);
+  const binCount =
+    requestedBinCount % 2 === 0 ? requestedBinCount + 1 : requestedBinCount;
   const binStart = -axisLimit;
   const binWidth = (axisLimit * 2) / binCount;
   const counts = new Array(binCount).fill(0);
@@ -61,6 +63,9 @@ export default function SimulateOutcomeChart({
     const mid = Math.round((low + high) / 2);
     return { bucket: mid, low, high, count };
   });
+  const peakBucket =
+    data.reduce((best, point) => (point.count > best.count ? point : best), data[0])
+      ?.bucket ?? 0;
   const attackerBoundary =
     attackerArmy > 0 && attackerArmy < axisLimit ? attackerArmy : null;
   const defenderBoundary =
@@ -71,6 +76,7 @@ export default function SimulateOutcomeChart({
       data-testid="simulate-outcome-chart"
       data-axis-limit={axisLimit}
       data-axis-reversed={attackerOnLeft}
+      data-peak-bucket={peakBucket}
       style={{ height: 260 }}
     >
       <ResponsiveContainer width="100%" height="100%">

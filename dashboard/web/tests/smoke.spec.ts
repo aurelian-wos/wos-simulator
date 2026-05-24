@@ -103,6 +103,34 @@ const SAVED_SIMULATION_RESULT = {
   },
 } as const;
 
+const DRAW_SIMULATION_ID = "run-share-all-draws";
+const DRAW_SIMULATION_REQUEST = {
+  ...SAVED_SIMULATION_REQUEST,
+  attacker: {
+    ...SAVED_SIMULATION_REQUEST.attacker,
+    troops: { infantry: 1000, lancer: 1000, marksman: 1000 },
+  },
+  defender: {
+    ...SAVED_SIMULATION_REQUEST.defender,
+    troops: { infantry: 1000, lancer: 1000, marksman: 1000 },
+  },
+  replicates: 1000,
+} as const;
+
+const DRAW_SIMULATION_RESULT = {
+  ...SAVED_SIMULATION_RESULT,
+  replicates: 1000,
+  summary: {
+    ...SAVED_SIMULATION_RESULT.summary,
+    mean: 0,
+    std: 0,
+    best: { value: 0, winner: "draw" },
+    worst: { value: 0, winner: "draw" },
+    attacker_win_rate: 0,
+  },
+  outcomes: Array.from({ length: 1000 }, () => 0),
+} as const;
+
 test.describe("Dashboard smoke tests", () => {
   test("/ — home page renders all five cards with drill-down links", async ({
     page,
@@ -647,6 +675,42 @@ test.describe("Dashboard smoke tests", () => {
       .getByRole("button", { name: "Swap attacker and defender" })
       .click();
     await expect(chart).toHaveAttribute("data-axis-reversed", "false");
+
+    expect(errors).toHaveLength(0);
+  });
+
+  test("/simulate — all-draw outcome distribution peaks at zero", async ({
+    page,
+  }) => {
+    const errors: string[] = [];
+    page.on("console", (msg) => {
+      if (msg.type() === "error") errors.push(msg.text());
+    });
+    page.on("pageerror", (err) => errors.push(err.message));
+
+    await page.route(`**/api/simulate/runs/${DRAW_SIMULATION_ID}`, async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          version: 1,
+          id: DRAW_SIMULATION_ID,
+          kind: "simulate",
+          created_at: "2026-05-24T15:52:00.000Z",
+          share_url: `/simulate?run=${DRAW_SIMULATION_ID}`,
+          request: DRAW_SIMULATION_REQUEST,
+          result: DRAW_SIMULATION_RESULT,
+        }),
+      });
+    });
+
+    const response = await page.goto(`/simulate?run=${DRAW_SIMULATION_ID}`);
+    expect(response?.status()).toBe(200);
+
+    await expect(page.locator("body")).toContainText("0 (draw)");
+    const chart = page.getByTestId("simulate-outcome-chart");
+    await expect(chart).toHaveAttribute("data-axis-limit", "3000");
+    await expect(chart).toHaveAttribute("data-peak-bucket", "0");
 
     expect(errors).toHaveLength(0);
   });
