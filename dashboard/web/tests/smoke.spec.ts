@@ -815,15 +815,24 @@ test.describe("Dashboard smoke tests", () => {
     await page.locator('[data-testid="pet-modifier-defender-toggle"]').click();
     await expect(
       page.locator('[data-testid="stat-preview-attacker-infantry-defense"]'),
-    ).toContainText("+5.0%");
+    ).toContainText("-10.0%");
 
     await page.locator('[data-testid="pet-modifier-details-defender"]').click();
+    await expect(
+      page.locator('[data-testid="pet-modifier-defender-enemy_defense"]'),
+    ).toHaveAttribute("max", "10");
+    await expect(
+      page.locator('[data-testid="pet-modifier-defender-enemy_lethality"]'),
+    ).toHaveAttribute("max", "5");
+    await expect(
+      page.locator('[data-testid="pet-modifier-defender-enemy_health"]'),
+    ).toHaveAttribute("max", "5");
     await page
       .locator('[data-testid="pet-modifier-defender-enemy_defense"]')
-      .fill("2.5");
+      .fill("10");
     await expect(
       page.locator('[data-testid="stat-preview-attacker-infantry-defense"]'),
-    ).toContainText("+7.5%");
+    ).toContainText("-10.0%");
 
     expect(errors).toHaveLength(0);
   });

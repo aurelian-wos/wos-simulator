@@ -109,7 +109,8 @@ const PET_DEBUFF_NAMES: PetModifierName[] = [
   "enemy_health",
 ];
 const PET_BUFF_MAX = 10;
-const PET_DEBUFF_MAX = 5;
+const PET_DEFAULT_DEBUFF_MAX = 5;
+const PET_DEFENSE_DEBUFF_MAX = 10;
 const PET_MODIFIER_LABELS: Record<PetModifierName, string> = {
   attack: "Attack",
   defense: "Defense",
@@ -627,6 +628,11 @@ function petStatModifierGroups(
   if (stat === "lethality") down = opponentModifiers.enemy_lethality;
   if (stat === "health") down = opponentModifiers.enemy_health;
   return { up: Math.max(0, up), down: Math.max(0, down) };
+}
+
+function petModifierMax(name: PetModifierName): number {
+  if (name === "enemy_defense") return PET_DEFENSE_DEBUFF_MAX;
+  return PET_DEBUFF_NAMES.includes(name) ? PET_DEFAULT_DEBUFF_MAX : PET_BUFF_MAX;
 }
 
 function effectiveStatBonusGroups(
@@ -3251,9 +3257,9 @@ function SidePanel({
                   defense: PET_BUFF_MAX,
                   lethality: PET_BUFF_MAX,
                   health: PET_BUFF_MAX,
-                  enemy_defense: PET_DEBUFF_MAX,
-                  enemy_lethality: PET_DEBUFF_MAX,
-                  enemy_health: PET_DEBUFF_MAX,
+                  enemy_defense: PET_DEFENSE_DEBUFF_MAX,
+                  enemy_lethality: PET_DEFAULT_DEBUFF_MAX,
+                  enemy_health: PET_DEFAULT_DEBUFF_MAX,
                 }
               : defaultPetModifiers(),
           }));
@@ -3284,6 +3290,8 @@ function StatModifierControls({
     STAT_MODIFIER_NAMES.every((name) => modifiers[name] === value),
   );
   const petEnabled = PET_MODIFIER_NAMES.some((name) => petModifiers[name] !== 0);
+  const [cityDetailsOpen, setCityDetailsOpen] = useState(false);
+  const [petDetailsOpen, setPetDetailsOpen] = useState(false);
   return (
     <div
       className="mt-3 rounded border p-2.5"
@@ -3298,9 +3306,19 @@ function StatModifierControls({
       <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
         <div className="rounded border p-2" style={{ borderColor: "var(--border-color)" }}>
           <div className="mb-2 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
-            <span className="text-[10px] font-bold uppercase tracking-wider opacity-70">
-              City
-            </span>
+            <button
+              type="button"
+              aria-expanded={cityDetailsOpen}
+              aria-controls={`city-modifier-fields-${which}`}
+              data-testid={`city-modifier-details-${which}`}
+              onClick={() => setCityDetailsOpen((open) => !open)}
+              className="flex min-h-[30px] min-w-0 items-center gap-1 text-left text-[10px] font-bold uppercase tracking-wider opacity-70 hover:opacity-100"
+            >
+              <span className="w-3 text-center text-[9px] opacity-70">
+                {cityDetailsOpen ? "▼" : "▶"}
+              </span>
+              <span className="truncate">City</span>
+            </button>
             <div
               className="inline-grid grid-cols-3 overflow-hidden rounded border"
               style={{ borderColor: "var(--border-color)" }}
@@ -3334,11 +3352,11 @@ function StatModifierControls({
               })}
             </div>
           </div>
-          <details className="group" data-testid={`city-modifier-details-${which}`}>
-            <summary className="cursor-pointer select-none text-[10px] uppercase tracking-wider opacity-60">
-              Individual city buffs
-            </summary>
-            <div className="mt-2 grid grid-cols-1 gap-2">
+          {cityDetailsOpen && (
+            <div
+              id={`city-modifier-fields-${which}`}
+              className="mt-2 grid grid-cols-1 gap-2"
+            >
               {STAT_MODIFIER_NAMES.map((name) => (
                 <SegmentedCityModifier
                   key={name}
@@ -3349,14 +3367,24 @@ function StatModifierControls({
                 />
               ))}
             </div>
-          </details>
+          )}
         </div>
 
         <div className="rounded border p-2" style={{ borderColor: "var(--border-color)" }}>
           <div className="mb-2 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
-            <span className="text-[10px] font-bold uppercase tracking-wider opacity-70">
-              Pets
-            </span>
+            <button
+              type="button"
+              aria-expanded={petDetailsOpen}
+              aria-controls={`pet-modifier-fields-${which}`}
+              data-testid={`pet-modifier-details-${which}`}
+              onClick={() => setPetDetailsOpen((open) => !open)}
+              className="flex min-h-[30px] min-w-0 items-center gap-1 text-left text-[10px] font-bold uppercase tracking-wider opacity-70 hover:opacity-100"
+            >
+              <span className="w-3 text-center text-[9px] opacity-70">
+                {petDetailsOpen ? "▼" : "▶"}
+              </span>
+              <span className="truncate">Pets</span>
+            </button>
             <button
               type="button"
               aria-label={`${which} pet buffs ${petEnabled ? "off" : "on"}`}
@@ -3376,11 +3404,11 @@ function StatModifierControls({
               {petEnabled ? "On" : "Off"}
             </button>
           </div>
-          <details data-testid={`pet-modifier-details-${which}`}>
-            <summary className="cursor-pointer select-none text-[10px] uppercase tracking-wider opacity-60">
-              Individual pet buffs
-            </summary>
-            <div className="mt-2 grid grid-cols-1 gap-2">
+          {petDetailsOpen && (
+            <div
+              id={`pet-modifier-fields-${which}`}
+              className="mt-2 grid grid-cols-1 gap-2"
+            >
               {PET_MODIFIER_NAMES.map((name) => (
                 <PetModifierInput
                   key={name}
@@ -3391,7 +3419,7 @@ function StatModifierControls({
                 />
               ))}
             </div>
-          </details>
+          )}
         </div>
       </div>
     </div>
@@ -3460,7 +3488,7 @@ function PetModifierInput({
   onChange: (name: PetModifierName, value: number) => void;
 }) {
   const isDebuff = PET_DEBUFF_NAMES.includes(name);
-  const max = isDebuff ? PET_DEBUFF_MAX : PET_BUFF_MAX;
+  const max = petModifierMax(name);
   const display = isDebuff && value > 0 ? `-${value.toFixed(1)}%` : `+${value.toFixed(1)}%`;
   return (
     <label className="grid grid-cols-[minmax(0,1fr)_5rem_3.25rem] items-center gap-2 text-[10px]">

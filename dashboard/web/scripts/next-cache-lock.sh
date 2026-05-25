@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-cache_dir="${NEXT_CACHE_DIR:-.next}"
+cache_dir="${NEXT_DIST_DIR:-${NEXT_CACHE_DIR:-.next}}"
 lock_file="$cache_dir/.wos-next-cache.lock"
 
 print_running_next_processes() {

@@ -1,5 +1,7 @@
 node_modules/
 .next/
+.next-user/
+.next-turbo-test/
 .next_old/
 .env*.local
 test-results/

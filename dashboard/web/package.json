@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "scripts/next-cache-lock.sh dev --turbopack",
+    "dev-user": "npm --prefix ../../v3 run build && NEXT_DIST_DIR=.next-user NEXT_V3_DIST=1 scripts/next-cache-lock.sh dev --turbopack",
     "dev:docker": "scripts/next-cache-lock.sh dev --turbopack",
     "build": "scripts/next-cache-lock.sh build",
     "start": "scripts/next-cache-lock.sh start",
