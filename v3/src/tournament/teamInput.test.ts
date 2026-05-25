@@ -37,6 +37,18 @@ test("teamToBattleInput sets max rounds, seed, and hero generation mechanics", (
   assert.deepEqual(input.mechanics, { hero_generation_stats: true, engagement_type: "rally" });
 });
 
+test("teamToBattleInput applies supplied player stats to both fighters", () => {
+  const playerStats = {
+    infantry: { attack: 1, defense: 2, lethality: 3, health: 4 },
+    lancer: { attack: 5, defense: 6, lethality: 7, health: 8 },
+    marksman: { attack: 9, defense: 10, lethality: 11, health: 12 }
+  };
+  const input = teamToBattleInput(sampleTeam, sampleTeam, 123, loadSimulatorConfig(), playerStats);
+
+  assert.deepEqual(input.attacker.stats, playerStats);
+  assert.deepEqual(input.defender.stats, playerStats);
+});
+
 test("teamToBattleInput activates rally attacker and garrison defender widgets", () => {
   const config = loadSimulatorConfig();
   const result = simulateBattle({ ...teamToBattleInput(sampleTeam, sampleTeam, 123, config), maxRounds: 0 }, config);

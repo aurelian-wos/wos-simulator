@@ -1,5 +1,7 @@
 import type { StatBlock, UnitType } from "./types.js";
 
+export type StatBlockInput = Record<string, unknown> | readonly unknown[];
+
 export function normalizeUnitType(value: string): UnitType {
   const normalized = value.toLowerCase().replace(/[\s_-]/g, "");
   if (["inf", "infantry"].includes(normalized)) return "infantry";
@@ -8,12 +10,12 @@ export function normalizeUnitType(value: string): UnitType {
   throw new Error(`Unsupported unit type: ${value}`);
 }
 
-export function normalizeStatBlock(input: Record<string, unknown> | undefined): StatBlock {
+export function normalizeStatBlock(input: StatBlockInput | undefined): StatBlock {
   return {
-    attack: numberField(input, "attack", "Attack"),
-    defense: numberField(input, "defense", "Defense"),
-    lethality: numberField(input, "lethality", "Lethality"),
-    health: numberField(input, "health", "Health")
+    attack: numberField(input, "attack", "Attack", 0),
+    defense: numberField(input, "defense", "Defense", 1),
+    lethality: numberField(input, "lethality", "Lethality", 2),
+    health: numberField(input, "health", "Health", 3)
   };
 }
 
@@ -30,13 +32,17 @@ export function addStats(a: StatBlock, b: Partial<StatBlock>): StatBlock {
   };
 }
 
-export function numberField(input: Record<string, unknown> | undefined, ...keys: string[]): number {
+export function numberField(input: StatBlockInput | undefined, ...keys: Array<string | number>): number {
   if (!input) return 0;
   for (const key of keys) {
-    const value = input[key];
+    const value = Array.isArray(input) ? (typeof key === "number" ? input[key] : undefined) : valueForObjectKey(input as Record<string, unknown>, key);
     if (typeof value === "number" && Number.isFinite(value)) return value;
   }
   return 0;
+}
+
+function valueForObjectKey(input: Record<string, unknown>, key: string | number): unknown {
+  return typeof key === "string" ? input[key] : undefined;
 }
 
 export function valueAtLevel(value: unknown, level: number): number | string[] {

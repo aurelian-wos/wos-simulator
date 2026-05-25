@@ -20,7 +20,7 @@ export function runSingleBattleDirect(task: BattleTask, config: SimulatorConfig)
   let totalAttackerLeft = 0;
   let totalDefenderLeft = 0;
   for (let rep = 0; rep < task.reps; rep += 1) {
-    const input = teamToBattleInput(task.attacker, task.defender, task.seed + rep, config);
+    const input = teamToBattleInput(task.attacker, task.defender, task.seed + rep, config, task.playerStats);
     const score = simulateBattleScore(input, config);
     if (score > 0) totalAttackerLeft += score;
     else if (score < 0) totalDefenderLeft += -score;

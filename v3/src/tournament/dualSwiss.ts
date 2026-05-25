@@ -2,10 +2,18 @@ import { runBattleTasks } from "./battleRunner.js";
 import { Pool } from "./pools.js";
 import { seededShuffle } from "./rng.js";
 import type { BattleSummary, BattleTask, Team, TournamentOptions } from "./types.js";
+import type { PlayerStats } from "./playerStats.js";
 
 export type BattleTaskRunner = (tasks: BattleTask[], jobs: number, onProgress?: (completed: number, total: number) => void) => Promise<BattleSummary[]>;
 
-export function createRandomRoundTasks(attackerPool: Pool, defenderPool: Pool, roundNum: number, reps: number, seed: number): BattleTask[] {
+export function createRandomRoundTasks(
+  attackerPool: Pool,
+  defenderPool: Pool,
+  roundNum: number,
+  reps: number,
+  seed: number,
+  playerStats?: PlayerStats
+): BattleTask[] {
   const attackers = seededShuffle(attackerPool.teamsActiveOrdered, seed + roundNum);
   const defenders = seededShuffle(defenderPool.teamsActiveOrdered, seed + roundNum + 100000);
   if (attackers.length !== defenders.length) throw new Error(`Pool size mismatch: ${attackers.length} attackers vs ${defenders.length} defenders`);
@@ -13,11 +21,19 @@ export function createRandomRoundTasks(attackerPool: Pool, defenderPool: Pool, r
     attacker,
     defender: defenders[index],
     seed: seed + roundNum + index * 1000,
-    reps
+    reps,
+    playerStats
   }));
 }
 
-export function createDualRankingTasks(attackerPool: Pool, defenderPool: Pool, roundNum: number, reps: number, seed: number): BattleTask[] {
+export function createDualRankingTasks(
+  attackerPool: Pool,
+  defenderPool: Pool,
+  roundNum: number,
+  reps: number,
+  seed: number,
+  playerStats?: PlayerStats
+): BattleTask[] {
   const attackers = attackerPool.teamsActiveOrdered;
   const defenders = defenderPool.teamsActiveOrdered;
   if (attackers.length !== defenders.length) throw new Error(`Pool size mismatch: ${attackers.length} attackers vs ${defenders.length} defenders`);
@@ -25,7 +41,8 @@ export function createDualRankingTasks(attackerPool: Pool, defenderPool: Pool, r
     attacker,
     defender: defenders[index],
     seed: seed + roundNum * 10000 + index * 1000,
-    reps
+    reps,
+    playerStats
   }));
 }
 
@@ -63,8 +80,8 @@ export async function runDualSwissTournament(
     if (activeAttackers.length === 0 || activeDefenders.length === 0) break;
     const isSeedRound = round <= options.seedRounds;
     const tasks = isSeedRound
-      ? createRandomRoundTasks(attackerPool, defenderPool, round, options.reps, options.seed)
-      : createDualRankingTasks(attackerPool, defenderPool, round, options.reps, options.seed);
+      ? createRandomRoundTasks(attackerPool, defenderPool, round, options.reps, options.seed, options.playerStats)
+      : createDualRankingTasks(attackerPool, defenderPool, round, options.reps, options.seed, options.playerStats);
     const label = `Round ${round} (${isSeedRound ? "random" : "Swiss"})`;
     const results = await runner(tasks, options.jobs, (completed, total) => onProgress?.(label, completed, total));
     aggregateBattleResults(attackerPool, defenderPool, results);
@@ -100,14 +117,15 @@ export async function runFinalsRoundRobin(
   jobs: number,
   seed: number,
   runner: BattleTaskRunner = runBattleTasks,
-  onProgress?: (label: string, completed: number, total: number) => void
+  onProgress?: (label: string, completed: number, total: number) => void,
+  playerStats?: PlayerStats
 ): Promise<[Pool, Pool]> {
   const attackerPool = new Pool(attackerTeams);
   const defenderPool = new Pool(defenderTeams);
   const tasks: BattleTask[] = [];
   for (const attacker of attackerTeams) {
     for (const defender of defenderTeams) {
-      tasks.push({ attacker, defender, seed: seed + 999000 + tasks.length * 1000, reps });
+      tasks.push({ attacker, defender, seed: seed + 999000 + tasks.length * 1000, reps, playerStats });
     }
   }
   const results = await runner(tasks, jobs, (completed, total) => onProgress?.("Finals round-robin", completed, total));

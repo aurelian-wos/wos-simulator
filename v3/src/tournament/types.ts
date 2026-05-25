@@ -1,3 +1,5 @@
+import type { StatBlock, UnitType } from "../types.js";
+
 export type MainHeroRole = "inf" | "lanc" | "mark";
 
 export interface Team {
@@ -31,6 +33,7 @@ export interface BattleTask {
   defender: Team;
   seed: number;
   reps: number;
+  playerStats?: Record<UnitType, StatBlock>;
 }
 
 export interface TournamentOptions {
@@ -44,4 +47,5 @@ export interface TournamentOptions {
   startFreezeRound: number;
   minPoolSize: number;
   freezeLossesGte?: number;
+  playerStats?: Record<UnitType, StatBlock>;
 }

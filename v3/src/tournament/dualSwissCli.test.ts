@@ -32,6 +32,18 @@ test("parseCliArgs parses loss freeze threshold with equals syntax", () => {
   assert.equal(options.freezeLossesGte, 2);
 });
 
+test("parseCliArgs defaults player stats to max", () => {
+  const options = parseCliArgs([]);
+
+  assert.equal(options.playerStats, "max");
+});
+
+test("parseCliArgs parses player stats profile", () => {
+  const options = parseCliArgs(["--player-stats", "viper"]);
+
+  assert.equal(options.playerStats, "viper");
+});
+
 test("parseCliArgs rejects negative loss freeze threshold", () => {
   assert.throws(() => parseCliArgs(["--freeze-losses-gte", "-1"]), /--freeze-losses-gte must be >= 0/);
 });

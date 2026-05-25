@@ -1,20 +1,27 @@
-import type { BattleInput, FighterInput, SimulatorConfig, SkillFile } from "../types.js";
+import type { BattleInput, FighterInput, SimulatorConfig, SkillFile, StatBlock, UnitType } from "../types.js";
 import type { Team } from "./types.js";
 
-export function teamToBattleInput(attacker: Team, defender: Team, seed: number, config: SimulatorConfig): BattleInput {
+export function teamToBattleInput(
+  attacker: Team,
+  defender: Team,
+  seed: number,
+  config: SimulatorConfig,
+  playerStats?: Record<UnitType, StatBlock>
+): BattleInput {
   return {
-    attacker: teamToFighterInput(attacker, config),
-    defender: teamToFighterInput(defender, config),
+    attacker: teamToFighterInput(attacker, config, playerStats),
+    defender: teamToFighterInput(defender, config, playerStats),
     seed,
     maxRounds: 600,
     mechanics: { hero_generation_stats: true, engagement_type: "rally" }
   };
 }
 
-export function teamToFighterInput(team: Team, config: SimulatorConfig): FighterInput {
+export function teamToFighterInput(team: Team, config: SimulatorConfig, playerStats?: Record<UnitType, StatBlock>): FighterInput {
   return {
     name: "max",
     troops: { ...team.troops },
+    ...(playerStats ? { stats: playerStats } : {}),
     heroes: team.mains.map((name) => ({ name, levels: allCombatSkillsAtLevelFive(name, config) })),
     joiner_heroes: team.joiners.map((name) => ({ name, levels: { skill_1: 5 } }))
   };

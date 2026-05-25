@@ -6,6 +6,7 @@ import { pathToFileURL } from "node:url";
 import { createBattleTaskRunner } from "./battleRunner.js";
 import { runDualSwissTournament, runFinalsRoundRobin, type BattleTaskRunner } from "./dualSwiss.js";
 import { Pool } from "./pools.js";
+import { loadPlayerStatsProfile } from "./playerStats.js";
 import { copyQualifierCsvs, deriveResultsLabel, loadAllRankedTeamsFromCsv, writeResultsCsv } from "./results.js";
 import { generateTeams, parseRatio, selectFinalsTeamsByMainLineup } from "./teamGeneration.js";
 import type { Team } from "./types.js";
@@ -29,6 +30,7 @@ export interface CliOptions {
   finalsOnly?: string;
   finalsMaxSameHeroes: number;
   repeatJoiners: boolean;
+  playerStats: string;
 }
 
 const VALUE_FLAGS = new Set([
@@ -48,7 +50,8 @@ const VALUE_FLAGS = new Set([
   "--finals-top-m",
   "--finals-reps",
   "--finals-only",
-  "--finals-max-same-heroes"
+  "--finals-max-same-heroes",
+  "--player-stats"
 ]);
 
 export function parseCliArgs(argv: string[]): CliOptions {
@@ -66,7 +69,8 @@ export function parseCliArgs(argv: string[]): CliOptions {
     minPoolSize: 200,
     finalsTopM: 200,
     finalsMaxSameHeroes: 10,
-    repeatJoiners: false
+    repeatJoiners: false,
+    playerStats: "max"
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -134,6 +138,9 @@ export function parseCliArgs(argv: string[]): CliOptions {
       case "--finals-max-same-heroes":
         options.finalsMaxSameHeroes = parseInteger(readValue(), arg);
         break;
+      case "--player-stats":
+        options.playerStats = readValue();
+        break;
       case "--repeat-joiners":
         options.repeatJoiners = true;
         break;
@@ -152,6 +159,7 @@ export function parseCliArgs(argv: string[]): CliOptions {
 export async function main(argv = process.argv.slice(2)): Promise<void> {
   const args = parseCliArgs(argv);
   const finalsReps = args.finalsReps ?? args.reps;
+  const playerStats = loadPlayerStatsProfile(args.playerStats);
   let topAttackers: Team[] | undefined;
   let topDefenders: Team[] | undefined;
   let outDir: string;
@@ -189,6 +197,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
       console.log(`Running dual-ranking Swiss tournament: ${args.rounds} rounds (${args.seedRounds} random + ${Math.max(0, args.rounds - args.seedRounds)} Swiss)`);
       console.log(`  - Reps per battle: ${args.reps}`);
       console.log(`  - Parallel workers: ${args.jobs}`);
+      console.log(`  - Player stats: ${args.playerStats}`);
       console.log(`  - Output top ${args.topN} per category`);
 
       const startedAt = Date.now();
@@ -205,7 +214,8 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
           freezeRate: args.freezeRate,
           freezeLossesGte: args.freezeLossesGte,
           startFreezeRound: args.startFreezeRound,
-          minPoolSize: args.minPoolSize
+          minPoolSize: args.minPoolSize,
+          playerStats
         },
         runTasksWithPersistentPool,
         printProgress
@@ -238,7 +248,8 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
         args.jobs,
         args.seed,
         runTasksWithPersistentPool,
-        printProgress
+        printProgress,
+        playerStats
       );
       writeResultsCsv(join(outDir, "finals"), finalAttackPool, finalDefensePool, args.finalsTopM, topAttackers, topDefenders);
       console.log(`Finals results saved to ${outDir}`);
