@@ -1,5 +1,14 @@
 import json
 import os
+from pathlib import Path
+
+# This file lives at <repo>/archived/v1/Base_classes/JsonUtil.py.
+# Shared game data was moved to <repo>/shared/ during the monorepo reorg, so
+# resolve it from this file's location rather than the process cwd (the legacy
+# code assumed it ran from the repo root).
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+_ASSET_DIR = _REPO_ROOT / "shared" / "assets"
+_FIGHTERS_DIR = _REPO_ROOT / "shared" / "fighters_data"
 
 def _normalize_json_values(value):
     """Recursively coerce numeric-like JSON string values into numbers."""
@@ -33,7 +42,7 @@ class JsonUtil:
     """
     # Load JSON assets from assets directory
     @staticmethod
-    def _get_asset(file_name: str, ASSET_DIR = "assets"):
+    def _get_asset(file_name: str, ASSET_DIR = str(_ASSET_DIR)):
         """Load a JSON asset file.
         
         Args:
@@ -53,7 +62,7 @@ class JsonUtil:
     # hero dicts
     hero_registery = {}
     hero_alias_to_canonical = {}  # maps alias names -> canonical hero name
-    hero_skills_dir_path = 'assets/hero_skills/'
+    hero_skills_dir_path = str(_ASSET_DIR / 'hero_skills')
     for file in os.listdir(hero_skills_dir_path):
         _hero_dict = _get_asset(file, ASSET_DIR= hero_skills_dir_path)
         _canonical = _hero_dict[0]['skill_hero']
@@ -61,9 +70,9 @@ class JsonUtil:
         for _alias in _hero_dict[0].get('aliases', []):
             hero_alias_to_canonical[_alias] = _canonical
     
-    fighters_stats_path = 'fighters_data/fighters_stats.json',
-    fighters_heroes_path = 'fighters_data/fighters_heroes.json'
-    hero_base_stats_path = 'assets/hero_base_stats.json'
+    fighters_stats_path = str(_FIGHTERS_DIR / 'fighters_stats.json')
+    fighters_heroes_path = str(_FIGHTERS_DIR / 'fighters_heroes.json')
+    hero_base_stats_path = str(_ASSET_DIR / 'hero_base_stats.json')
     fighter_stats = None
     fighter_heroes = None
     hero_base_stats = None

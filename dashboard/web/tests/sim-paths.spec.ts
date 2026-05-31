@@ -4,12 +4,12 @@ import { isSimulatorPath } from "../lib/sim-paths";
 import { parsePatch } from "diff";
 
 // Acceptance criterion from WOS-188: "A fixture patch containing both
-// assets/heroes/foo.json and dashboard/web/app/page.tsx round-trips through
-// the filter with only the assets file remaining."
-const FIXTURE_PATCH = `diff --git a/assets/heroes/foo.json b/assets/heroes/foo.json
+// shared/assets/heroes/foo.json and dashboard/web/app/page.tsx round-trips
+// through the filter with only the assets file remaining."
+const FIXTURE_PATCH = `diff --git a/shared/assets/heroes/foo.json b/shared/assets/heroes/foo.json
 index 1111111..2222222 100644
---- a/assets/heroes/foo.json
-+++ b/assets/heroes/foo.json
+--- a/shared/assets/heroes/foo.json
++++ b/shared/assets/heroes/foo.json
 @@ -1,3 +1,3 @@
  {
 -  "power": 100
@@ -52,29 +52,24 @@ index 8888888..9999999 100644
 test.describe("WOS-188 simulator path filter", () => {
   test("isSimulatorPath classifies the allowlist correctly", () => {
     // Positive cases
-    expect(isSimulatorPath("Base_classes/Fight.py")).toBe(true);
-    expect(isSimulatorPath("assets/heroes/foo.json")).toBe(true);
+    expect(isSimulatorPath("archived/v1/Base_classes/Fight.py")).toBe(true);
+    expect(isSimulatorPath("shared/assets/heroes/foo.json")).toBe(true);
     expect(isSimulatorPath("testcases/emulator_verified/x.json")).toBe(true);
-    expect(isSimulatorPath("fighters_data/sharp.json")).toBe(true);
-    expect(isSimulatorPath("battle_specs_manual/logan.json")).toBe(true);
+    expect(isSimulatorPath("shared/fighters_data/sharp.json")).toBe(true);
     expect(isSimulatorPath("pyproject.toml")).toBe(true);
-    expect(isSimulatorPath("check_testcases.py")).toBe(true);
-    expect(isSimulatorPath("battle_main.py")).toBe(true);
-    expect(isSimulatorPath("compare_results.py")).toBe(true);
+    expect(isSimulatorPath("archived/v1/check_testcases.py")).toBe(true);
+    expect(isSimulatorPath("archived/v1/battle_main.py")).toBe(true);
+    expect(isSimulatorPath("archived/v1/compare_results.py")).toBe(true);
 
     // Negative cases — everything the board flagged as noise
     expect(isSimulatorPath("dashboard/web/app/page.tsx")).toBe(false);
     expect(isSimulatorPath("dashboard/ingest.py")).toBe(false);
-    expect(isSimulatorPath("sim_custom.py")).toBe(false);
-    expect(isSimulatorPath("find_rng_testcase.py")).toBe(false);
-    expect(isSimulatorPath("find_rng_testcase_paul.py")).toBe(false);
-    expect(isSimulatorPath("test_current.py")).toBe(false);
-    expect(isSimulatorPath("test_reina.py")).toBe(false);
-    expect(isSimulatorPath("test_troop_grid_search.py")).toBe(false);
-    expect(isSimulatorPath("troop_grid_search.py")).toBe(false);
+    // Scratch tooling and tests under archived/v1 are NOT simulator-relevant.
+    expect(isSimulatorPath("archived/v1/util/sim_custom.py")).toBe(false);
+    expect(isSimulatorPath("archived/v1/util/troop_grid_search.py")).toBe(false);
+    expect(isSimulatorPath("archived/v1/tests/test_gordon_hero_skills.py")).toBe(false);
     expect(isSimulatorPath("Changelog.md")).toBe(false);
     expect(isSimulatorPath("README.md")).toBe(false);
-    expect(isSimulatorPath("CODE_REVIEW_ISSUES.md")).toBe(false);
     expect(isSimulatorPath("last_battle_report.json")).toBe(false);
     expect(isSimulatorPath("test_results/dashboard.sqlite-wal")).toBe(false);
     expect(isSimulatorPath("tests/test_state_capture.py")).toBe(false);
@@ -83,7 +78,7 @@ test.describe("WOS-188 simulator path filter", () => {
     expect(isSimulatorPath("")).toBe(false);
     expect(isSimulatorPath(null)).toBe(false);
     expect(isSimulatorPath(undefined)).toBe(false);
-    expect(isSimulatorPath("a/assets/heroes/foo.json")).toBe(true); // git a/ prefix
+    expect(isSimulatorPath("a/shared/assets/heroes/foo.json")).toBe(true); // git a/ prefix
     expect(isSimulatorPath("b/dashboard/web/x.tsx")).toBe(false);
   });
 
@@ -97,7 +92,7 @@ test.describe("WOS-188 simulator path filter", () => {
     const names = filtered.map(
       (p) => (p.newFileName ?? p.oldFileName ?? "").replace(/^[ab]\//, ""),
     );
-    expect(names).toContain("assets/heroes/foo.json");
+    expect(names).toContain("shared/assets/heroes/foo.json");
     expect(names).toContain("testcases/emulator_verified/x.json");
     expect(names).not.toContain("dashboard/web/app/page.tsx");
     expect(names).not.toContain("sim_custom.py");
@@ -107,7 +102,7 @@ test.describe("WOS-188 simulator path filter", () => {
   test("filterPatchText round-trips through parse/format and keeps only sim paths", () => {
     const out = filterPatchText(FIXTURE_PATCH);
     expect(out).not.toBe("");
-    expect(out).toContain("assets/heroes/foo.json");
+    expect(out).toContain("shared/assets/heroes/foo.json");
     expect(out).toContain("testcases/emulator_verified/x.json");
     expect(out).not.toContain("dashboard/web/app/page.tsx");
     expect(out).not.toContain("sim_custom.py");

@@ -20,7 +20,9 @@ from pathlib import Path
 from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-CHECK_TESTCASES_PATH = REPO_ROOT / "check_testcases.py"
+# The legacy Python simulator moved to archived/v1/ during the monorepo reorg.
+# It is still spawned (with cwd=REPO_ROOT) for the dashboard "Check now" flow.
+CHECK_TESTCASES_PATH = REPO_ROOT / "archived" / "v1" / "check_testcases.py"
 DB_PATH = REPO_ROOT / "test_results" / "dashboard.sqlite"
 
 

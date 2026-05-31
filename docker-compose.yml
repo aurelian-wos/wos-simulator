@@ -57,17 +57,18 @@ services:
       - ./skill:/skill:ro
       # Python testcase/check utilities still need the simulator support trees.
       # The browser simulate page does not call Python compute endpoints.
-      - ./Base_classes:/Base_classes:ro
-      - ./assets:/assets:ro
+      - ./archived/v1/Base_classes:/archived/v1/Base_classes:ro
+      - ./shared/assets:/shared/assets:ro
       # fighters_data is NOT mounted :ro because JsonUtil.load_fighters_data
       # opens these files with 'r+' (it only reads, but the fd demands write
       # access). The simulator does not actually write here, so the host
       # files stay unchanged in practice.
-      - ./fighters_data:/fighters_data
-      # The "Check now" button spawns check_testcases.py via dashboard/check_now.py.
-      # In the container, REPO_ROOT resolves to / (cwd==/app, ../.. == /), so
-      # check_testcases.py and its dependencies must be accessible at those paths.
-      - ./check_testcases.py:/check_testcases.py:ro
+      - ./shared/fighters_data:/shared/fighters_data
+      # The "Check now" button spawns archived/v1/check_testcases.py via
+      # dashboard/check_now.py. In the container, REPO_ROOT resolves to /
+      # (cwd==/app, ../.. == /), so the legacy simulator and its dependencies
+      # must be accessible at those paths.
+      - ./archived/v1/check_testcases.py:/archived/v1/check_testcases.py:ro
       - ./testcases:/testcases:ro
       # Also mount test_results at / so check_testcases.py can write run JSON
       # and ingest.py can find dashboard.sqlite (both use relative path

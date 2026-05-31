@@ -1,4 +1,10 @@
 import json
+# --- monorepo path bootstrap: make Base_classes importable from any cwd -------
+import os as _os, sys as _sys
+_V1_DIR = _os.path.dirname(_os.path.abspath(__file__))
+if _V1_DIR not in _sys.path:
+    _sys.path.insert(0, _V1_DIR)
+# -----------------------------------------------------------------------------
 from Base_classes.Fight import Fight
 from Base_classes.Fighter import Fighter
 from Base_classes.StatsBonus import StatsBonus
@@ -10,10 +16,9 @@ from Base_classes.JsonUtil import JsonUtil
 # LOAD FIGHTERS DATA
 ###############################################
 
-JsonUtil.load_fighters_data(
-    fighters_stats_path = "fighters_data/fighters_stats.json",      # File containing the fighters stats
-    fighters_heroes_path = "fighters_data/fighters_heroes.json"     # File containing hero skill-level profiles
-)
+# Paths default to <repo>/shared/fighters_data/* (resolved inside JsonUtil from
+# its own location), so no cwd-relative arguments are needed after the reorg.
+JsonUtil.load_fighters_data()
 
 
 ###############################################

@@ -1,3 +1,16 @@
+# --- monorepo path bootstrap -------------------------------------------------
+# This module lives at <repo>/archived/v1/check_testcases.py after the reorg.
+# Make the Base_classes package (sibling) and the repo root (for the dashboard
+# ingestion package) importable regardless of the process cwd. Relative data
+# paths below (testcases/, test_results/) still resolve from cwd, so the
+# dashboard spawns this with cwd=<repo root> to keep testcase ids canonical.
+import os as _os, sys as _sys
+_V1_DIR = _os.path.dirname(_os.path.abspath(__file__))
+_REPO_ROOT = _os.path.dirname(_os.path.dirname(_V1_DIR))
+for _p in (_V1_DIR, _REPO_ROOT):
+    if _p not in _sys.path:
+        _sys.path.insert(0, _p)
+# -----------------------------------------------------------------------------
 from Base_classes.Fighter import Fighter
 from Base_classes.Fight import Fight
 from Base_classes.BattleRound import BattleRound
@@ -775,7 +788,9 @@ def check_testcases(testcases_files, TESTCASES_PATH='testcases', max_diff_ratio=
     try:
         from dashboard.ingest import record_run
         from dashboard.state_capture import capture_dirty_state
-        repo_root = os.path.dirname(os.path.abspath(__file__))
+        # check_testcases.py now lives at <repo>/archived/v1/; the ingest/dirty
+        # capture helpers expect the actual repo root (resolved in the bootstrap).
+        repo_root = _REPO_ROOT
         dirty_state = capture_dirty_state(repo_root) if git_dirty else None
         record_run(run_doc, repo_root, dirty_state=dirty_state)
     except Exception as _ingest_err:

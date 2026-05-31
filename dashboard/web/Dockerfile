@@ -34,7 +34,7 @@ RUN apt-get update \
       ca-certificates \
  && rm -rf /var/lib/apt/lists/*
 
-COPY archived/v1/pyproject.toml archived/v1/uv.lock /opt/sim-deps/
+COPY pyproject.toml uv.lock /opt/sim-deps/
 RUN python3 -m venv /opt/sim-venv \
  && /opt/sim-venv/bin/pip install --no-cache-dir uv \
  && cd /opt/sim-deps \

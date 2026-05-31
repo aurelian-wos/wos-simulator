@@ -32,12 +32,12 @@ export function normalizePlayerStatsProfile(profile: unknown): PlayerStats {
 
 function resolveDefaultPlayerStatsPath(): string {
   const candidates = [
-    join(process.cwd(), "fighters_data", "fighters_stats.json"),
-    join(process.cwd(), "..", "fighters_data", "fighters_stats.json"),
-    join(process.cwd(), "..", "..", "fighters_data", "fighters_stats.json")
+    join(process.cwd(), "shared", "fighters_data", "fighters_stats.json"),
+    join(process.cwd(), "..", "shared", "fighters_data", "fighters_stats.json"),
+    join(process.cwd(), "..", "..", "shared", "fighters_data", "fighters_stats.json")
   ];
   const found = candidates.find((candidate) => existsSync(candidate));
-  if (!found) throw new Error(`Could not find fighters_data/fighters_stats.json from ${process.cwd()}`);
+  if (!found) throw new Error(`Could not find shared/fighters_data/fighters_stats.json from ${process.cwd()}`);
   return found;
 }
 

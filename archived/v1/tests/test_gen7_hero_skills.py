@@ -39,10 +39,8 @@ def make_fighter(name: str, heroes: dict | None = None) -> Fighter:
 
 class Gen7HeroSkillsTests(unittest.TestCase):
     def test_max_fighter_data_includes_gen7_heroes(self) -> None:
-        JsonUtil.load_fighters_data(
-            "fighters_data/fighters_stats.json",
-            "fighters_data/fighters_heroes.json",
-        )
+        # Defaults resolve to <repo>/shared/fighters_data/* (cwd-independent).
+        JsonUtil.load_fighters_data()
         max_heroes = JsonUtil.fighter_heroes["max"]
         expected_stats = {
             "attack": 650.52,
@@ -58,12 +56,9 @@ class Gen7HeroSkillsTests(unittest.TestCase):
             self.assertEqual(max_heroes[hero_name]["skill_levels"], expected_levels)
 
     def test_max_base_stats_are_loaded_from_shared_category_file(self) -> None:
-        JsonUtil.load_fighters_data(
-            "fighters_data/fighters_stats.json",
-            "fighters_data/fighters_heroes.json",
-        )
+        JsonUtil.load_fighters_data()
 
-        raw_fighter_heroes = json.loads(Path("fighters_data/fighters_heroes.json").read_text())
+        raw_fighter_heroes = json.loads(Path(JsonUtil.fighters_heroes_path).read_text())
         self.assertNotIn("stats", raw_fighter_heroes["max"]["Bradley"])
         self.assertEqual(
             JsonUtil.hero_base_stats["categories"]["S7"]["stats"],

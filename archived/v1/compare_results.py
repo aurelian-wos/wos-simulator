@@ -20,8 +20,11 @@ import os
 import sys
 from tabulate import tabulate
 
-RUNS_DIR = os.path.join('test_results', 'runs')
-BASELINE_PATH = os.path.join('test_results', 'baseline.json')
+# test_results/ stayed at the repo root during the reorg; resolve it from this
+# file's location (archived/v1/) so the tool works from any cwd.
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+RUNS_DIR = os.path.join(_REPO_ROOT, 'test_results', 'runs')
+BASELINE_PATH = os.path.join(_REPO_ROOT, 'test_results', 'baseline.json')
 
 DEFAULT_BIAS_DELTA = 0.5   # percentage points
 DEFAULT_STAT_DELTA = 1.0   # t-units
