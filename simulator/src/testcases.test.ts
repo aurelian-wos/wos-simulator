@@ -9,7 +9,7 @@ import { loadCalibrationComparison, readCalibrationCase, testcaseFileLookupVaria
 import { applyBenjaminiHochberg, compareOutcomeDistribution, type ParityComparisonMetrics } from "./parityMetrics";
 import { adaptTestcaseEntry, applyComparisonQValues, assignDetailArtifactPaths, battleScoreDelta, buildSummaryForOutput, discoverTestcaseFiles, runTestcases, type TestcaseSummaryEntry } from "./testcases";
 
-test("discoverTestcaseFiles follows v3/testcases symlink and skips disabled or stale files by default", () => {
+test("discoverTestcaseFiles follows simulator/testcases symlink and skips disabled or stale files by default", () => {
   const files = discoverTestcaseFiles();
 
   assert.ok(files.some((file) => file.endsWith("emulator_verified/simple_001_nc.json")));
@@ -160,16 +160,24 @@ test("applyComparisonQValues keeps game and v1 correction families separate", ()
   assert.equal(onlyV1.q, 0.04);
 });
 
-test("calibration lookup supports v3 symlink and source testcase path variants", () => {
-  assert.deepEqual(testcaseFileLookupVariants("v3/testcases/emulator_verified/simple_001_nc.json"), [
-    "v3/testcases/emulator_verified/simple_001_nc.json",
-    "testcases/emulator_verified/simple_001_nc.json"
+test("calibration lookup supports simulator symlink and source testcase path variants", () => {
+  assert.deepEqual(testcaseFileLookupVariants("simulator/testcases/emulator_verified/simple_001_nc.json"), [
+    "simulator/testcases/emulator_verified/simple_001_nc.json",
+    "testcases/emulator_verified/simple_001_nc.json",
+    "v3/testcases/emulator_verified/simple_001_nc.json"
   ]);
+
+  // Legacy parity reports embed v3/testcases/ paths and must still resolve.
+  assert.ok(
+    testcaseFileLookupVariants("v3/testcases/emulator_verified/simple_001_nc.json").includes(
+      "testcases/emulator_verified/simple_001_nc.json",
+    ),
+  );
 
   const comparison = loadCalibrationComparison();
   const sourceRow = readCalibrationCase(comparison, "testcases/emulator_verified/simple_001_nc.json", "simple_001");
   if (sourceRow) {
-    assert.deepEqual(readCalibrationCase(comparison, "v3/testcases/emulator_verified/simple_001_nc.json", "simple_001"), sourceRow);
+    assert.deepEqual(readCalibrationCase(comparison, "simulator/testcases/emulator_verified/simple_001_nc.json", "simple_001"), sourceRow);
   }
 });
 

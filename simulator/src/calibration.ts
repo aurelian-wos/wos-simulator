@@ -120,13 +120,18 @@ export function readCalibrationCase(
 export function testcaseFileLookupVariants(path: string): string[] {
   const normalized = normalizePath(path);
   const variants = new Set<string>([normalized]);
-  const v3Index = normalized.indexOf("v3/testcases/");
-  if (v3Index >= 0) variants.add(`testcases/${normalized.slice(v3Index + "v3/testcases/".length)}`);
+  // Historical parity reports embed "v3/testcases/"; current ones embed
+  // "simulator/testcases/". Both normalize to the canonical "testcases/" id.
+  for (const prefix of ["v3/testcases/", "simulator/testcases/"]) {
+    const idx = normalized.indexOf(prefix);
+    if (idx >= 0) variants.add(`testcases/${normalized.slice(idx + prefix.length)}`);
+  }
   const testcaseIndex = normalized.indexOf("testcases/");
   if (testcaseIndex >= 0) {
     const testcasePath = normalized.slice(testcaseIndex);
     variants.add(testcasePath);
     variants.add(`v3/${testcasePath}`);
+    variants.add(`simulator/${testcasePath}`);
   }
   return [...variants];
 }

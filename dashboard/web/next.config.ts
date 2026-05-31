@@ -4,7 +4,7 @@ import path from "path";
 const pollIntervalMs = Number(process.env.NEXT_WATCH_POLL_INTERVAL_MS ?? 0);
 const distDir = process.env.NEXT_DIST_DIR ?? ".next";
 const repoRoot = path.resolve(__dirname, "../..");
-const v3SourceRoot = path.resolve(__dirname, "../../v3/src");
+const v3SourceRoot = path.resolve(__dirname, "../../simulator/src");
 
 const nextConfig: NextConfig = {
   distDir,
@@ -22,7 +22,7 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: repoRoot,
     resolveAlias: {
-      "@v3": "../../v3/src",
+      "@v3": "../../simulator/src",
     },
     resolveExtensions: [".mdx", ".tsx", ".ts", ".jsx", ".js", ".mjs", ".json"],
   },

@@ -356,7 +356,7 @@ function parseCliArgs(argv: string[]): CliOptions {
   const defaults: CliOptions = {
     projectDir: repoRoot,
     reportsDir: join(repoRoot, "tmp/lab"),
-    configDir: join(repoRoot, "v3/config"),
+    configDir: join(repoRoot, "simulator/config"),
     parserScript: join(repoRoot, "skill/scripts/report_stats_parser.py"),
     cacheFile: join(repoRoot, "tmp/lab/report_stats_cache.json"),
     enemySide: "defender",

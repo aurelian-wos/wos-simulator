@@ -146,7 +146,7 @@ export interface LoadedParityReport extends ParityReportDescriptor {
 export function defaultParityReportDir(): string {
   return process.env.V3_PARITY_REPORT_DIR
     ? path.resolve(process.env.V3_PARITY_REPORT_DIR)
-    : path.join(resolveSimulatorRoot(), "v3", "testcase_results");
+    : path.join(resolveSimulatorRoot(), "simulator", "testcase_results");
 }
 
 export function findParityReports(
@@ -377,5 +377,7 @@ function isSubpath(root: string, candidate: string): boolean {
 }
 
 function normalizePath(value: string): string {
-  return value.replaceAll("\\", "/").replace(/^.*\/v3\/testcases\//, "testcases/");
+  // Reports embed either ".../v3/testcases/" (historical) or
+  // ".../simulator/testcases/" (current); both map to the canonical id.
+  return value.replaceAll("\\", "/").replace(/^.*\/(?:v3|simulator)\/testcases\//, "testcases/");
 }

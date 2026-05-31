@@ -9,11 +9,12 @@
 # replaced by the host bind mount at runtime.
 #
 # The dashboard spawns the report-stats parser for the import flow. Battle
-# simulation and ratio optimisation run in the browser via the v3 TypeScript
-# web worker, so this image no longer hosts Python simulate endpoints.
-# compose mounts the host dashboard/, skill/, Base_classes/, assets/, and
-# fighters_data/ trees at the matching container paths so scripts can reach
-# them. A dedicated /opt/sim-venv holds the Python deps for OCR/import helpers.
+# simulation and ratio optimisation run in the browser via the TypeScript
+# web worker (simulator/), so this image no longer hosts Python simulate
+# endpoints. compose mounts the host dashboard/, skill/, archived/v1/ (legacy
+# Python simulator), and shared/ (assets, fighters_data) trees at the matching
+# container paths so scripts can reach them. A dedicated /opt/sim-venv holds the
+# Python deps for OCR/import helpers.
 
 FROM node:20-bookworm-slim
 WORKDIR /app
@@ -33,7 +34,7 @@ RUN apt-get update \
       ca-certificates \
  && rm -rf /var/lib/apt/lists/*
 
-COPY pyproject.toml uv.lock /opt/sim-deps/
+COPY archived/v1/pyproject.toml archived/v1/uv.lock /opt/sim-deps/
 RUN python3 -m venv /opt/sim-venv \
  && /opt/sim-venv/bin/pip install --no-cache-dir uv \
  && cd /opt/sim-deps \
