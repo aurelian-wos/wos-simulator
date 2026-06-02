@@ -1,11 +1,13 @@
 import type { MainHeroRole, Team } from "./types";
 
 export const MAIN_POOL: Record<string, MainHeroRole> = {
-  Hector: "inf",
   Edith: "inf",
+  Hector: "inf",
+  "Wu Ming": "inf",
+  Gordon: "lanc",
   Mia: "lanc",
   Philly: "lanc",
-  Gordon: "lanc",
+  Alonso: "mark",
   Bradley: "mark",
   Greg: "mark",
   Wayne: "mark"
