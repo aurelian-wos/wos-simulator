@@ -609,8 +609,8 @@ function resolveTriggerJobSelector(
 ): TriggerJobUnit[] {
   if (selector === "use.source") return [{ side: normalAttack.attackerSide, unit: normalAttack.attackerUnit }];
   if (selector === "use.target") return [{ side: normalAttack.defenderSide, unit: normalAttack.defenderUnit }];
-  if (selector === "activation.source") return unitsFromMask(effect.appliesTo.units).map((unit) => ({ side: effect.appliesTo.side, unit }));
-  if (selector === "activation.target") return unitsFromMask(effect.appliesVs.units).map((unit) => ({ side: effect.appliesVs.side, unit }));
+  if (selector === "effect.applies_to") return unitsFromMask(effect.appliesTo.units).map((unit) => ({ side: effect.appliesTo.side, unit }));
+  if (selector === "effect.applies_vs") return unitsFromMask(effect.appliesVs.units).map((unit) => ({ side: effect.appliesVs.side, unit }));
   if (selector === "enemy.living") return livingUnits(normalAttack.defenderSide, roundStartTroops);
   if (selector === "self.living") return livingUnits(normalAttack.attackerSide, roundStartTroops);
   const units = unitListFromSelector(selector);

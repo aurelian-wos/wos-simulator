@@ -43,7 +43,7 @@ export function runSimulationTraceInV3(
   const config = options.config ?? loadSimulatorConfig();
   const result = simulateBattle({ ...toBattleInput(request, seed), trace: true }, config, { detail: "full" });
   options.onProgress?.(1, 1);
-  return battleResultToTrace(result, seed);
+  return battleResultToTrace(result, seed, troopHeroGroupLabels(request));
 }
 
 export function signedOutcome(result: BattleResult): number {
@@ -107,7 +107,9 @@ function aggregateSkills(results: BattleResult[], side: "attacker" | "defender")
   }));
 }
 
-export function battleResultToTrace(result: BattleResult, seed: string | number): SimulateTrace {
+type SkillGroupLabels = Partial<Record<"attacker" | "defender", Partial<Record<UnitType, string>>>>;
+
+export function battleResultToTrace(result: BattleResult, seed: string | number, skillGroupLabels: SkillGroupLabels = {}): SimulateTrace {
   const attacksByRound = attacksGroupedByRound(result);
   const rounds = (result.trace?.rounds ?? []).map((roundTrace) => {
     const sideRounds = {
@@ -129,10 +131,30 @@ export function battleResultToTrace(result: BattleResult, seed: string | number)
     seed,
     outcome: signedOutcome(result),
     rounds,
-    skill_kills: skillKills(result),
+    skill_kills: skillKills(result, skillGroupLabels),
     effect_usage: effectUsage(result),
     total_kills: totalKills(result),
   };
+}
+
+function troopHeroGroupLabels(request: SimulateRequestPayload): SkillGroupLabels {
+  return {
+    attacker: sideTroopHeroGroupLabels(request.attacker),
+    defender: sideTroopHeroGroupLabels(request.defender),
+  };
+}
+
+function sideTroopHeroGroupLabels(side: SimulateRequestPayload["attacker"]): Partial<Record<UnitType, string>> {
+  return {
+    infantry: normalizedGroupLabel(side.heroes.infantry.name),
+    lancer: normalizedGroupLabel(side.heroes.lancer.name),
+    marksman: normalizedGroupLabel(side.heroes.marksman.name),
+  };
+}
+
+function normalizedGroupLabel(value: string | null | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
 }
 
 function attacksGroupedByRound(result: BattleResult): Map<number, AttackOutcome[]> {
@@ -179,14 +201,16 @@ function totalKills(result: BattleResult): SimulateTrace["total_kills"] {
   return totals;
 }
 
-function skillKills(result: BattleResult): SimulateTrace["skill_kills"] {
+function skillKills(result: BattleResult, skillGroupLabels: SkillGroupLabels): SimulateTrace["skill_kills"] {
   const grouped: SimulateTrace["skill_kills"] = { attacker: {}, defender: {} };
   for (const side of ["attacker", "defender"] as const) {
+    const chanceSkillIds = new Set(result.randomness.chanceSkillIds[side]);
     for (const row of result.skillReport[side]) {
+      if (row.sourceKind === "troop_skill" && !chanceSkillIds.has(row.skillId)) continue;
       const kills = row.skillKills;
-      const triggers = row.triggersSeen;
+      const triggers = row.skillActivations;
       if (kills <= 0 && triggers <= 0) continue;
-      const hero = row.heroName ?? (row.troopType ? unitLabel(row.troopType) : "Troop skill");
+      const hero = skillGroupLabel(row, side, skillGroupLabels);
       const heroRows = grouped[side][hero] ?? {};
       const existing = heroRows[row.skillName] ?? { triggers: 0, kills: 0 };
       heroRows[row.skillName] = {
@@ -197,6 +221,16 @@ function skillKills(result: BattleResult): SimulateTrace["skill_kills"] {
     }
   }
   return grouped;
+}
+
+function skillGroupLabel(
+  row: BattleResult["skillReport"]["attacker"][number],
+  side: "attacker" | "defender",
+  skillGroupLabels: SkillGroupLabels,
+): string {
+  if (row.heroName) return row.heroName;
+  if (row.troopType) return skillGroupLabels[side]?.[row.troopType] ?? unitLabel(row.troopType);
+  return "Troop skill";
 }
 
 function effectUsage(result: BattleResult): SimulateTrace["effect_usage"] {

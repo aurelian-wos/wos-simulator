@@ -1,4 +1,5 @@
 import type { OptimizeRatioRequestPayload, OptimizeRatioResult, SimulateApiResult, SimulateRequestPayload, SimulateTrace } from "@/lib/simulate-run";
+import { createProgressThrottle } from "./progress-throttle";
 import type { V3WorkerRequest, V3WorkerResponse } from "./worker-protocol";
 
 let nextJobId = 1;
@@ -37,20 +38,33 @@ function runWorkerJob<T>(
 ): { promise: Promise<T>; cancel: () => void } {
   const id = nextJobId++;
   const worker = new Worker(new URL("../../app/simulate/simulate.worker.ts", import.meta.url), { type: "module" });
+  const progress = createProgressThrottle(onProgress);
   const promise = new Promise<T>((resolve, reject) => {
     worker.onmessage = (event: MessageEvent<V3WorkerResponse>) => {
       const message = event.data;
       if (message.id !== id) return;
-      if (message.type === "progress") onProgress(message.done, message.total);
-      else if (message.type === resultType && "data" in message) resolve(message.data as T);
-      else if (message.type === "error") reject(new Error(message.message));
+      if (message.type === "progress") progress.update(message.done, message.total);
+      else if (message.type === resultType && "data" in message) {
+        progress.flush();
+        resolve(message.data as T);
+      } else if (message.type === "error") {
+        progress.cancel();
+        reject(new Error(message.message));
+      }
     };
-    worker.onerror = (event) => reject(new Error(event.message));
+    worker.onerror = (event) => {
+      progress.cancel();
+      reject(new Error(event.message));
+    };
     worker.postMessage({ id, ...request } as V3WorkerRequest);
-  }).finally(() => worker.terminate());
+  }).finally(() => {
+    progress.cancel();
+    worker.terminate();
+  });
   return {
     promise,
     cancel() {
+      progress.cancel();
       worker.postMessage({ id, type: "cancel" } satisfies V3WorkerRequest);
       worker.terminate();
     },

@@ -90,7 +90,7 @@ test("battleResultToTrace maps a full v3 trace into dashboard detail rows", () =
   assert.deepEqual(trace.skill_kills.attacker.Greg.S1, { triggers: 1, kills: 4 });
 });
 
-test("skill kill summaries only count skill damage source effects", () => {
+test("skill kill summaries show only chance troop skills grouped under matching troop hero", () => {
   const sample = result(9, 0, 1);
   sample.skillReport.attacker.push({
     sourceKind: "troop_skill",
@@ -98,12 +98,25 @@ test("skill kill summaries only count skill damage source effects", () => {
     skillId: "CrystalShield",
     skillName: "CrystalShield",
     level: 1,
+    triggersSeen: 44,
+    skillActivations: 5,
+    effectActivations: 1,
+    skillKills: 0,
+    unsupportedEffects: [],
+  });
+  sample.skillReport.attacker.push({
+    sourceKind: "troop_skill",
+    troopType: "infantry",
+    skillId: "BandsOfSteel",
+    skillName: "BandsOfSteel",
+    level: 1,
     triggersSeen: 1,
     skillActivations: 1,
     effectActivations: 1,
     skillKills: 0,
     unsupportedEffects: [],
   });
+  sample.randomness.chanceSkillIds.attacker = ["CrystalShield"];
   sample.skillReport.attacker[0].skillKills = 4;
   sample.attacks = [
     {
@@ -177,10 +190,12 @@ test("skill kill summaries only count skill damage source effects", () => {
     }],
   };
 
-  const trace = battleResultToTrace(sample, "seed-1");
+  const trace = battleResultToTrace(sample, "seed-1", { attacker: { infantry: "Molly" } });
 
   assert.deepEqual(trace.skill_kills.attacker.Greg.S1, { triggers: 1, kills: 4 });
-  assert.deepEqual(trace.skill_kills.attacker.Infantry?.CrystalShield, { triggers: 1, kills: 0 });
+  assert.deepEqual(trace.skill_kills.attacker.Molly?.CrystalShield, { triggers: 5, kills: 0 });
+  assert.equal(trace.skill_kills.attacker.Molly?.BandsOfSteel, undefined);
+  assert.equal(trace.skill_kills.attacker.Infantry, undefined);
 
   const aggregate = aggregateBattleResults([sample]);
   assert.equal(aggregate.per_side_skills.attacker.find((row) => row.name === "S1")?.avg_kills, 4);

@@ -272,9 +272,9 @@ function validateExtraSkillAttackEffect(effect: EffectIntentDefinition, file: st
     validateTriggerDamageJobShape(job, path, index);
     validateTriggerDamageJobSelector(job.source, "source", path, index);
     validateTriggerDamageJobSelector(job.target, "target", path, index);
-    if (job.target === "activation.target" && !isActivationConcreteAppliesVs(effect.units?.applies_vs)) {
+    if (job.target === "effect.applies_vs" && !isEffectAppliesVsConcrete(effect.units?.applies_vs)) {
       throw new Error(
-        `trigger_damage_jobs target activation.target requires a concrete applies_vs, not ${JSON.stringify(effect.units?.applies_vs)}, at ${path}.trigger_damage_jobs[${index}]`
+        `trigger_damage_jobs target effect.applies_vs requires a concrete applies_vs, not ${JSON.stringify(effect.units?.applies_vs)}, at ${path}.trigger_damage_jobs[${index}]`
       );
     }
     if (job.multiplier !== undefined && typeof job.multiplier !== "number") {
@@ -313,13 +313,13 @@ function validateTriggerDamageJobSelector(
 }
 
 function isAllowedTriggerDamageJobSelector(selector: TriggerDamageJobDefinition["source"]): boolean {
-  const supported = new Set(["use.source", "use.target", "activation.source", "activation.target", "enemy.living", "self.living"]);
+  const supported = new Set(["use.source", "use.target", "effect.applies_to", "effect.applies_vs", "enemy.living", "self.living"]);
   if (typeof selector === "string") return supported.has(selector) || (UNIT_TYPES as string[]).includes(selector);
   if (Array.isArray(selector)) return selector.length > 0 && selector.every((entry) => typeof entry === "string" && (UNIT_TYPES as string[]).includes(entry));
   return false;
 }
 
-function isActivationConcreteAppliesVs(selector: unknown): boolean {
+function isEffectAppliesVsConcrete(selector: unknown): boolean {
   if (selector === "trigger.target" || selector === "target") return true;
   if (typeof selector === "string") return (UNIT_TYPES as string[]).includes(selector);
   if (Array.isArray(selector)) return selector.length > 0 && selector.every((entry) => typeof entry === "string" && (UNIT_TYPES as string[]).includes(entry));

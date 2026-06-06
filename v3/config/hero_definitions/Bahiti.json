@@ -53,7 +53,7 @@
           "trigger_damage_jobs": [
             {
               "source": "use.source",
-              "target": "activation.target"
+              "target": "effect.applies_vs"
             }
           ]
         }

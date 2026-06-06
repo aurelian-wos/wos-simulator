@@ -19,9 +19,9 @@ from emulator import adb_screencap_bgr, adb_tap
 
 LABEL_REGION = (20, 1112, 700, 1260)
 TEAM_ROOM_START_REGION = (360, 840, 690, 940)
-TEAM_ROOM_START_TAP = (520, 895)
+TEAM_ROOM_START_TAP = (517, 890)
 SOLO_START_REGION = (320, 1125, 655, 1245)
-SOLO_START_TAP = (490, 1192)
+SOLO_START_TAP = (490, 1175)
 SOLO_PROGRESS_REGION = (20, 1215, 700, 1260)
 START_BUTTON_MASK_RATIO = 0.12
 TEAM_ROOM_START_RETRY_SEC = 1.0
@@ -235,20 +235,6 @@ def _solo_progress_visible(screen_bgr) -> bool:
     return float(progress_pixels.mean()) >= 0.55
 
 
-def _label_layout(screen_bgr) -> str:
-    if _solo_start_visible(screen_bgr) or _solo_progress_visible(screen_bgr):
-        return "solo"
-    return "team"
-
-
-def _update_label_layout(current_layout: str, detected_layout: str) -> str:
-    if current_layout not in LABEL_LAYOUTS or detected_layout not in LABEL_LAYOUTS:
-        raise ValueError(f"label layout must be one of {sorted(LABEL_LAYOUTS)}")
-    if current_layout == "solo" or detected_layout == "solo":
-        return "solo"
-    return "team"
-
-
 def _target_click_count(label_layout: str) -> int:
     if label_layout not in LABEL_LAYOUTS:
         raise ValueError(f"label_layout must be one of {sorted(LABEL_LAYOUTS)}")
@@ -271,11 +257,11 @@ def _purple_start_region_visible(screen_bgr, region_bounds: tuple[int, int, int,
     return float(start_pixels.mean()) >= START_BUTTON_MASK_RATIO
 
 
-def _visible_start_tap(screen_bgr) -> tuple[int, int] | None:
+def _visible_start_tap(screen_bgr) -> tuple[tuple[int, int], str] | None:
     if _team_room_start_visible(screen_bgr):
-        return TEAM_ROOM_START_TAP
+        return TEAM_ROOM_START_TAP, "team"
     if _solo_start_visible(screen_bgr):
-        return SOLO_START_TAP
+        return SOLO_START_TAP, "solo"
     return None
 
 
@@ -599,7 +585,6 @@ def run_memories(serial: str, map_path: str | Path, tap_mode: str = "threaded") 
         before_capture = time.monotonic()
         screen = _capture_screen_bgr(serial)
         strip = _crop_label_strip_bgr(screen)
-        label_layout = _update_label_layout(label_layout, _label_layout(screen))
         timing["capture_sec"] += time.monotonic() - before_capture
 
         before_ocr = time.monotonic()
@@ -638,13 +623,14 @@ def run_memories(serial: str, map_path: str | Path, tap_mode: str = "threaded") 
             return payload
 
         now = time.monotonic()
-        start_tap = _visible_start_tap(screen)
+        start = _visible_start_tap(screen)
         if (
             not visible_known_labels
             and not _should_complete(label_layout, len(used_labels), empty_label_loops)
-            and start_tap is not None
+            and start is not None
             and now - last_start_tap_at >= TEAM_ROOM_START_RETRY_SEC
         ):
+            start_tap, label_layout = start
             before_tap = time.monotonic()
             _tap_start(serial, start_tap)
             timing["tap_sec"] += time.monotonic() - before_tap

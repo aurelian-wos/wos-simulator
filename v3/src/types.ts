@@ -21,8 +21,8 @@ export interface ResolvedUnitScope {
 export type SupportedTriggerDamageJobSelector =
   | "use.source"
   | "use.target"
-  | "activation.source"
-  | "activation.target"
+  | "effect.applies_to"
+  | "effect.applies_vs"
   | "enemy.living"
   | "self.living";
 export type TriggerDamageJobSelector = SupportedTriggerDamageJobSelector | UnitType | UnitType[];

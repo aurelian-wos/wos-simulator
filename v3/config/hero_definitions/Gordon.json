@@ -11,7 +11,7 @@
       },
       "effects": {
         "VenomInfusion/1": {
-          "type": "extra_skill_attack",
+          "type": "active.hero.lethality.up",
           "value": [
             20,
             40,
@@ -28,13 +28,7 @@
           "duration": {
             "type": "attack",
             "value": 1
-          },
-          "trigger_damage_jobs": [
-            {
-              "source": "use.source",
-              "target": "activation.target"
-            }
-          ]
+          }
         },
         "VenomInfusion/2": {
           "type": "active.hero.lethality.down",
@@ -46,8 +40,8 @@
             20
           ],
           "units": {
-            "applies_to": "enemy.any",
-            "applies_vs": "trigger.source"
+            "applies_to": "trigger.target",
+            "applies_vs": "any"
           },
           "duration": {
             "type": "turn",
@@ -95,7 +89,7 @@
           ],
           "units": {
             "applies_to": "enemy.any",
-            "applies_vs": "any"
+            "applies_vs": "self.any"
           },
           "duration": {
             "type": "turn",
