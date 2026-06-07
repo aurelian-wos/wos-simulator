@@ -1181,6 +1181,94 @@ test.describe("Dashboard smoke tests", () => {
     expect(errors).toHaveLength(0);
   });
 
+  test("/simulate upload — active screenshot buffs are inverted before filling stats", async ({
+    page,
+  }) => {
+    const errors: string[] = [];
+    page.on("console", (msg) => {
+      if (msg.type() === "error") errors.push(msg.text());
+    });
+    page.on("pageerror", (err) => errors.push(err.message));
+
+    await page.route("**/api/ocr-report", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          attacker: {
+            troops: { infantry: 123, lancer: 234, marksman: 345 },
+            stats: {
+              infantry: {
+                attack: 1110,
+                defense: 900,
+                lethality: 100,
+                health: 100,
+              },
+              lancer: {},
+              marksman: {},
+            },
+          },
+          defender: {
+            troops: { infantry: 456, lancer: 567, marksman: 678 },
+            stats: { infantry: {}, lancer: {}, marksman: {} },
+          },
+          warnings: [],
+        }),
+      });
+    });
+
+    const response = await page.goto("/simulate");
+    expect(response?.status()).toBe(200);
+
+    await page.getByRole("button", { name: /Upload report/i }).click();
+    const dialog = page.getByRole("dialog", { name: "Upload battle report" });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByAltText(/Example Stat Bonuses report/i)).toBeVisible();
+    await expect(dialog).toContainText(/absolute numbers, not percentages/i);
+    await expect(dialog).toContainText(/troop avatars, troop counts, and every stat row/i);
+
+    await dialog.locator('[data-testid="upload-city-modifier-details-attacker"]').click();
+    await dialog.locator('[data-testid="upload-stat-modifier-attacker-attack-10"]').click();
+    await dialog.locator('[data-testid="upload-city-modifier-details-defender"]').click();
+    await dialog.locator('[data-testid="upload-stat-modifier-defender-enemy_defense-10"]').click();
+
+    await dialog.locator('input[type="file"]').setInputFiles({
+      name: "report.png",
+      mimeType: "image/png",
+      buffer: Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9WnS2GAAAAAASUVORK5CYII=",
+        "base64",
+      ),
+    });
+
+    await dialog.getByRole("button", { name: /Parse and apply/i }).click();
+    await expect(dialog).toBeHidden();
+
+    await expect(page.getByLabel("Infantry attack").first()).toHaveValue("1000");
+    await expect(page.getByLabel("Infantry defense").first()).toHaveValue("1000");
+    await expect(page.locator('[data-testid="city-modifier-details-attacker"]')).toBeVisible();
+    await expect(page.locator('[data-testid="city-modifier-attacker-10"]')).not.toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await page.locator('[data-testid="city-modifier-details-attacker"]').click();
+    await expect(
+      page.locator('[data-testid="stat-modifier-attacker-attack-10"]'),
+    ).toHaveAttribute("aria-pressed", "true");
+    await page.locator('[data-testid="city-modifier-details-defender"]').click();
+    await expect(
+      page.locator('[data-testid="stat-modifier-defender-enemy_defense-10"]'),
+    ).toHaveAttribute("aria-pressed", "true");
+    await expect(
+      page.locator('[data-testid="stat-preview-attacker-infantry-attack"]'),
+    ).toContainText("1110");
+    await expect(
+      page.locator('[data-testid="stat-preview-attacker-infantry-defense"]'),
+    ).toContainText("900");
+
+    expect(errors).toHaveLength(0);
+  });
+
   test("/simulate upload — zero troop counts clear previous values", async ({
     page,
   }) => {

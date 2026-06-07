@@ -14,6 +14,7 @@ import { useRouter } from "next/navigation";
 import OptimizeRatioScatterChart from "@/components/OptimizeRatioScatterChart";
 import SimulateOutcomeChart from "@/components/SimulateOutcomeChart";
 import UploadReportModal, {
+  UploadActiveModifiers,
   UploadReportSubmission,
 } from "@/components/UploadReportModal";
 import {
@@ -639,8 +640,8 @@ function applyStatBonusGroups(baseValue: number, upPercent: number, downPercent:
   return ((100 + baseValue) * (1 + upPercent / 100)) / (1 + downPercent / 100) - 100;
 }
 
-function removeStatBonusGroup(displayedValue: number, upPercent: number): number {
-  return (100 + displayedValue) / (1 + upPercent / 100) - 100;
+function removeStatBonusGroups(displayedValue: number, upPercent: number, downPercent: number): number {
+  return ((100 + displayedValue) * (1 + downPercent / 100)) / (1 + upPercent / 100) - 100;
 }
 
 function effectiveStatPreview(baseValue: number, upPercent: number, downPercent: number): string {
@@ -733,9 +734,9 @@ function statModifierDescription(name: StatModifierName, value: number): string 
  * main form when picking a hero).
  *
  * When rally mode is on and skill4Levels is provided, the OCR stat values are
- * scaled down by the total skill_4 bonus for that stat+side (since the screenshot
- * already includes the skill_4 boost). The scaled value feeds the main form,
- * so the simulator doesn't double-count the bonus when it reapplies skill_4.
+ * scaled down by the total skill_4 bonus for that stat+side. Upload-selected
+ * active buffs and debuffs are also inverted, because the screenshot has already
+ * incorporated them and the main form needs the unbuffed player stat bonus.
  */
 function mergeSideFromOcr(
   prev: SideState,
@@ -748,6 +749,8 @@ function mergeSideFromOcr(
   rallyMode: boolean,
   which: Side,
   skill4Levels: Record<TroopCategory, number>,
+  ownActiveModifiers: UploadActiveModifiers,
+  opponentActiveModifiers: UploadActiveModifiers,
 ): SideState {
   const nextTroops = { ...prev.troops };
   const nextTiers = { ...prev.tiers };
@@ -757,13 +760,13 @@ function mergeSideFromOcr(
     marksman: { ...prev.stats.marksman },
   };
 
-  // Build per-stat skill_4 scaling factor from the ABOUT-TO-BE-APPLIED hero
+  // Build per-stat active modifier factors from the ABOUT-TO-BE-APPLIED hero
   // choices (what the user picked in the modal) and their skill_4 levels.
-  const scaleByStat: Record<string, number> = {
-    attack: 0,
-    defense: 0,
-    lethality: 0,
-    health: 0,
+  const activeByStat: Record<StatName, { up: number; down: number }> = {
+    attack: { up: 0, down: 0 },
+    defense: { up: 0, down: 0 },
+    lethality: { up: 0, down: 0 },
+    health: { up: 0, down: 0 },
   };
   if (rallyMode) {
     for (const cat of CATEGORIES) {
@@ -774,9 +777,23 @@ function mergeSideFromOcr(
       const level = skill4Levels[cat] ?? 0;
       const pct = skill4PercentAt(level);
       if (pct > 0) {
-        scaleByStat[hero.skill4.stat] += pct;
+        activeByStat[hero.skill4.stat].up += pct;
       }
     }
+  }
+  for (const stat of STAT_NAMES) {
+    const manual = manualStatModifierGroups(
+      ownActiveModifiers.statModifiers,
+      opponentActiveModifiers.statModifiers,
+      stat,
+    );
+    const pet = petStatModifierGroups(
+      ownActiveModifiers.petModifiers,
+      opponentActiveModifiers.petModifiers,
+      stat,
+    );
+    activeByStat[stat].up += manual.up + pet.up;
+    activeByStat[stat].down += manual.down + pet.down;
   }
 
   for (const cat of CATEGORIES) {
@@ -793,11 +810,14 @@ function mergeSideFromOcr(
     for (const stat of STAT_NAMES) {
       const v = statRow[stat];
       if (typeof v === "number" && !isNaN(v)) {
-        const bonus = scaleByStat[stat] ?? 0;
+        const active = activeByStat[stat];
         // Report stat bonuses sit on top of the standard 100%.
-        // displayed = (100 + base) * (1 + bonus/100) - 100
+        // displayed = (100 + base) * (1 + up/100) / (1 + down/100) - 100
         // Round to one decimal to match input precision.
-        const scaled = bonus > 0 ? removeStatBonusGroup(v, bonus) : v;
+        const scaled =
+          active.up > 0 || active.down > 0
+            ? removeStatBonusGroups(v, active.up, active.down)
+            : v;
         nextStats[cat][stat] = Math.round(scaled * 10) / 10;
       }
     }
@@ -836,6 +856,8 @@ function mergeSideFromOcr(
     tiers: nextTiers,
     heroes: nextHeroes,
     stats: nextStats,
+    statModifiers: { ...ownActiveModifiers.statModifiers },
+    petModifiers: { ...ownActiveModifiers.petModifiers },
   };
 }
 
@@ -1554,6 +1576,7 @@ export default function SimulateClient({
       rallyMode: modalRally,
       sidesSwapped: modalSwapped,
       skill4Levels,
+      activeModifiers,
     } = submission;
     // Align main-page rally toggle with the modal's choice so the user sees a
     // consistent state (main form already handles rally layout on its own).
@@ -1571,6 +1594,8 @@ export default function SimulateClient({
         modalRally,
         "attacker",
         skill4Levels.attacker,
+        activeModifiers.attacker,
+        activeModifiers.defender,
       ),
     );
     setDefender((prev) =>
@@ -1581,6 +1606,8 @@ export default function SimulateClient({
         modalRally,
         "defender",
         skill4Levels.defender,
+        activeModifiers.defender,
+        activeModifiers.attacker,
       ),
     );
     setUploadWarnings(ocr.warnings ?? []);

@@ -10,6 +10,58 @@ import {
 } from "@/lib/heroes-catalogue";
 
 const CATEGORIES: TroopCategory[] = ["infantry", "lancer", "marksman"];
+const STAT_MODIFIER_NAMES = [
+  "attack",
+  "defense",
+  "lethality",
+  "health",
+  "enemy_attack",
+  "enemy_defense",
+] as const;
+const STAT_MODIFIER_OPTIONS = [0, 10, 20] as const;
+const PET_MODIFIER_NAMES = [
+  "attack",
+  "defense",
+  "lethality",
+  "health",
+  "enemy_defense",
+  "enemy_lethality",
+  "enemy_health",
+] as const;
+const PET_DEBUFF_NAMES: PetModifierName[] = [
+  "enemy_defense",
+  "enemy_lethality",
+  "enemy_health",
+];
+const PET_BUFF_MAX = 10;
+const PET_DEFAULT_DEBUFF_MAX = 5;
+const PET_DEFENSE_DEBUFF_MAX = 10;
+const STAT_MODIFIER_LABELS: Record<StatModifierName, string> = {
+  attack: "Attack",
+  defense: "Defense",
+  lethality: "Lethality",
+  health: "Health",
+  enemy_attack: "Enemy Atk",
+  enemy_defense: "Enemy Def",
+};
+const PET_MODIFIER_LABELS: Record<PetModifierName, string> = {
+  attack: "Attack",
+  defense: "Defense",
+  lethality: "Lethality",
+  health: "Health",
+  enemy_defense: "Enemy Defense",
+  enemy_lethality: "Enemy Lethality",
+  enemy_health: "Enemy Health",
+};
+
+export type StatModifierName = (typeof STAT_MODIFIER_NAMES)[number];
+export type PetModifierName = (typeof PET_MODIFIER_NAMES)[number];
+export type UploadStatModifierState = Record<StatModifierName, number>;
+export type UploadPetModifierState = Record<PetModifierName, number>;
+export interface UploadActiveModifiers {
+  statModifiers: UploadStatModifierState;
+  petModifiers: UploadPetModifierState;
+}
 
 export type HeroSelection = Record<TroopCategory, string | null>;
 export type Skill4LevelMap = Record<TroopCategory, number>;
@@ -40,6 +92,10 @@ export interface UploadReportSubmission {
     attacker: Skill4LevelMap;
     defender: Skill4LevelMap;
   };
+  activeModifiers: {
+    attacker: UploadActiveModifiers;
+    defender: UploadActiveModifiers;
+  };
 }
 
 interface Props {
@@ -62,6 +118,30 @@ const emptySkill4 = (): Skill4LevelMap => ({
   marksman: 5,
 });
 
+const defaultStatModifiers = (): UploadStatModifierState => ({
+  attack: 0,
+  defense: 0,
+  lethality: 0,
+  health: 0,
+  enemy_attack: 0,
+  enemy_defense: 0,
+});
+
+const defaultPetModifiers = (): UploadPetModifierState => ({
+  attack: 0,
+  defense: 0,
+  lethality: 0,
+  health: 0,
+  enemy_defense: 0,
+  enemy_lethality: 0,
+  enemy_health: 0,
+});
+
+const defaultActiveModifiers = (): UploadActiveModifiers => ({
+  statModifiers: defaultStatModifiers(),
+  petModifiers: defaultPetModifiers(),
+});
+
 export default function UploadReportModal({
   open,
   onClose,
@@ -79,6 +159,10 @@ export default function UploadReportModal({
   const [rallyMode, setRallyMode] = useState(initialRallyMode);
   const [attackerSkill4, setAttackerSkill4] = useState<Skill4LevelMap>(emptySkill4);
   const [defenderSkill4, setDefenderSkill4] = useState<Skill4LevelMap>(emptySkill4);
+  const [attackerModifiers, setAttackerModifiers] =
+    useState<UploadActiveModifiers>(defaultActiveModifiers);
+  const [defenderModifiers, setDefenderModifiers] =
+    useState<UploadActiveModifiers>(defaultActiveModifiers);
   // Reports always show "me" on the left. When the user is the defender, they
   // toggle this so the OCR left column is treated as defender, not attacker.
   // Initial value is read from the parent so the modal opens in the same order
@@ -105,6 +189,8 @@ export default function UploadReportModal({
     setDefenderHeroes(emptyHeroes());
     setAttackerSkill4(emptySkill4());
     setDefenderSkill4(emptySkill4());
+    setAttackerModifiers(defaultActiveModifiers());
+    setDefenderModifiers(defaultActiveModifiers());
     setSidesSwapped(false);
   }, []);
 
@@ -218,6 +304,10 @@ export default function UploadReportModal({
           attacker: { ...attackerSkill4 },
           defender: { ...defenderSkill4 },
         },
+        activeModifiers: {
+          attacker: cloneActiveModifiers(attackerModifiers),
+          defender: cloneActiveModifiers(defenderModifiers),
+        },
       });
       reset();
       onClose();
@@ -296,6 +386,35 @@ export default function UploadReportModal({
 
         <div className="p-3 sm:p-4 flex flex-col gap-3 sm:gap-4">
           <div
+            className="grid gap-3 rounded p-3 sm:grid-cols-[minmax(0,1fr)_11rem]"
+            style={{
+              border: "1px solid var(--border-color)",
+              backgroundColor: "var(--main-bg)",
+            }}
+          >
+            <div className="flex flex-col gap-2 text-xs leading-relaxed">
+              <p className="font-bold" style={{ color: "var(--sidebar-active)" }}>
+                Upload a Stat Bonuses screenshot like this example.
+              </p>
+              <p className="opacity-75">
+                Troop counts must be shown as absolute numbers, not percentages.
+                Keep the troop avatars, troop counts, and every stat row in frame
+                so the parser can read the troop types and all bonuses.
+              </p>
+            </div>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/examples/stat-bonuses-report.png"
+              alt="Example Stat Bonuses report with troop avatars, troop counts, and all stat rows visible"
+              className="w-full rounded object-cover"
+              style={{
+                border: "1px solid var(--border-color)",
+                maxHeight: 180,
+                objectPosition: "top",
+              }}
+            />
+          </div>
+          <div
             onDragOver={(e) => {
               e.preventDefault();
               setDragging(true);
@@ -367,6 +486,8 @@ export default function UploadReportModal({
                 onChange={setAttackerHeroes}
                 skill4={attackerSkill4}
                 onSkill4Change={setAttackerSkill4}
+                activeModifiers={attackerModifiers}
+                onActiveModifiersChange={setAttackerModifiers}
                 rallyMode={rallyMode}
               />
             </div>
@@ -400,6 +521,8 @@ export default function UploadReportModal({
                 onChange={setDefenderHeroes}
                 skill4={defenderSkill4}
                 onSkill4Change={setDefenderSkill4}
+                activeModifiers={defenderModifiers}
+                onActiveModifiersChange={setDefenderModifiers}
                 rallyMode={rallyMode}
               />
             </div>
@@ -464,6 +587,8 @@ function HeroPickerPanel({
   onChange,
   skill4,
   onSkill4Change,
+  activeModifiers,
+  onActiveModifiersChange,
   rallyMode,
 }: {
   title: string;
@@ -472,8 +597,32 @@ function HeroPickerPanel({
   onChange: (next: HeroSelection) => void;
   skill4: Skill4LevelMap;
   onSkill4Change: (next: Skill4LevelMap) => void;
+  activeModifiers: UploadActiveModifiers;
+  onActiveModifiersChange: (next: UploadActiveModifiers) => void;
   rallyMode: boolean;
 }) {
+  const cityPreset = STAT_MODIFIER_OPTIONS.find((value) =>
+    STAT_MODIFIER_NAMES.every(
+      (name) => activeModifiers.statModifiers[name] === value,
+    ),
+  );
+  const petEnabled = PET_MODIFIER_NAMES.some(
+    (name) => activeModifiers.petModifiers[name] !== 0,
+  );
+  const [cityDetailsOpen, setCityDetailsOpen] = useState(false);
+  const [petDetailsOpen, setPetDetailsOpen] = useState(false);
+  const updateStatModifier = (name: StatModifierName, value: number) => {
+    onActiveModifiersChange({
+      ...activeModifiers,
+      statModifiers: { ...activeModifiers.statModifiers, [name]: value },
+    });
+  };
+  const updatePetModifier = (name: PetModifierName, value: number) => {
+    onActiveModifiersChange({
+      ...activeModifiers,
+      petModifiers: { ...activeModifiers.petModifiers, [name]: value },
+    });
+  };
   return (
     <div
       className="rounded p-3"
@@ -564,6 +713,272 @@ function HeroPickerPanel({
           );
         })}
       </div>
+      <div className="mt-3 rounded border p-2" style={{ borderColor: "var(--border-color)" }}>
+        <h5 className="mb-1 text-[10px] font-bold uppercase tracking-wider opacity-60">
+          Active buffs in screenshot
+        </h5>
+        <p className="mb-2 text-[11px] leading-relaxed opacity-65">
+          Select only buffs/debuffs that were already active when the screenshot
+          was taken. The importer removes them from parsed stats before filling
+          the main army inputs.
+        </p>
+        <div className="grid grid-cols-1 gap-2">
+          <div className="rounded border p-2" style={{ borderColor: "var(--border-color)" }}>
+            <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
+              <button
+                type="button"
+                aria-expanded={cityDetailsOpen}
+                aria-controls={`upload-city-modifier-fields-${which}`}
+                data-testid={`upload-city-modifier-details-${which}`}
+                onClick={() => setCityDetailsOpen((open) => !open)}
+                className="flex min-h-[30px] min-w-0 items-center gap-1 text-left text-[10px] font-bold uppercase tracking-wider opacity-70 hover:opacity-100"
+              >
+                <span className="w-3 text-center text-[9px] opacity-70">
+                  {cityDetailsOpen ? "▼" : "▶"}
+                </span>
+                <span className="truncate">City</span>
+              </button>
+              <div
+                className="inline-grid grid-cols-3 overflow-hidden rounded border"
+                style={{ borderColor: "var(--border-color)" }}
+              >
+                {STAT_MODIFIER_OPTIONS.map((value) => {
+                  const selected = cityPreset === value;
+                  return (
+                    <button
+                      key={value}
+                      type="button"
+                      aria-label={`${which} upload city buffs ${value}%`}
+                      aria-pressed={selected}
+                      data-testid={`upload-city-modifier-${which}-${value}`}
+                      onClick={() =>
+                        onActiveModifiersChange({
+                          ...activeModifiers,
+                          statModifiers: STAT_MODIFIER_NAMES.reduce(
+                            (next, name) => ({ ...next, [name]: value }),
+                            {} as UploadStatModifierState,
+                          ),
+                        })
+                      }
+                      className="min-h-[30px] px-2 text-[10px] font-bold"
+                      style={{
+                        backgroundColor: selected
+                          ? "var(--sidebar-active)"
+                          : "var(--sidebar-bg)",
+                        color: selected ? "#111827" : "var(--main-text)",
+                        borderRight:
+                          value === 20 ? "0" : "1px solid var(--border-color)",
+                      }}
+                    >
+                      {value}%
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            {cityDetailsOpen && (
+              <div
+                id={`upload-city-modifier-fields-${which}`}
+                className="mt-2 grid grid-cols-1 gap-2"
+              >
+                {STAT_MODIFIER_NAMES.map((name) => (
+                  <UploadCityModifier
+                    key={name}
+                    which={which}
+                    name={name}
+                    value={activeModifiers.statModifiers[name]}
+                    onChange={updateStatModifier}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="rounded border p-2" style={{ borderColor: "var(--border-color)" }}>
+            <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
+              <button
+                type="button"
+                aria-expanded={petDetailsOpen}
+                aria-controls={`upload-pet-modifier-fields-${which}`}
+                data-testid={`upload-pet-modifier-details-${which}`}
+                onClick={() => setPetDetailsOpen((open) => !open)}
+                className="flex min-h-[30px] min-w-0 items-center gap-1 text-left text-[10px] font-bold uppercase tracking-wider opacity-70 hover:opacity-100"
+              >
+                <span className="w-3 text-center text-[9px] opacity-70">
+                  {petDetailsOpen ? "▼" : "▶"}
+                </span>
+                <span className="truncate">Pets</span>
+              </button>
+              <button
+                type="button"
+                aria-label={`${which} upload pet buffs ${petEnabled ? "off" : "on"}`}
+                aria-pressed={petEnabled}
+                data-testid={`upload-pet-modifier-${which}-toggle`}
+                onClick={() =>
+                  onActiveModifiersChange({
+                    ...activeModifiers,
+                    petModifiers: petEnabled
+                      ? defaultPetModifiers()
+                      : {
+                          attack: PET_BUFF_MAX,
+                          defense: PET_BUFF_MAX,
+                          lethality: PET_BUFF_MAX,
+                          health: PET_BUFF_MAX,
+                          enemy_defense: PET_DEFENSE_DEBUFF_MAX,
+                          enemy_lethality: PET_DEFAULT_DEBUFF_MAX,
+                          enemy_health: PET_DEFAULT_DEBUFF_MAX,
+                        },
+                  })
+                }
+                className="min-h-[30px] rounded px-3 text-[10px] font-bold"
+                style={{
+                  backgroundColor: petEnabled
+                    ? "var(--sidebar-active)"
+                    : "var(--sidebar-bg)",
+                  border: "1px solid var(--border-color)",
+                  color: petEnabled ? "#111827" : "var(--main-text)",
+                }}
+              >
+                {petEnabled ? "On" : "Off"}
+              </button>
+            </div>
+            {petDetailsOpen && (
+              <div
+                id={`upload-pet-modifier-fields-${which}`}
+                className="mt-2 grid grid-cols-1 gap-2"
+              >
+                {PET_MODIFIER_NAMES.map((name) => (
+                  <UploadPetModifier
+                    key={name}
+                    which={which}
+                    name={name}
+                    value={activeModifiers.petModifiers[name]}
+                    onChange={updatePetModifier}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
     </div>
+  );
+}
+
+function cloneActiveModifiers(value: UploadActiveModifiers): UploadActiveModifiers {
+  return {
+    statModifiers: { ...value.statModifiers },
+    petModifiers: { ...value.petModifiers },
+  };
+}
+
+function statModifierDescription(name: StatModifierName, value: number): string {
+  if (name === "enemy_attack" || name === "enemy_defense") {
+    return value === 0 ? "Off" : `-${value}%`;
+  }
+  return value === 0 ? "Off" : `+${value}%`;
+}
+
+function petModifierMax(name: PetModifierName): number {
+  if (name === "enemy_defense") return PET_DEFENSE_DEBUFF_MAX;
+  return PET_DEBUFF_NAMES.includes(name) ? PET_DEFAULT_DEBUFF_MAX : PET_BUFF_MAX;
+}
+
+function UploadCityModifier({
+  which,
+  name,
+  value,
+  onChange,
+}: {
+  which: "attacker" | "defender";
+  name: StatModifierName;
+  value: number;
+  onChange: (name: StatModifierName, value: number) => void;
+}) {
+  return (
+    <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
+      <span className="min-w-0 truncate text-[10px] uppercase tracking-wider opacity-60">
+        {STAT_MODIFIER_LABELS[name]}
+      </span>
+      <div
+        className="inline-grid grid-cols-3 overflow-hidden rounded border"
+        style={{ borderColor: "var(--border-color)" }}
+      >
+        {STAT_MODIFIER_OPTIONS.map((option) => {
+          const selected = value === option;
+          return (
+            <button
+              key={option}
+              type="button"
+              aria-label={`${which} upload ${STAT_MODIFIER_LABELS[name]} ${statModifierDescription(name, option)}`}
+              aria-pressed={selected}
+              data-testid={`upload-stat-modifier-${which}-${name}-${option}`}
+              onClick={() => onChange(name, option)}
+              className="min-h-[30px] px-2 text-[10px] font-bold"
+              style={{
+                backgroundColor: selected
+                  ? "var(--sidebar-active)"
+                  : "var(--sidebar-bg)",
+                color: selected ? "#111827" : "var(--main-text)",
+                borderRight:
+                  option === 20 ? "0" : "1px solid var(--border-color)",
+              }}
+            >
+              {statModifierDescription(name, option)}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function UploadPetModifier({
+  which,
+  name,
+  value,
+  onChange,
+}: {
+  which: "attacker" | "defender";
+  name: PetModifierName;
+  value: number;
+  onChange: (name: PetModifierName, value: number) => void;
+}) {
+  const isDebuff = PET_DEBUFF_NAMES.includes(name);
+  const max = petModifierMax(name);
+  const display = isDebuff && value > 0 ? `-${value.toFixed(1)}%` : `+${value.toFixed(1)}%`;
+  return (
+    <label className="grid grid-cols-[minmax(0,1fr)_5rem_3.25rem] items-center gap-2 text-[10px]">
+      <span className="min-w-0 truncate uppercase tracking-wider opacity-60">
+        {PET_MODIFIER_LABELS[name]}
+      </span>
+      <input
+        type="number"
+        min={0}
+        max={max}
+        step={0.5}
+        value={value}
+        onChange={(e) => {
+          const parsed = parseFloat(e.target.value);
+          const next = Number.isNaN(parsed)
+            ? 0
+            : Math.max(0, Math.min(max, Math.round(parsed * 2) / 2));
+          onChange(name, next);
+        }}
+        className="min-h-[30px] rounded px-2 text-right font-mono text-[10px] tabular-nums"
+        style={{
+          backgroundColor: "var(--sidebar-bg)",
+          border: "1px solid var(--border-color)",
+          color: "var(--main-text)",
+        }}
+        aria-label={`${which} upload pet ${PET_MODIFIER_LABELS[name]}`}
+        data-testid={`upload-pet-modifier-${which}-${name}`}
+      />
+      <span
+        className="text-right font-mono tabular-nums"
+        style={{ color: isDebuff && value > 0 ? "#f38ba8" : "#a6e3a1" }}
+      >
+        {value === 0 ? "Off" : display}
+      </span>
+    </label>
   );
 }
