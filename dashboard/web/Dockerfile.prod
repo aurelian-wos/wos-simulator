@@ -9,7 +9,7 @@
 
 FROM node:20-bookworm-slim
 
-WORKDIR /app
+WORKDIR /repo/dashboard/web
 
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
@@ -38,11 +38,10 @@ RUN python3 -m venv /opt/sim-venv \
 COPY dashboard/web/package.json dashboard/web/package-lock.json ./
 RUN npm ci --no-audit --no-fund
 
-COPY dashboard/web/ ./
-# The browser-side simulator imports @simulator/* during the Next build. The dashboard
-# app lives at /app, so next.config.ts resolves that alias to /simulator/src.
-COPY simulator/src /simulator/src
-COPY simulator/config /simulator/config
+# Keep the same relative repo layout in the image that local builds use.
+COPY dashboard /repo/dashboard
+COPY simulator/src /repo/simulator/src
+COPY simulator/config /repo/simulator/config
 RUN npm run build
 
 RUN mkdir -p /data/simulations /data/test_results /test_results \

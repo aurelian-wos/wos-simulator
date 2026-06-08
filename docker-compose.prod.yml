@@ -19,20 +19,11 @@ services:
       PUBLIC_SURFACE: simulate
       DB_PATH: /data/test_results/dashboard.sqlite
       SIM_RUNS_DIR: /data/simulations
-      STAT_PRESETS_FILE: /data/stat-presets/player-stat-presets.json
       SIMULATOR_PYTHON: /opt/sim-venv/bin/python
     volumes:
       - ${WOS_SIM_RUNS_DIR:-/srv/wos-sim/runtime/simulate-runs}:/data/simulations
-      - ${WOS_STAT_PRESETS_DIR:-/srv/wos-sim/runtime/stat-presets}:/data/stat-presets
       - ./test_results:/data/test_results:rw
-      - ./test_results:/test_results:rw
-      - ./dashboard:/dashboard:ro
-      - ./skill:/skill:ro
-      - ./archived/v1/Base_classes:/archived/v1/Base_classes:ro
-      - ./archived/v1/assets:/archived/v1/assets:ro
-      - ./shared/fighters_data:/shared/fighters_data
-      - ./archived/v1/check_testcases.py:/archived/v1/check_testcases.py:ro
-      - ./testcases:/testcases:ro
+      - ./skill:/repo/skill:ro
     expose:
       - "3000"
     healthcheck:

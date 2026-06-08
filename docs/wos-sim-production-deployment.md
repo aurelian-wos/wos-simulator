@@ -6,7 +6,8 @@
 the private QA accuracy views. Per the final WOS-298 discussion, the public VPS
 surface is the simulator page only:
 
-- Public: `/simulate`, saved run sharing, stat presets, and report upload/OCR.
+- Public: `/simulate`, saved run sharing, browser-local stat presets, and
+  report upload/OCR.
 - Private/local: regression dashboard routes, coverage/history views, and
   TypeScript testcase-runner controls.
 - Saved simulation run JSON files sync bidirectionally between the local dev
@@ -18,8 +19,8 @@ behind the existing Traefik simulator TLS setup.
 
 The production container runs as the host deploy UID/GID exported by
 `scripts/wos-prod-deploy.sh` (`WOS_SIM_UID` / `WOS_SIM_GID`). This keeps
-bind-mounted saved-run and preset files writable without requiring root-owned
-artifacts on the host.
+bind-mounted saved-run files writable without requiring root-owned artifacts on
+the host.
 
 ## Relevant Files
 
@@ -59,13 +60,13 @@ Default/local mode must keep the full dashboard unchanged. In
 
 - `/` redirects to `/simulate`.
 - `/simulate` renders normally.
-- Public simulate APIs are limited to saved-run persistence/loading, stat
-  presets, and OCR upload. Browser-side simulator workers handle battle and ratio
-  calculations.
+- Public simulate APIs are limited to saved-run persistence/loading and OCR
+  upload. Browser-side simulator workers handle battle and ratio calculations.
+  Player stat presets are stored in browser `localStorage`, not through a server
+  API.
 - Public API routes are limited to:
   - `/api/simulate/runs`
   - `/api/simulate/runs/[id]`
-  - `/api/simulate/stat-presets`
   - `/api/ocr-report`
 - Private QA routes return 404 or another non-success response:
   - `/runs`
@@ -129,7 +130,6 @@ Syncthing ignore patterns for both sides:
 ```text
 *.tmp
 *.json.*.tmp
-player-stat-presets.json
 ```
 
 Unison path filter equivalent:
@@ -137,13 +137,11 @@ Unison path filter equivalent:
 ```text
 ignore = Name *.tmp
 ignore = Name *.json.*.tmp
-ignore = Name player-stat-presets.json
 ```
 
-Do not sync `player-stat-presets.json` in this phase. In production,
-`STAT_PRESETS_FILE` is pointed at `/data/stat-presets/player-stat-presets.json`,
-backed by a separate Docker named volume, so presets remain VPS-local even when
-saved run JSONs are synced bidirectionally.
+Player stat presets are private browser data stored by `/simulate` in
+`localStorage` under `wos-simulator.player-stat-presets.v1`; there is no server
+preset file, preset API, or production stat-preset volume to sync.
 
 ## Deployment Path
 
@@ -159,7 +157,6 @@ The deploy script exports these defaults before invoking Compose:
 WOS_SIM_UID=$(id -u)
 WOS_SIM_GID=$(id -g)
 WOS_SIM_RUNS_DIR=/srv/wos-sim/runtime/simulate-runs
-WOS_STAT_PRESETS_DIR=/srv/wos-sim/runtime/stat-presets
 ```
 
 The script builds the image before replacing the routed container:
@@ -172,17 +169,17 @@ docker compose -f docker-compose.prod.yml up -d --no-build --no-deps app
 `docker-compose.prod.yml` sets `PUBLIC_SURFACE=simulate` and Traefik labels for
 the `wos-sim.ratme.org` host rule, TLS, and service port `3000`.
 
-JavaScript changes require a production image rebuild. Python/config changes
-that are bind-mounted into the container can be picked up by restart when
-needed. Saved run JSON changes should appear after file sync without an image
-rebuild.
+JavaScript changes require a production image rebuild. The public OCR parser
+assets under `skill/` are bind-mounted at `/repo/skill`, so parser/template
+changes can be picked up by restart when needed. Saved run JSON changes should
+appear after file sync without an image rebuild.
 
 ## Non-Goals
 
 - Do not expose the accuracy dashboard publicly.
 - Do not expose `/api/check-testcases` publicly.
 - Do not run full testcase checks from public request handlers.
-- Do not redesign player stat preset storage in this phase.
+- Do not add a server-side player stat preset store or sync path.
 - Do not fork the app into a separate codebase unless the single-codebase
   public mode proves impractical.
 
@@ -194,8 +191,9 @@ rebuild.
 - Default local mode keeps the full dashboard behavior unchanged.
 - Public navigation only presents simulate-appropriate links/actions.
 - OCR upload has size, timeout, and concurrency safeguards.
-- `SIM_RUNS_DIR` saved run JSON files have documented bidirectional sync setup;
-  player stat presets are intentionally not synced.
+- `SIM_RUNS_DIR` saved run JSON files have documented bidirectional sync setup.
+- Player stat presets remain browser-local and are not represented in production
+  Compose volumes or public APIs.
 - Production deployment runs behind Traefik/TLS at `wos-sim.ratme.org`.
 - `/healthz` verifies the production app.
 
@@ -244,8 +242,7 @@ route and verify:
   required before public exposure.
 - Saved run files are low-conflict because IDs are UUIDs and completed JSON run
   documents should be immutable.
-- Single-file player stat presets are more conflict-prone, so they are excluded
-  from first-phase sync.
+- Player stat presets are browser-local and excluded from server sync.
 - Current issue tracking and regression history belong in Paperclip/local QA,
   not on the public site.
 

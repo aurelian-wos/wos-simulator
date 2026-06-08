@@ -2,11 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 
 const PUBLIC_SURFACE = process.env.PUBLIC_SURFACE;
 
-function isAllowedPublicPath(pathname: string): boolean {
+export function isAllowedPublicPath(pathname: string): boolean {
   if (pathname === "/") return true;
   if (pathname === "/simulate" || pathname.startsWith("/simulate/")) return true;
   if (pathname === "/healthz") return true;
   if (pathname === "/icon.svg") return true;
+  if (pathname.startsWith("/examples/")) return true;
   if (pathname === "/api/ocr-report") return true;
   if (
     pathname === "/api/simulate/runs" ||

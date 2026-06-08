@@ -22,7 +22,7 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: repoRoot,
     resolveAlias: {
-      "@simulator": "../../simulator/src",
+      "@simulator": simulatorSourceRoot,
     },
     resolveExtensions: [".mdx", ".tsx", ".ts", ".jsx", ".js", ".mjs", ".json"],
   },
