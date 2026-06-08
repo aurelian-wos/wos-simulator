@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { spawnSync, type SpawnSyncReturns } from "node:child_process";
 import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
+
+import { formatHumanSummary } from "./run_testcases";
 
 const repoRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
 
@@ -125,6 +127,119 @@ test("cli --workers runs testcase cases through worker pool", () => {
   assert.deepEqual(readdirSync(outputDir), []);
 });
 
+test("cli --human writes a readable testcase summary table", () => {
+  const outputDir = tempDir("simulator-parity-human");
+
+  const result = spawnSync(
+    "npx",
+    [
+      "--yes",
+      "tsx",
+      "scripts/run_testcases.ts",
+      "--matching",
+      "simple_001",
+      "--repeat",
+      "1",
+      "--output-dir",
+      outputDir,
+      "--no-run-snapshot",
+      "--human",
+    ],
+    { cwd: repoRoot, encoding: "utf8" },
+  );
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /Testcase summary/);
+  assert.match(result.stdout, /Status\s+#\s+Testcase\s+Samples\s+Game N\s+Mode\s+Sim mu\s+Game mu\s+Game SD\s+Sim SD/);
+  assert.match(result.stdout, /PASS\s+0\s+simple_001\s+1\s+1\s+single\s+-186\s+-186\s+0\s+0/);
+  assert.throws(() => JSON.parse(result.stdout), "human output should not be JSON");
+});
+
+test("human summary shows ten individual runs for failing repeated stochastic testcases", () => {
+  const text = formatHumanSummary({
+    reportKind: "simulator-parity-summary",
+    schemaVersion: 1,
+    createdAt: "2026-01-02T03:04:05.000Z",
+    options: { repeat: 25 },
+    counts: {
+      filesFound: 1,
+      testcasesFound: 1,
+      executed: 1,
+      warnings: 0,
+      errors: 0,
+      comparedToGame: 1,
+      comparedToBaseline: 0,
+    },
+    warnings: [],
+    errors: [],
+    testcases: {
+      "testcases/failing.json#0": {
+        file: "testcases/failing.json",
+        testcase_id: "failing_case",
+        idx: 0,
+        deterministic: false,
+        sampleCount: 25,
+        game: {
+          n_candidate: 25,
+          mu_candidate: 123,
+          sigma_candidate: 4.5,
+          n_reference: 3,
+          mu_reference: 100,
+          sigma_reference: 2,
+          bias_raw: 23,
+          bias_pct: 2.3,
+          sem: 1.5,
+          stat_type: "t",
+          stat: 15.3333,
+          p: 0.000001,
+          q: 0.000001,
+          passes: false,
+        },
+        baseline: null,
+      },
+    },
+    details: [
+      {
+        file: "testcases/failing.json",
+        testcaseId: "failing_case",
+        index: 0,
+        diagnostics: [],
+        deterministic: false,
+        sampleCount: 25,
+        simulatorSampleOutcomes: Array.from({ length: 12 }, (_, index) => ({
+          run: index + 1,
+          attackerHeroes: ["Molly", "Bahiti"],
+          defenderHeroes: ["Sergey"],
+          attackerTroops: { infantry: 1000, lancer: 200, marksman: 30 },
+          defenderTroops: { infantry: 900, lancer: 100, marksman: 20 },
+          attackerRemainingByType: { infantry: 80 + index, lancer: 20, marksman: 0 },
+          defenderRemainingByType: { infantry: 40 + index, lancer: 10, marksman: 0 },
+          attackerRemaining: 100 + index,
+          defenderRemaining: 50 + index,
+          scoreDelta: 50,
+        })),
+        simulatorSampleDeltas: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+        visibility: {
+          attacker: { heroes: [], troopSkillIds: [], troops: {}, skillEffectActivations: 0 },
+          defender: { heroes: [], troopSkillIds: [], troops: {}, skillEffectActivations: 0 },
+        },
+      },
+    ],
+  });
+
+  assert.match(text, /Failing repeated stochastic sample runs \(first 10\)/);
+  assert.match(text, /failing_case/);
+  assert.match(text, /Status\s+#\s+Testcase\s+Samples\s+Game N\s+Mode\s+Sim mu\s+Game mu\s+Game SD\s+Sim SD/);
+  assert.match(text, /FAIL\s+0\s+failing_case\s+25\s+3\s+stoch\s+123\s+100\s+2\s+4\.50/);
+  assert.match(text, /1\.0e-6/);
+  assert.match(text, /p\s+q\(BH\)/);
+  assert.doesNotMatch(text, /15\.33\s+0\.00/);
+  assert.match(text, /Run\s+Attacker army\s+Defender army\s+A rem\s+D rem\s+Outcome\s+Delta vs game mu\s+Game SD\s+Sim SD\s+Run p/);
+  assert.match(text, /#1\s+Molly,Bahiti i:1000 l:200 m:30\s+Sergey i:900 l:100 m:20\s+i:80 l:20 m:0 \(100\)\s+i:40 l:10 m:0 \(50\)\s+50\s+-50\s+2\s+4\.50\s+<1e-12/);
+  assert.match(text, /#10\s+Molly,Bahiti i:1000 l:200 m:30\s+Sergey i:900 l:100 m:20\s+i:89 l:20 m:0 \(109\)\s+i:49 l:10 m:0 \(59\)\s+50/);
+  assert.doesNotMatch(text, /#11\s+Molly/);
+});
+
 test("cli snapshot paths are unique when timestamps collide", () => {
   const outputDir = tempDir("simulator-parity-collision");
   const preloadPath = resolve(outputDir, "fixed-date.mjs");
@@ -186,7 +301,7 @@ function tempDir(prefix: string): string {
   return dir;
 }
 
-function runCliWithFixedDate(outputDir: string, preloadPath: string, fixedDate: string): ReturnType<typeof spawnSync> {
+function runCliWithFixedDate(outputDir: string, preloadPath: string, fixedDate: string): SpawnSyncReturns<string> {
   return spawnSync(
     "env",
     [

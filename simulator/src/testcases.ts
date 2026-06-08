@@ -38,6 +38,8 @@ export interface TestcaseCaseReport {
   result?: BattleResult;
   simulatorScoreDelta?: number;
   simulatorStats?: SampleStats;
+  simulatorSampleOutcomes?: TestcaseSampleOutcome[];
+  simulatorSampleDeltas?: number[];
   deterministic?: boolean;
   sampleCount?: number;
   visibility: {
@@ -134,9 +136,24 @@ export interface TestcaseExecutionResult {
   sampleCount?: number;
   simulatorStats?: SampleStats;
   simulatorScoreDelta?: number;
+  simulatorSampleOutcomes?: TestcaseSampleOutcome[];
+  simulatorSampleDeltas?: number[];
   diagnostics: string[];
   error?: string;
   errorDetails?: TestcaseErrorDetails;
+}
+
+export interface TestcaseSampleOutcome {
+  run: number;
+  attackerHeroes: string[];
+  defenderHeroes: string[];
+  attackerTroops: Partial<Record<UnitType, number>>;
+  defenderTroops: Partial<Record<UnitType, number>>;
+  attackerRemainingByType: Partial<Record<UnitType, number>>;
+  defenderRemainingByType: Partial<Record<UnitType, number>>;
+  attackerRemaining: number;
+  defenderRemaining: number;
+  scoreDelta: number;
 }
 
 export function defaultTestcaseRoot(): string {
@@ -350,6 +367,8 @@ function applyExecutionResult(
   detail.sampleCount = execution.sampleCount;
   detail.simulatorStats = stats;
   detail.simulatorScoreDelta = execution.simulatorScoreDelta;
+  detail.simulatorSampleOutcomes = execution.simulatorSampleOutcomes;
+  detail.simulatorSampleDeltas = execution.simulatorSampleDeltas;
   detail.gameResult = gameResult;
   detail.calibration = calibration;
   detail.visibility = visibilityFromResult(result);
@@ -387,14 +406,26 @@ function normalizeRepeat(repeat: number | undefined): number {
 export function executeTestcaseCase(job: TestcaseExecutionJob, config: SimulatorConfig): TestcaseExecutionResult {
   try {
     const samples: number[] = [];
+    const sampleOutcomes: TestcaseSampleOutcome[] = [];
+    const sampleDeltas: number[] = [];
     let result = simulateBattle(sampleInput(job.input, job.seed, job.file, job.testcaseId, job.index, 0), config);
     const firstScore = battleScoreDelta(result);
-    if (firstScore !== undefined) samples.push(firstScore);
+    if (firstScore !== undefined) {
+      samples.push(firstScore);
+      sampleOutcomes.push(sampleOutcome(1, result, firstScore));
+      sampleDeltas.push(firstScore);
+    }
     const sampleCount = result.randomness.deterministic ? 1 : job.repeat;
     for (let iteration = 1; iteration < sampleCount; iteration += 1) {
       result = simulateBattle(sampleInput(job.input, job.seed, job.file, job.testcaseId, job.index, iteration), config);
       const score = battleScoreDelta(result);
-      if (score !== undefined) samples.push(score);
+      if (score !== undefined) {
+        samples.push(score);
+        if (sampleDeltas.length < 10) {
+          sampleOutcomes.push(sampleOutcome(iteration + 1, result, score));
+          sampleDeltas.push(score);
+        }
+      }
     }
     return {
       testcaseId: job.testcaseId,
@@ -404,6 +435,8 @@ export function executeTestcaseCase(job: TestcaseExecutionJob, config: Simulator
       sampleCount,
       simulatorStats: sampleStats(samples),
       simulatorScoreDelta: battleScoreDelta(result),
+      simulatorSampleOutcomes: sampleOutcomes,
+      simulatorSampleDeltas: sampleDeltas,
       diagnostics: [...result.resolved.attacker.diagnostics, ...result.resolved.defender.diagnostics]
     };
   } catch (error) {
@@ -475,6 +508,21 @@ export function battleScoreDelta(value: unknown): number | undefined {
   const defender = Number((gameResult as { defender?: unknown }).defender);
   if (!Number.isFinite(attacker) || !Number.isFinite(defender)) return undefined;
   return attacker - defender;
+}
+
+function sampleOutcome(run: number, result: BattleResult, scoreDelta: number): TestcaseSampleOutcome {
+  return {
+    run,
+    attackerHeroes: result.resolved.attacker.heroes.map((hero) => hero.name),
+    defenderHeroes: result.resolved.defender.heroes.map((hero) => hero.name),
+    attackerTroops: result.resolved.attacker.troops,
+    defenderTroops: result.resolved.defender.troops,
+    attackerRemainingByType: result.remaining.attacker,
+    defenderRemainingByType: result.remaining.defender,
+    attackerRemaining: totalSide(result.remaining.attacker),
+    defenderRemaining: totalSide(result.remaining.defender),
+    scoreDelta
+  };
 }
 
 function isDiscoverableTestcaseFile(file: string, includeDisabled?: boolean): boolean {
