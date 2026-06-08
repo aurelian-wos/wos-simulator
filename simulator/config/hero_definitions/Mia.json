@@ -39,7 +39,7 @@
     "LuckyCharm": {
       "description": "Grants a 50% chance of boosting troops' Attack by X%",
       "trigger": {
-        "type": "turn",
+        "type": "attack",
         "probability": [
           50,
           50,
@@ -59,7 +59,7 @@
             50
           ],
           "units": {
-            "applies_to": "all",
+            "applies_to": "trigger.source",
             "applies_vs": "any"
           },
           "duration": {

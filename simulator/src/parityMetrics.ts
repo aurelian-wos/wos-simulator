@@ -57,8 +57,10 @@ export function compareOutcomeDistribution(options: {
     passes = Math.abs(biasPct) <= deterministicLimit;
   } else if (options.reference.n <= 1) {
     statType = "single_obs";
-    sem = round(options.candidate.sigma, 2);
-    passes = true;
+    sem = options.candidate.sigma;
+    stat = sem === 0 ? null : round(biasRaw / sem, 4);
+    p = stat === null ? null : round(2 * (1 - normalCdf(Math.abs(stat))), 6);
+    passes = stat === null || Math.abs(stat) <= zThreshold || Math.abs(biasPct) <= minBiasPct;
   } else {
     statType = "t";
     sem = options.candidate.sigma * Math.sqrt(1 / Math.max(options.candidate.n, 1) + 1 / options.reference.n);

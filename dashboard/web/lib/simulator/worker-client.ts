@@ -1,4 +1,5 @@
 import type { OptimizeRatioRequestPayload, OptimizeRatioResult, SimulateApiResult, SimulateRequestPayload, SimulateTrace } from "@/lib/simulate-run";
+import type { TournamentRequestPayload, TournamentResult } from "@/lib/tournament";
 import { createProgressThrottle } from "./progress-throttle";
 import type { SimulatorWorkerRequest, SimulatorWorkerResponse } from "./worker-protocol";
 
@@ -7,7 +8,8 @@ let nextJobId = 1;
 type WorkerJobRequest =
   | Omit<Extract<SimulatorWorkerRequest, { type: "simulate" }>, "id">
   | Omit<Extract<SimulatorWorkerRequest, { type: "simulateTrace" }>, "id">
-  | Omit<Extract<SimulatorWorkerRequest, { type: "optimizeRatio" }>, "id">;
+  | Omit<Extract<SimulatorWorkerRequest, { type: "optimizeRatio" }>, "id">
+  | Omit<Extract<SimulatorWorkerRequest, { type: "tournament" }>, "id">;
 
 export function runWorkerSimulation(
   payload: SimulateRequestPayload,
@@ -29,6 +31,13 @@ export function runWorkerOptimizeRatio(
   onProgress: (done: number, total: number) => void
 ): { promise: Promise<OptimizeRatioResult>; cancel: () => void } {
   return runWorkerJob<OptimizeRatioResult>({ type: "optimizeRatio", payload }, "optimizeResult", onProgress);
+}
+
+export function runWorkerTournament(
+  payload: TournamentRequestPayload,
+  onProgress: (done: number, total: number) => void
+): { promise: Promise<TournamentResult>; cancel: () => void } {
+  return runWorkerJob<TournamentResult>({ type: "tournament", payload }, "tournamentResult", onProgress);
 }
 
 function runWorkerJob<T>(

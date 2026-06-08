@@ -25,7 +25,7 @@
             32,
             40
           ],
-          "same_effect_stacking": "max",
+          "same_effect_stacking": "add",
           "units": {
             "applies_to": "all",
             "applies_vs": "any"
@@ -62,12 +62,11 @@
           "same_effect_stacking": "max",
           "units": {
             "applies_to": "trigger.target",
-            "applies_vs": "trigger.source"
+            "applies_vs": "self.any"
           },
           "duration": {
             "type": "turn",
-            "value": 2,
-            "delay": 1
+            "value": 2
           }
         }
       }

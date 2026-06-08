@@ -298,7 +298,7 @@ test("compareOutcomeDistribution matches deterministic zero-bias shape", () => {
   } satisfies ParityComparisonMetrics);
 });
 
-test("compareOutcomeDistribution reports single-observation stochastic references as low evidence", () => {
+test("compareOutcomeDistribution uses candidate spread for single-observation stochastic references", () => {
   const metrics = compareOutcomeDistribution({
     candidate: { n: 5, mu: 10, sigma: 2 },
     reference: { n: 1, mu: 8, sigma: 0 },
@@ -311,6 +311,25 @@ test("compareOutcomeDistribution reports single-observation stochastic reference
   assert.equal(metrics.passes, true);
   assert.equal(metrics.bias_raw, 2);
   assert.equal(metrics.bias_pct, 2);
+  assert.equal(metrics.sem, 2);
+  assert.equal(metrics.stat, 1);
+});
+
+test("compareOutcomeDistribution fails single-observation references outside candidate spread", () => {
+  const metrics = compareOutcomeDistribution({
+    candidate: { n: 100, mu: 862.15, sigma: 3.79 },
+    reference: { n: 1, mu: 879, sigma: 0 },
+    initialTroops: 1440,
+    deterministic: false,
+    thresholds: { max_diff_ratio_deterministic: 0.01, z_threshold: 2, min_bias_pct: 0.5 }
+  });
+
+  assert.equal(metrics.stat_type, "single_obs");
+  assert.equal(metrics.passes, false);
+  assert.equal(metrics.bias_raw, -16.85);
+  assert.equal(metrics.bias_pct, -1.17);
+  assert.equal(metrics.sem, 3.79);
+  assert.equal(metrics.stat, -4.4459);
 });
 
 test("applyBenjaminiHochberg fills q values on p-valued comparisons", () => {

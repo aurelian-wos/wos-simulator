@@ -14,6 +14,7 @@ const DASHBOARD_LINKS: { href: string; label: string }[] = [
   { href: "/testcases", label: "Testcases" },
   { href: "/testcases/changelog", label: "Changelog" },
   { href: "/simulate", label: "Simulate" },
+  { href: "/tournament", label: "Tournament" },
 ];
 
 const SIMULATE_LINKS: { href: string; label: string }[] = [
