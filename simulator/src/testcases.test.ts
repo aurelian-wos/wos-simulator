@@ -223,6 +223,20 @@ test("no-hero simple testcase loads, runs, compares to calibration, and exposes 
   assert.equal(battleScoreDelta(entry?.result), entry ? entry.result!.remaining.attacker.infantry + entry.result!.remaining.attacker.lancer + entry.result!.remaining.attacker.marksman - (entry.result!.remaining.defender.infantry + entry.result!.remaining.defender.lancer + entry.result!.remaining.defender.marksman) : undefined);
 });
 
+test("runTestcases applies possible stat rounding correction to exact deterministic misses", () => {
+  const config = loadSimulatorConfig();
+  const report = runTestcases({ matching: "norah_s2_inf_only_B" }, config);
+  const summary = Object.values(report.testcases)[0];
+
+  assert.equal(summary?.testcase_id, "norah_s2_inf_only_B");
+  assert.equal(summary?.deterministic, true);
+  assert.equal(summary?.game?.passes, true);
+  assert.equal(summary?.game?.bias_raw, 0);
+  assert.equal(summary?.gameStatAdjustment?.mode, "deterministic_exact");
+  assert.equal(summary?.gameStatAdjustment?.value, 0.05);
+  assert.equal(summary?.gameStatAdjustment?.unadjusted.bias_raw, -2);
+});
+
 test("runTestcases default round cap lets long no-hero baselines reach battle end", () => {
   const config = loadSimulatorConfig();
   const report = runTestcases({ matching: "1-testcases_no-heroes_t6_single-type_nc.json", repeat: 1 }, config);

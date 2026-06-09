@@ -150,8 +150,8 @@ test("cli --human writes a readable testcase summary table", () => {
 
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /Testcase summary/);
-  assert.match(result.stdout, /Status\s+#\s+Testcase\s+Samples\s+Game N\s+Mode\s+Sim mu\s+Game mu\s+Game SD\s+Sim SD/);
-  assert.match(result.stdout, /PASS\s+0\s+simple_001\s+1\s+1\s+single\s+-186\s+-186\s+0\s+0/);
+  assert.match(result.stdout, /Status\s+#\s+Testcase\s+Samples\s+Game N\s+Mode\s+Stat adj\s+Sim mu\s+Game mu\s+Game SD\s+Sim SD/);
+  assert.match(result.stdout, /PASS\s+0\s+simple_001\s+1\s+1\s+single\s+-\s+-186\s+-186\s+0\s+0/);
   assert.throws(() => JSON.parse(result.stdout), "human output should not be JSON");
 });
 
@@ -229,8 +229,8 @@ test("human summary shows ten individual runs for failing repeated stochastic te
 
   assert.match(text, /Failing repeated stochastic sample runs \(first 10\)/);
   assert.match(text, /failing_case/);
-  assert.match(text, /Status\s+#\s+Testcase\s+Samples\s+Game N\s+Mode\s+Sim mu\s+Game mu\s+Game SD\s+Sim SD/);
-  assert.match(text, /FAIL\s+0\s+failing_case\s+25\s+3\s+stoch\s+123\s+100\s+2\s+4\.50/);
+  assert.match(text, /Status\s+#\s+Testcase\s+Samples\s+Game N\s+Mode\s+Stat adj\s+Sim mu\s+Game mu\s+Game SD\s+Sim SD/);
+  assert.match(text, /FAIL\s+0\s+failing_case\s+25\s+3\s+stoch\s+-\s+123\s+100\s+2\s+4\.50/);
   assert.match(text, /1\.0e-6/);
   assert.match(text, /p\s+q\(BH\)/);
   assert.doesNotMatch(text, /15\.33\s+0\.00/);

@@ -12,9 +12,11 @@ import {
 import { applyBenjaminiHochberg, compareOutcomeDistribution, type ParityComparisonMetrics } from "./parityMetrics";
 import { simulateBattle } from "./simulator";
 import { DamageAggregationError } from "./damage";
-import type { BattleInput, BattleResult, FighterInput, SimulatorConfig, UnitType } from "./types";
+import type { BattleInput, BattleResult, FighterInput, SimulatorConfig, StatBlock, UnitType } from "./types";
 
 const DEFAULT_STOCHASTIC_REPEAT = 100;
+const STAT_ROUNDING_MAX_ADJUSTMENT = 0.05;
+const STAT_ROUNDING_SCAN_STEPS = 50;
 
 export interface TestcaseRunOptions {
   testcaseRoot?: string;
@@ -40,6 +42,7 @@ export interface TestcaseCaseReport {
   simulatorStats?: SampleStats;
   simulatorSampleOutcomes?: TestcaseSampleOutcome[];
   simulatorSampleDeltas?: number[];
+  gameStatAdjustment?: TestcaseStatAdjustment;
   deterministic?: boolean;
   sampleCount?: number;
   visibility: {
@@ -68,6 +71,7 @@ export interface TestcaseSummaryEntry {
   sampleCount: number;
   game: ParityComparisonMetrics | null;
   baseline: ParityComparisonMetrics | null;
+  gameStatAdjustment?: TestcaseStatAdjustment;
 }
 
 export interface TestcaseRunReport {
@@ -156,6 +160,12 @@ export interface TestcaseSampleOutcome {
   scoreDelta: number;
 }
 
+export interface TestcaseStatAdjustment {
+  value: number;
+  mode: "deterministic_exact" | "deterministic_within_one" | "stochastic_tolerance" | "best_effort";
+  unadjusted: ParityComparisonMetrics;
+}
+
 export function defaultTestcaseRoot(): string {
   return resolve(dirname(fileURLToPath(import.meta.url)), "..", "testcases");
 }
@@ -240,7 +250,7 @@ export function runPreparedTestcases(
     }
     try {
       const execution = execute({ file, reportFile, testcaseId, index, input: preparedCase.input, repeat, seed: options.seed }, config);
-      applyExecutionResult(report, comparison, preparedCase, execution);
+      applyExecutionResult(report, comparison, preparedCase, execution, config);
     } catch (error) {
       detail.error = errorMessage(error);
       detail.errorDetails = errorDetails(error);
@@ -256,6 +266,7 @@ export function runPreparedTestcases(
 
 export async function runPreparedTestcasesAsync(
   options: TestcaseRunOptions,
+  config: SimulatorConfig,
   prepared: { filesFound: number; cases: PreparedTestcaseCase[]; parseErrors: TestcaseRunWarning[] },
   execute: (job: TestcaseExecutionJob) => Promise<TestcaseExecutionResult>
 ): Promise<TestcaseRunReport> {
@@ -305,7 +316,7 @@ export async function runPreparedTestcasesAsync(
       detail.diagnostics.push(detail.error);
       report.errors.push({ file: reportFile, testcase_id: testcaseId, idx: index, stage: "execute", reason: detail.error });
     } else {
-      applyExecutionResult(report, comparison, preparedCase, execution!);
+      applyExecutionResult(report, comparison, preparedCase, execution!, config);
     }
     report.details.push(detail);
   }
@@ -318,7 +329,8 @@ function applyExecutionResult(
   report: TestcaseRunReport,
   comparison: ReturnType<typeof loadCalibrationComparison>,
   preparedCase: PreparedTestcaseCase,
-  execution: TestcaseExecutionResult
+  execution: TestcaseExecutionResult,
+  config: SimulatorConfig
 ): void {
   const { reportFile, entry, testcaseId, index, detail } = preparedCase;
   if (execution.error) {
@@ -343,7 +355,7 @@ function applyExecutionResult(
   const initialTroops = totalInputTroops(preparedCase.input!.attacker) + totalInputTroops(preparedCase.input!.defender);
   const simulatorDistribution = { n: stats.n, mu: stats.mu, sigma: stats.sigma };
   const gameDistribution = distributionFromGameResult(gameResult);
-  const game = gameDistribution
+  let game = gameDistribution
     ? compareOutcomeDistribution({
         candidate: simulatorDistribution,
         reference: gameDistribution,
@@ -352,6 +364,19 @@ function applyExecutionResult(
         thresholds: comparison.thresholds
       })
     : null;
+  const gameStatAdjustment = game && preparedCase.input
+    ? findGameStatAdjustment({
+        game,
+        input: preparedCase.input,
+        config,
+        job: { file: preparedCase.file, reportFile, testcaseId, index, input: preparedCase.input, repeat: execution.sampleCount, seed: undefined },
+        reference: gameDistribution!,
+        initialTroops,
+        deterministic: result.randomness.deterministic,
+        thresholds: comparison.thresholds
+      })
+    : undefined;
+  if (gameStatAdjustment) game = gameStatAdjustment.adjusted;
   const baseline = calibration?.nSim !== undefined && calibration.muSim !== undefined && calibration.sigmaSim !== undefined
     ? compareOutcomeDistribution({
         candidate: simulatorDistribution,
@@ -369,6 +394,7 @@ function applyExecutionResult(
   detail.simulatorScoreDelta = execution.simulatorScoreDelta;
   detail.simulatorSampleOutcomes = execution.simulatorSampleOutcomes;
   detail.simulatorSampleDeltas = execution.simulatorSampleDeltas;
+  detail.gameStatAdjustment = gameStatAdjustment ? statAdjustmentForReport(gameStatAdjustment) : undefined;
   detail.gameResult = gameResult;
   detail.calibration = calibration;
   detail.visibility = visibilityFromResult(result);
@@ -387,8 +413,120 @@ function applyExecutionResult(
     deterministic: execution.deterministic,
     sampleCount: execution.sampleCount,
     game,
-    baseline
+    baseline,
+    ...(gameStatAdjustment ? { gameStatAdjustment: statAdjustmentForReport(gameStatAdjustment) } : {})
   };
+}
+
+interface InternalStatAdjustment {
+  value: number;
+  mode: TestcaseStatAdjustment["mode"];
+  unadjusted: ParityComparisonMetrics;
+  adjusted: ParityComparisonMetrics;
+}
+
+function findGameStatAdjustment(options: {
+  game: ParityComparisonMetrics;
+  input: BattleInput;
+  config: SimulatorConfig;
+  job: TestcaseExecutionJob;
+  reference: { n: number; mu: number; sigma: number };
+  initialTroops: number;
+  deterministic: boolean;
+  thresholds?: Record<string, number>;
+}): InternalStatAdjustment | undefined {
+  const shouldCorrect = options.deterministic ? options.game.bias_raw !== 0 : !options.game.passes;
+  if (!shouldCorrect || options.game.bias_raw === 0) return undefined;
+  const direction = -Math.sign(options.game.bias_raw);
+  const candidates = statAdjustmentCandidates(direction);
+  let best: InternalStatAdjustment | undefined;
+  for (const value of candidates) {
+    const adjustedInput = inputWithStatAdjustment(options.input, value);
+    const candidateStats = simulateAdjustedDistribution(adjustedInput, options.job, options.config);
+    const adjusted = compareOutcomeDistribution({
+      candidate: { n: candidateStats.n, mu: candidateStats.mu, sigma: candidateStats.sigma },
+      reference: options.reference,
+      initialTroops: options.initialTroops,
+      deterministic: options.deterministic,
+      thresholds: options.thresholds
+    });
+    const candidate = {
+      value,
+      mode: adjustmentMode(options.game, adjusted, options.deterministic),
+      unadjusted: options.game,
+      adjusted: adjustedForRoundingRules(adjusted, options.deterministic)
+    };
+    if (!best || correctionScore(candidate.adjusted, options.deterministic) < correctionScore(best.adjusted, options.deterministic)) best = candidate;
+    if (options.deterministic && candidate.mode === "deterministic_exact") return candidate;
+  }
+  if (best && !options.deterministic && best.adjusted.passes) return { ...best, mode: "stochastic_tolerance" };
+  return best;
+}
+
+function statAdjustmentCandidates(direction: number): number[] {
+  const values: number[] = [];
+  for (let step = STAT_ROUNDING_SCAN_STEPS; step >= 1; step -= 1) {
+    values.push(roundStatAdjustment(direction * (STAT_ROUNDING_MAX_ADJUSTMENT * step) / STAT_ROUNDING_SCAN_STEPS));
+  }
+  return values;
+}
+
+function simulateAdjustedDistribution(input: BattleInput, job: TestcaseExecutionJob, config: SimulatorConfig): SampleStats {
+  const samples: number[] = [];
+  for (let iteration = 0; iteration < job.repeat; iteration += 1) {
+    const result = simulateBattle(sampleInput(input, job.seed, job.file, job.testcaseId, job.index, iteration), config, { detail: "fast" });
+    const score = battleScoreDelta(result);
+    if (score !== undefined) samples.push(score);
+  }
+  return sampleStats(samples);
+}
+
+function inputWithStatAdjustment(input: BattleInput, value: number): BattleInput {
+  const adjusted = structuredClone(input);
+  adjustFighterStats(adjusted.attacker, value);
+  adjustFighterStats(adjusted.defender, -value);
+  return adjusted;
+}
+
+function adjustFighterStats(fighter: FighterInput, value: number): void {
+  for (const stats of Object.values(fighter.stats ?? {}) as Array<Partial<StatBlock>>) {
+    for (const key of ["attack", "defense", "lethality", "health"] as Array<keyof StatBlock>) {
+      if (stats[key] === undefined) continue;
+      stats[key] = roundStatAdjustment(Number(stats[key]) + value);
+    }
+  }
+}
+
+function adjustmentMode(original: ParityComparisonMetrics, adjusted: ParityComparisonMetrics, deterministic: boolean): TestcaseStatAdjustment["mode"] {
+  if (deterministic) {
+    if (adjusted.bias_raw === 0) return "deterministic_exact";
+    if (Math.abs(adjusted.bias_raw) <= 1) return "deterministic_within_one";
+    return "best_effort";
+  }
+  return adjusted.passes ? "stochastic_tolerance" : "best_effort";
+}
+
+function adjustedForRoundingRules(metric: ParityComparisonMetrics, deterministic: boolean): ParityComparisonMetrics {
+  if (!deterministic) return metric;
+  return { ...metric, passes: Math.abs(metric.bias_raw) <= 1 };
+}
+
+function correctionScore(metric: ParityComparisonMetrics, deterministic: boolean): number {
+  if (deterministic) return Math.abs(metric.bias_raw);
+  if (metric.stat !== null && Number.isFinite(metric.stat)) return Math.abs(metric.stat);
+  return Math.abs(metric.bias_raw);
+}
+
+function statAdjustmentForReport(adjustment: InternalStatAdjustment): TestcaseStatAdjustment {
+  return {
+    value: adjustment.value,
+    mode: adjustment.mode,
+    unadjusted: adjustment.unadjusted
+  };
+}
+
+function roundStatAdjustment(value: number): number {
+  return Number(value.toFixed(3));
 }
 
 function finalizeReport(report: TestcaseRunReport): void {

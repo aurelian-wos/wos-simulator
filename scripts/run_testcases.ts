@@ -47,7 +47,7 @@ async function runCliTestcases(options: CliOptions, config: ReturnType<typeof lo
   const prepared = prepareTestcaseCases(options.testcaseOptions);
   const pool = new TestcaseWorkerPool(workers);
   try {
-    return await runPreparedTestcasesAsync(options.testcaseOptions, prepared, (job) => pool.run(job));
+    return await runPreparedTestcasesAsync(options.testcaseOptions, config, prepared, (job) => pool.run(job));
   } finally {
     await pool.close();
   }
@@ -102,7 +102,7 @@ export function formatHumanSummary(report: TestcaseRunReport): string {
     lines.push("No testcase results.");
   } else {
     lines.push(formatTable([
-      ["Status", "#", "Testcase", "Samples", "Game N", "Mode", "Sim mu", "Game mu", "Game SD", "Sim SD", "Game bias%", "Base bias%", "Stat", "p", "q(BH)"],
+      ["Status", "#", "Testcase", "Samples", "Game N", "Mode", "Stat adj", "Sim mu", "Game mu", "Game SD", "Sim SD", "Game bias%", "Base bias%", "Stat", "p", "q(BH)"],
       ...rows.map((row) => [
         row.status,
         row.index,
@@ -110,6 +110,7 @@ export function formatHumanSummary(report: TestcaseRunReport): string {
         row.samples,
         row.gameN,
         row.mode,
+        row.statAdjustment,
         row.simMu,
         row.gameMu,
         row.gameSd,
@@ -167,6 +168,7 @@ function humanRow(entry: TestcaseSummaryEntry, detail: TestcaseCaseReport | unde
     samples: String(entry.sampleCount),
     gameN: formatNumber(entry.game?.n_reference),
     mode: entry.deterministic ? "det" : entry.sampleCount > 1 ? "stoch" : "single",
+    statAdjustment: formatSignedNumber(entry.gameStatAdjustment?.value),
     simMu: formatNumber(primary?.mu_candidate),
     gameMu: formatNumber(entry.game?.mu_reference),
     gameSd: formatNumber(entry.game?.sigma_reference),
