@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 import urllib.request
 import time
@@ -31,6 +32,9 @@ TEMPLATES  = SKILL_DIR / "templates"
 DATA_DIR   = SKILL_DIR / "data"
 TESSDATA_DIR = SKILL_DIR / "tessdata"
 TESSDATA_ENG_URL = "https://github.com/tesseract-ocr/tessdata/raw/main/eng.traineddata"
+SKILL_DIGIT_ONNX_MODEL = SKILL_DIR / "models" / "hero_skill_digit.onnx"
+HERO_NAME_ONNX_MODEL = SKILL_DIR / "models" / "hero_name.onnx"
+HERO_NAME_LABELS_FILE = SKILL_DIR / "models" / "hero_name_labels.json"
 
 TPL_HEROES_NAV   = str(TEMPLATES / "nav_heroes_button.png")
 TPL_SKILLS_BTN   = str(TEMPLATES / "hero_skills_button.png")
@@ -49,11 +53,18 @@ SLOT_3_CROP = (520, 545, 130, 130)
 SLOT_1_LEVEL_DIGIT_CROP = (598, 308, 19, 18)
 SLOT_2_LEVEL_DIGIT_CROP = (647, 466, 19, 18)
 SLOT_3_LEVEL_DIGIT_CROP = (598, 637, 19, 18)
+LEVEL_DIGIT_THRESHOLD = 650
+HERO_NAME_THRESHOLD = 720
 
 LOCK_THRESHOLD  = 0.65
 NAV_THRESHOLD   = 0.75
 SKILLS_THRESHOLD = 0.70
 ARROW_THRESHOLD  = 0.70
+NEXT_FRAME_TIMEOUT_SEC = 2.5
+NEXT_FRAME_POLL_SEC = 0.05
+_skill_digit_onnx_session = None
+_hero_name_onnx_session = None
+_hero_name_onnx_labels: list[str] | None = None
 
 
 def _load_hero_names() -> list[str]:
@@ -117,6 +128,106 @@ def _parse_skill_level_text(text: str) -> int | None:
     return None
 
 
+def _skill_digit_mask(crop: np.ndarray) -> np.ndarray:
+    return np.where(crop.astype(np.uint16).sum(axis=2) > LEVEL_DIGIT_THRESHOLD, 0, 255).astype(np.uint8)
+
+
+def _skill_digit_features(crop: np.ndarray) -> np.ndarray:
+    mask = _skill_digit_mask(crop)
+    return (mask.astype(np.float32).reshape(1, -1) / 255.0)
+
+
+def _white_text_mask(crop: np.ndarray, threshold: int) -> np.ndarray:
+    return np.where(crop.astype(np.uint16).sum(axis=2) > threshold, 0, 255).astype(np.uint8)
+
+
+def _onnx_session(model_path: Path):
+    import onnxruntime as ort
+
+    ort.set_default_logger_severity(3)
+    options = ort.SessionOptions()
+    options.log_severity_level = 3
+    return ort.InferenceSession(
+        str(model_path),
+        sess_options=options,
+        providers=["CPUExecutionProvider"],
+    )
+
+
+def _get_skill_digit_onnx_session():
+    global _skill_digit_onnx_session
+    if os.environ.get("WOS_SKILL_DIGIT_ONNX", "").lower() in {"0", "false", "no"}:
+        return None
+    if not SKILL_DIGIT_ONNX_MODEL.exists():
+        return None
+    if _skill_digit_onnx_session is None:
+        _skill_digit_onnx_session = _onnx_session(SKILL_DIGIT_ONNX_MODEL)
+    return _skill_digit_onnx_session
+
+
+def _hero_name_features(crop: np.ndarray) -> np.ndarray:
+    mask = _white_text_mask(crop, HERO_NAME_THRESHOLD)
+    return (mask.astype(np.float32).reshape(1, -1) / 255.0)
+
+
+def _get_hero_name_onnx_session():
+    global _hero_name_onnx_session, _hero_name_onnx_labels
+    if os.environ.get("WOS_HERO_NAME_ONNX", "").lower() in {"0", "false", "no"}:
+        return None, None
+    if not HERO_NAME_ONNX_MODEL.exists() or not HERO_NAME_LABELS_FILE.exists():
+        return None, None
+    if _hero_name_onnx_session is None:
+        _hero_name_onnx_session = _onnx_session(HERO_NAME_ONNX_MODEL)
+    if _hero_name_onnx_labels is None:
+        _hero_name_onnx_labels = json.loads(HERO_NAME_LABELS_FILE.read_text())
+    return _hero_name_onnx_session, _hero_name_onnx_labels
+
+
+def _classify_hero_name_onnx(img: np.ndarray, known_names: list[str]) -> str:
+    x, y, w, h = HERO_NAME_TESSERACT_CROP
+    crop = _crop(img, x, y, w, h)
+    if crop.size == 0:
+        return ""
+    session, labels = _get_hero_name_onnx_session()
+    if session is None or not labels:
+        return ""
+
+    input_name = session.get_inputs()[0].name
+    logits = session.run(None, {input_name: _hero_name_features(crop)})[0][0]
+    pred_idx = int(np.argmax(logits))
+    if pred_idx >= len(labels):
+        return ""
+    top_two = np.partition(logits, -2)[-2:]
+    if float(top_two[-1] - top_two[-2]) < 1.0:
+        return ""
+    name = str(labels[pred_idx])
+    if known_names and name not in known_names:
+        return ""
+    return name
+
+
+def _classify_skill_level_onnx(img: np.ndarray, x: int, y: int, w: int, h: int) -> int | None:
+    digit_crop = _level_digit_crop_for_slot(x, y, w, h)
+    if digit_crop is None:
+        return None
+    dx, dy, dw, dh = digit_crop
+    crop = _crop(img, dx, dy, dw, dh)
+    if crop.size == 0:
+        return None
+    session = _get_skill_digit_onnx_session()
+    if session is None:
+        return None
+
+    input_name = session.get_inputs()[0].name
+    logits = session.run(None, {input_name: _skill_digit_features(crop)})[0][0]
+    pred = int(np.argmax(logits)) + 1
+    # A weak margin means this crop is unlike the training set. Let OCR handle it.
+    top_two = np.partition(logits, -2)[-2:]
+    if float(top_two[-1] - top_two[-2]) < 1.0:
+        return None
+    return pred
+
+
 def _ocr_skill_level_tesseract(img: np.ndarray, x: int, y: int, w: int, h: int) -> int | None:
     """Fast OCR of the single level digit for a known skill slot."""
     import pytesseract
@@ -131,7 +242,7 @@ def _ocr_skill_level_tesseract(img: np.ndarray, x: int, y: int, w: int, h: int) 
     if crop.size == 0:
         return None
 
-    mask = np.where(crop.astype(np.uint16).sum(axis=2) > 650, 0, 255).astype(np.uint8)
+    mask = _skill_digit_mask(crop)
     tessdata_dir = _ensure_legacy_tessdata()
     try:
         raw = pytesseract.image_to_string(
@@ -183,6 +294,9 @@ def _ocr_skill_level_rapid(img: np.ndarray, x: int, y: int, w: int, h: int) -> i
 
 def _ocr_skill_level(img: np.ndarray, x: int, y: int, w: int, h: int) -> int | None:
     """OCR a skill level box. Returns 1-5 if found, None if unreadable."""
+    level = _classify_skill_level_onnx(img, x, y, w, h)
+    if level is not None:
+        return level
     level = _ocr_skill_level_tesseract(img, x, y, w, h)
     if level is not None:
         return level
@@ -197,7 +311,7 @@ def _slot_level_pill_has_text(img: np.ndarray, x: int, y: int, w: int, h: int) -
     crop = _crop(img, dx, dy, dw, dh)
     if crop.size == 0:
         return False
-    light_pixels = int((crop.astype(np.uint16).sum(axis=2) > 650).sum())
+    light_pixels = int((crop.astype(np.uint16).sum(axis=2) > LEVEL_DIGIT_THRESHOLD).sum())
     return light_pixels >= 12
 
 
@@ -205,11 +319,14 @@ def _read_slot_presence_and_level(img: np.ndarray, x: int, y: int, w: int, h: in
     """Return whether a skill slot exists and the level if OCR could read it."""
     if _has_lock(img, x, y, w, h):
         return True, 0
+    if not _slot_level_pill_has_text(img, x, y, w, h):
+        return False, None
+    level = _classify_skill_level_onnx(img, x, y, w, h)
+    if level is not None:
+        return True, level
     level = _ocr_skill_level_tesseract(img, x, y, w, h)
     if level is not None:
         return True, level
-    if not _slot_level_pill_has_text(img, x, y, w, h):
-        return False, None
     level = _ocr_skill_level_rapid(img, x, y, w, h)
     return level is not None, level
 
@@ -284,7 +401,7 @@ def _ocr_hero_name_tesseract(img: np.ndarray, known_names: list[str]) -> str:
             return best_name
         return None
 
-    white_text = np.where(crop.astype(np.uint16).sum(axis=2) > 720, 0, 255).astype(np.uint8)
+    white_text = _white_text_mask(crop, HERO_NAME_THRESHOLD)
     for config in configs:
         matched = _try_image(white_text, config)
         if matched:
@@ -303,6 +420,10 @@ def _ocr_hero_name(img: np.ndarray, known_names: list[str], debug_dir: str | Non
 
     If debug_dir is set, saves the crop image and OCR results to that directory.
     """
+    classified_name = _classify_hero_name_onnx(img, known_names)
+    if classified_name:
+        return classified_name
+
     fast_name = _ocr_hero_name_tesseract(img, known_names)
     if fast_name:
         return fast_name
@@ -358,6 +479,85 @@ def _read_skill_level(img: np.ndarray, x: int, y: int, w: int, h: int) -> int:
     return level if level is not None else 0
 
 
+def _read_skill_level_checked(img: np.ndarray, x: int, y: int, w: int, h: int) -> tuple[bool, int]:
+    """Return (readable, level). Level 0 means locked."""
+    if _has_lock(img, x, y, w, h):
+        return True, 0
+    level = _ocr_skill_level(img, x, y, w, h)
+    if level is None:
+        return False, 0
+    return True, level
+
+
+def _read_hero_skill_entry(img: np.ndarray) -> tuple[bool, dict | None]:
+    """Return (readable, skill entry). Entry None means skill_1 is locked."""
+    slot_1_ok, slot_1 = _read_skill_level_checked(img, *SLOT_1_CROP)
+    if not slot_1_ok:
+        return False, None
+    slot_2_present, slot_2_level = _read_slot_presence_and_level(img, *SLOT_2_CROP)
+    if slot_2_present and slot_2_level is None:
+        return False, None
+    slot_3_ok, slot_3 = _read_skill_level_checked(img, *SLOT_3_CROP)
+    if not slot_3_ok:
+        return False, None
+
+    if slot_2_present:
+        skill_2 = slot_2_level
+        skill_3 = slot_3
+    else:
+        skill_2 = slot_3
+        skill_3 = None
+
+    if slot_1 == 0:
+        return True, None
+
+    entry: dict = {"skill_1": slot_1, "skill_2": skill_2}
+    if skill_3 is not None:
+        entry["skill_3"] = skill_3
+    return True, entry
+
+
+def _read_hero_frame(
+    img: np.ndarray,
+    known_names: list[str],
+    debug_dir: str | None = None,
+    debug_idx: int = 0,
+) -> tuple[str, dict | None] | None:
+    """Return (hero name, skill entry) when the frame has a readable name and levels."""
+    name = _ocr_hero_name(img, known_names, debug_dir=debug_dir, debug_idx=debug_idx)
+    if not name:
+        return None
+    skills_readable, entry = _read_hero_skill_entry(img)
+    if not skills_readable:
+        return None
+    return name, entry
+
+
+def _wait_for_readable_next_frame(
+    emulator,
+    known_names: list[str],
+    previous_name: str,
+    debug_dir: str | None = None,
+    debug_idx: int = 0,
+) -> tuple[np.ndarray, tuple[str, dict | None] | None]:
+    deadline = time.monotonic() + NEXT_FRAME_TIMEOUT_SEC
+    last_img = None
+    while time.monotonic() < deadline:
+        img = emulator.screencap_bgr()
+        last_img = img
+        name = _ocr_hero_name(img, known_names, debug_dir=debug_dir, debug_idx=debug_idx)
+        if name and name != previous_name:
+            skills_readable, entry = _read_hero_skill_entry(img)
+            if skills_readable:
+                return img, (name, entry)
+        time.sleep(NEXT_FRAME_POLL_SEC)
+
+    logger.warning("Timed out waiting for readable next hero frame after %s", previous_name)
+    if last_img is None:
+        last_img = emulator.screencap_bgr()
+    return last_img, None
+
+
 def capture_hero_skills(emulator, instance_name: str, debug_dir: str | None = None) -> dict:
     """
     Navigate to Heroes screen, capture skill levels for all heroes,
@@ -394,9 +594,16 @@ def capture_hero_skills(emulator, instance_name: str, debug_dir: str | None = No
 
     first_hero_name = None
     max_heroes = 60  # safety cap
+    next_frame: tuple[np.ndarray, tuple[str, dict | None] | None] | None = None
 
     for i in range(max_heroes):
-        img = emulator.screencap_bgr()
+        current_name = ""
+        if next_frame is None:
+            img = emulator.screencap_bgr()
+            parsed = _read_hero_frame(img, known_names, debug_dir=debug_dir, debug_idx=i)
+        else:
+            img, parsed = next_frame
+            next_frame = None
 
         # Save full screenshot in debug mode
         if debug_dir:
@@ -404,11 +611,11 @@ def capture_hero_skills(emulator, instance_name: str, debug_dir: str | None = No
             debug_path.mkdir(parents=True, exist_ok=True)
             cv2.imwrite(str(debug_path / f"{i:03d}_full.png"), img)
 
-        # OCR hero name
-        name = _ocr_hero_name(img, known_names, debug_dir=debug_dir, debug_idx=i)
-        if not name:
-            logger.warning("Could not read hero name on iteration %d, skipping", i)
+        if parsed is None:
+            logger.warning("Could not read a complete hero frame on iteration %d, skipping", i)
         else:
+            name, entry = parsed
+            current_name = name
             logger.info("Hero %d: %s", i, name)
 
             # Detect if we've looped back to start
@@ -418,27 +625,16 @@ def capture_hero_skills(emulator, instance_name: str, debug_dir: str | None = No
             if i == 0:
                 first_hero_name = name
 
-            slot_1 = _read_skill_level(img, *SLOT_1_CROP)
-            slot_2_present, slot_2_level = _read_slot_presence_and_level(img, *SLOT_2_CROP)
-            slot_3 = _read_skill_level(img, *SLOT_3_CROP)
-
-            skill_1 = slot_1
-            if slot_2_present:
-                skill_2 = slot_2_level if slot_2_level is not None else _read_skill_level(img, *SLOT_2_CROP)
-                skill_3 = slot_3
-            else:
-                skill_2 = slot_3
-                skill_3 = None
-
             # Skip heroes where skill_1 is locked (level 0)
-            if skill_1 == 0:
+            if entry is None:
                 logger.info("Skipping %s — skill_1 is locked", name)
             else:
-                entry: dict = {"skill_1": skill_1, "skill_2": skill_2}
-                if skill_3 is not None:
-                    entry["skill_3"] = skill_3
                 results[name] = entry
                 logger.info("  %s: %s", name, entry)
+                if debug_dir:
+                    (debug_path / f"{i:03d}_skills.json").write_text(
+                        json.dumps({"hero": name, "skills": entry}, indent=2)
+                    )
 
         # Tap next arrow
         found, (ax, ay) = _match_template(img, TPL_NEXT_ARROW, ARROW_THRESHOLD)
@@ -446,7 +642,14 @@ def capture_hero_skills(emulator, instance_name: str, debug_dir: str | None = No
             logger.info("Next arrow not found, stopping")
             break
         emulator.tap(ax, ay)
-        time.sleep(0.8)
+        if current_name:
+            next_frame = _wait_for_readable_next_frame(
+                emulator,
+                known_names,
+                previous_name=current_name,
+                debug_dir=debug_dir,
+                debug_idx=i + 1,
+            )
 
     return results
 

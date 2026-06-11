@@ -298,6 +298,20 @@ def _success(**payload: object) -> int:
     return 0
 
 
+def _next_debug_dir(prefix: str) -> Path:
+    root = _SKILL_DIR / "tmp" / "debug"
+    root.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    for suffix in range(100):
+        candidate = root / f"{prefix}_{stamp}_{suffix:02d}"
+        try:
+            candidate.mkdir()
+            return candidate
+        except FileExistsError:
+            continue
+    raise RuntimeError(f"Could not allocate debug directory under {root}")
+
+
 def _safe_repr(value: object, limit: int = 500) -> str:
     try:
         rendered = repr(value)
@@ -887,16 +901,25 @@ def cmd_memories(instance_name: str, map_path: str, tap_mode: str) -> int:
         )
 
 
-def cmd_capture_hero_skills(instance_name: str) -> int:
+def cmd_capture_hero_skills(instance_name: str, debug: bool = False) -> int:
     from capture_hero_skills import capture_hero_skills, save_hero_skills
     try:
         emulator = _resolve_emulator(instance_name)
     except WosError as exc:
         return _fail(str(exc), command="capture-hero-skills", instance_name=instance_name, cause=exc)
     try:
-        hero_data = capture_hero_skills(emulator, instance_name)
+        debug_dir = None
+        if debug:
+            debug_dir = _next_debug_dir(f"hero_skills_{instance_name}")
+        hero_data = capture_hero_skills(emulator, instance_name, debug_dir=str(debug_dir) if debug_dir else None)
         save_hero_skills(instance_name, hero_data)
-        return _success(command="capture-hero-skills", instance_name=instance_name, heroes_captured=len(hero_data), heroes=hero_data)
+        return _success(
+            command="capture-hero-skills",
+            instance_name=instance_name,
+            heroes_captured=len(hero_data),
+            heroes=hero_data,
+            **({"debug_dir": str(debug_dir.resolve())} if debug_dir else {}),
+        )
     except Exception as exc:
         return _fail(f"capture-hero-skills failed: {exc}", command="capture-hero-skills", instance_name=instance_name, cause=exc)
 
@@ -1096,7 +1119,8 @@ def build_parser() -> argparse.ArgumentParser:
     shell_p = sub.add_parser("shell", help="Run an ADB shell command")
     shell_p.add_argument("cmd", nargs=argparse.REMAINDER, help="Shell command")
 
-    sub.add_parser("capture-hero-skills", help="Capture hero skill levels and save to data/player_hero_skills.json")
+    hero_skills_p = sub.add_parser("capture-hero-skills", help="Capture hero skill levels and save to data/player_hero_skills.json")
+    hero_skills_p.add_argument("--debug", action="store_true", default=argparse.SUPPRESS, help=argparse.SUPPRESS)
 
     ea_p = sub.add_parser("ensure-alliance", help="Ensure the player is in the specified alliance")
     ea_p.add_argument("tag", help="Alliance tag, e.g. [ABC] -> ABC")
@@ -1155,7 +1179,7 @@ def main() -> int:
                 return cmd_screencap(instance_name, args.path)
 
             if args.command == "capture-hero-skills":
-                return cmd_capture_hero_skills(instance_name)
+                return cmd_capture_hero_skills(instance_name, debug=args.debug)
 
             if args.command == "ensure-alliance":
                 return cmd_ensure_alliance(instance_name, args.tag)
