@@ -418,10 +418,11 @@ def _candidate_percentage_items(items: Iterable[OCRItem]) -> list[OCRItem]:
     return candidates
 
 
-def _select_best_label_boxes(items: list[OCRItem], header: OCRItem) -> dict[str, OCRItem]:
+def _select_best_label_boxes(items: list[OCRItem], header: OCRItem, image_width: int) -> dict[str, OCRItem]:
     matched: dict[str, tuple[float, OCRItem]] = {}
+    max_stat_panel_height = int(round(850 * image_width / 720.0))
     for item in _candidate_label_items(items):
-        if item.cy <= header.cy + 10 or item.y1 >= header.y2 + 850:
+        if item.cy <= header.cy + 10 or item.y1 >= header.y2 + max_stat_panel_height:
             continue
         label_match = _match_stat_label(item.text)
         if label_match is None:
@@ -808,7 +809,7 @@ def extract_values_from_ocr_items(items: Iterable[OCRItem | dict[str, Any]], *, 
             confidence=1.0,
         )
     else:
-        label_boxes = _select_best_label_boxes(ocr_items, header)
+        label_boxes = _select_best_label_boxes(ocr_items, header, image_width)
 
     percentage_items = [
         item
