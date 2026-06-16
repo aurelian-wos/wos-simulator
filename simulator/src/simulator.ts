@@ -19,7 +19,8 @@ import type {
   UnitType
 } from "./types";
 import { ALL_UNIT_MASK, UNIT_TYPES, unitMaskHas, unitsFromMask } from "./types";
-import { calculateDamageJob, createFastDamageScratch, type DamageScratch } from "./damage";
+import { calculateDamageJob, createFastDamageScratch, type DamageResult, type DamageScratch } from "./damage";
+import { createRecorder } from "./recorder";
 import {
   activateEffect,
   chancePasses,
@@ -109,10 +110,7 @@ function runBattle(input: BattleInput, config: SimulatorConfig, options: Simulat
   const fighters: Record<SideId, ResolvedFighter> = { attacker, defender };
   const runtime = createRuntime([attacker, defender], createSeededRng(input.seed ?? "simulator-default"));
   const mode = options.mode ?? "standard";
-  const detail = mode === "fast" ? "fast" : "full";
-  const traceEnabled = mode === "trace";
-  const trace: BattleTrace | undefined = traceEnabled ? { resolved: buildResolved(attacker, defender), rounds: [] } : undefined;
-  const attacks: AttackOutcome[] = [];
+  const recorder = createRecorder(mode, runtime.skillReports, () => buildResolved(attacker, defender));
   const maxRounds = input.maxRounds ?? DEFAULT_MAX_ROUNDS;
 
   triggerSkills("battle_start", 0, runtime.skills.battleStart, runtime);
@@ -131,7 +129,7 @@ function runBattle(input: BattleInput, config: SimulatorConfig, options: Simulat
 
     const intents = resolveAttackIntents(round, fighters, runtime, roundStartTroops);
     const jobs: DamageJob[] = [];
-    const cancelled: AttackOutcome[] = [];
+    const cancelled: CancelledAttack[] = [];
 
     for (const intent of intents) {
       triggerSkills("attack_declared", round, runtime.skills.attackDeclared, runtime, intent);
@@ -140,38 +138,33 @@ function runBattle(input: BattleInput, config: SimulatorConfig, options: Simulat
       if (controls.no_attack || controls.dodge) {
         const control = controls.no_attack ?? controls.dodge!;
         runtime.attackControlCounts[control.reason] += 1;
-        const outcome = cancelledOutcome(intent, control.effect.id, control.reason, attackDurationEffectIdsForJob(job, round, runtime.activeEffects));
-        cancelled.push(outcome);
-        consumeEffects(runtime, outcome.consumedEffectIds);
+        const consumedEffectIds = attackDurationEffectIdsForJob(job, round, runtime.activeEffects);
+        cancelled.push({ intent, effectId: control.effect.id, reason: control.reason, consumedEffectIds });
+        consumeEffects(runtime, consumedEffectIds);
       } else {
         jobs.push(job);
         jobs.push(...extraSkillJobs(job, round, runtime, roundStartTroops));
       }
     }
 
-    const roundOutcomes: AttackOutcome[] = [];
+    const results: DamageJobResult[] = [];
     for (const job of jobs) {
-      const outcome =
-        detail === "fast"
-          ? calculateDamageJob(job, fighters, runtime.activeEffects, {
-              detail: "fast",
-              effectIndex: runtime.effectIndex,
-              staticDamageProfile: runtime.staticDamageProfile,
-              scratch: runtime.damageScratch
-            })
-          : calculateDamageJob(job, fighters, runtime.activeEffects, {
-              trace: traceEnabled,
-              effectIndex: runtime.effectIndex,
-              staticDamageProfile: runtime.staticDamageProfile
-            });
-      roundOutcomes.push(outcome);
-      consumeEffects(runtime, outcome.consumedEffectIds, outcome.consumedEffectUseKey, outcome.consumedEffectUseId, outcome.consumedEffectUseIds);
+      const result = calculateDamageJob(job, fighters, runtime.activeEffects, {
+        trace: recorder.capturesTrace,
+        effectIndex: runtime.effectIndex,
+        staticDamageProfile: runtime.staticDamageProfile,
+        scratch: recorder.capturesTrace ? undefined : runtime.damageScratch
+      });
+      results.push({ job, result });
+      consumeEffects(runtime, result.consumedEffectIds, result.consumedEffectUseKey, result.consumedEffectUseId, result.consumedEffectUseIds);
     }
-    finalizeRoundOutcomes(roundOutcomes, roundStartTroops, runtime);
-    if (detail === "full") attacks.push(...cancelled, ...roundOutcomes);
-    commitOutcomes(cancelled, fighters, runtime);
-    commitOutcomes(roundOutcomes, fighters, runtime);
-    trace?.rounds.push({ round, roundStartTroops, intents, jobs });
+
+    capRoundKills(results, roundStartTroops);
+    commitRound(cancelled, results, fighters, runtime);
+
+    for (const entry of cancelled) recorder.recordCancelled(entry.intent, entry.effectId, entry.reason, entry.consumedEffectIds);
+    for (const entry of results) recorder.recordDamageJob(entry.job, entry.result);
+    recorder.recordRound(round, roundStartTroops, intents, jobs);
   }
 
   const winner = winnerFor(fighters) ?? "draw";
@@ -180,9 +173,21 @@ function runBattle(input: BattleInput, config: SimulatorConfig, options: Simulat
     runtime,
     winner,
     rounds,
-    attacks,
-    trace
+    attacks: recorder.attacks,
+    trace: recorder.trace
   };
+}
+
+interface CancelledAttack {
+  intent: AttackIntent;
+  effectId: string;
+  reason: "dodge" | "no_attack";
+  consumedEffectIds: string[];
+}
+
+interface DamageJobResult {
+  job: DamageJob;
+  result: DamageResult;
 }
 
 function triggerRoundStartSkills(
@@ -645,75 +650,44 @@ function multiplierForTriggerDamageJob(multiplier: number | undefined, effect: A
   return Number.isFinite(pct) ? pct / 100 : 0;
 }
 
-function cancelledOutcome(intent: AttackIntent, effectId: string, reason: "dodge" | "no_attack", consumedEffectIds: string[] = [effectId]): AttackOutcome {
-  return {
-    jobId: `${intent.id}:cancelled`,
-    kind: "normal",
-    attackerSide: intent.attackerSide,
-    attackerUnit: intent.attackerUnit,
-    defenderSide: intent.defenderSide,
-    defenderUnit: intent.defenderUnit,
-    kills: 0,
-    counterDeltas: [
-      { side: intent.attackerSide, unit: intent.attackerUnit, counter: "attacks", by: 1, cause: "normal_attack" },
-      { side: intent.defenderSide, unit: intent.defenderUnit, counter: "received_attacks", by: 1, cause: "normal_attack" }
-    ],
-    appliedEffectIds: [],
-    appliedEffects: [],
-    consumedEffectIds,
-    cancelledBy: effectId,
-    cancelReason: reason
-  };
-}
-
-function finalizeRoundOutcomes(outcomes: AttackOutcome[], roundStartTroops: DamageJob["roundStartTroops"], runtime: Runtime): void {
-  capRoundOutcomeKills(outcomes, roundStartTroops);
-  attributeSkillKills(outcomes, runtime);
-}
-
-function capRoundOutcomeKills(outcomes: AttackOutcome[], roundStartTroops: DamageJob["roundStartTroops"]): void {
+// Cap each defender unit's total kills this round to the troops available at round start, applied
+// in job order. Mutates result.kills (and the trace's finalKills when present). This is
+// simulation-affecting and runs in every mode, before commit and recording.
+function capRoundKills(results: DamageJobResult[], roundStartTroops: DamageJob["roundStartTroops"]): void {
   for (const side of ["attacker", "defender"] as SideId[]) {
     for (const unit of UNIT_TYPES) {
-      const matching = outcomes.filter((outcome) => outcome.defenderSide === side && outcome.defenderUnit === unit && outcome.kills > 0);
+      const matching = results.filter((entry) => entry.job.defenderSide === side && entry.job.defenderUnit === unit && entry.result.kills > 0);
       if (matching.length === 0) continue;
       const available = Math.max(0, roundStartTroops[side][unit] ?? 0);
-      const totalKills = matching.reduce((sum, outcome) => sum + outcome.kills, 0);
+      const totalKills = matching.reduce((sum, entry) => sum + entry.result.kills, 0);
       if (totalKills <= available) continue;
       let appliedKills = 0;
       let rawRemaining = available;
-      for (const outcome of matching) {
-        const rawKills = outcome.kills;
-        outcome.kills = Math.min(rawKills, Math.max(0, available - appliedKills));
-        appliedKills += outcome.kills;
+      for (const entry of matching) {
+        const rawKills = entry.result.kills;
+        entry.result.kills = Math.min(rawKills, Math.max(0, available - appliedKills));
+        appliedKills += entry.result.kills;
         rawRemaining = Math.max(0, rawRemaining - rawKills);
         if (rawRemaining === 0) appliedKills = available;
-        if (outcome.trace) outcome.trace.finalKills = outcome.kills;
+        if (entry.result.trace) entry.result.trace.finalKills = entry.result.kills;
       }
     }
   }
 }
 
-function attributeSkillKills(outcomes: AttackOutcome[], runtime: Runtime): void {
-  for (const outcome of outcomes) {
-    if (outcome.kind !== "skill" || !outcome.sourceSkillReportKey || outcome.kills <= 0) continue;
-    const report = runtime.skillReports[outcome.attackerSide].get(outcome.sourceSkillReportKey);
-    if (report) report.skillKills += outcome.kills;
+// Apply the round's effects to fighter state: remove killed troops and bump attack/received
+// counters. Every declared attack (each damage job and each cancelled attack) counts as one
+// attack for its attacker unit and one received for its defender unit.
+function commitRound(cancelled: CancelledAttack[], results: DamageJobResult[], fighters: Record<SideId, ResolvedFighter>, runtime: Runtime): void {
+  for (const entry of cancelled) {
+    runtime.counters.attacks[entry.intent.attackerSide][entry.intent.attackerUnit] += 1;
+    runtime.counters.received[entry.intent.defenderSide][entry.intent.defenderUnit] += 1;
   }
-}
-
-function commitOutcomes(outcomes: AttackOutcome[], fighters: Record<SideId, ResolvedFighter>, runtime: Runtime): void {
   const losses: Record<SideId, Record<UnitType, number>> = { attacker: emptyTroops(), defender: emptyTroops() };
-  for (const outcome of outcomes) {
-    losses[outcome.defenderSide][outcome.defenderUnit] += outcome.kills;
-    if (outcome.counterDeltas.length === 0) {
-      runtime.counters.attacks[outcome.attackerSide][outcome.attackerUnit] += 1;
-      runtime.counters.received[outcome.defenderSide][outcome.defenderUnit] += 1;
-    } else {
-      for (const delta of outcome.counterDeltas) {
-        if (delta.counter === "attacks") runtime.counters.attacks[delta.side][delta.unit] += delta.by;
-        else runtime.counters.received[delta.side][delta.unit] += delta.by;
-      }
-    }
+  for (const { job, result } of results) {
+    losses[job.defenderSide][job.defenderUnit] += result.kills;
+    runtime.counters.attacks[job.attackerSide][job.attackerUnit] += 1;
+    runtime.counters.received[job.defenderSide][job.defenderUnit] += 1;
   }
   for (const side of ["attacker", "defender"] as SideId[]) {
     for (const unit of UNIT_TYPES) {

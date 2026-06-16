@@ -1,7 +1,6 @@
 import type {
   ActiveEffect,
   DamageAggregationGroupTrace,
-  AttackOutcome,
   DamageBucketTrace,
   DamageEquationTrace,
   DamageJob,
@@ -57,11 +56,23 @@ interface NumericDamageBuckets {
 
 export type DamageScratch = NumericDamageBuckets;
 
+// Lean result of a single damage job: the correctness-relevant outputs (kills, consumed
+// effect bookkeeping) plus, only when tracing, the recording detail. The heavy per-attack
+// AttackOutcome is assembled by the recorder, not here, so fast mode allocates nothing extra.
+export interface DamageResult {
+  kills: number;
+  consumedEffectIds: string[];
+  consumedEffectUseKey?: string;
+  consumedEffectUseId?: string;
+  consumedEffectUseIds?: string[];
+  appliedEffectIds?: string[];
+  appliedEffects?: DamageEquationTrace["appliedEffects"];
+  trace?: DamageEquationTrace;
+}
+
 const BUCKET_IDS = Object.fromEntries(ATOMIC_BUCKETS.map((bucket, index) => [bucket, index])) as Record<AtomicBucket, NumericBucketId>;
 const EMPTY_AGGREGATION_GROUPS: Record<string, DamageAggregationGroupTrace> = {};
-const EMPTY_APPLIED_EFFECT_IDS: AttackOutcome["appliedEffectIds"] = [];
-const EMPTY_COUNTER_DELTAS: AttackOutcome["counterDeltas"] = [];
-const EMPTY_CONSUMED_EFFECT_IDS: AttackOutcome["consumedEffectIds"] = [];
+const EMPTY_CONSUMED_EFFECT_IDS: string[] = [];
 const TROOPS_COUNT_TERM = factorTerm("troops.count");
 const SOURCE_EXTRA_SKILL_TERM = factorTerm("source.extraSkill");
 const DEFAULT_FACTOR_TERMS = ATOMIC_BUCKETS.map((bucket) => factorTerm(bucket));
@@ -101,11 +112,13 @@ export function calculateDamageJob(
   job: DamageJob,
   fighters: Record<SideId, ResolvedFighter>,
   activeEffects: ActiveEffect[],
-  options: { trace?: boolean; effectIndex: EffectIndex; detail?: DamageDetail; staticDamageProfile?: StaticDamageProfile; scratch?: DamageScratch }
-): AttackOutcome {
+  options: { trace?: boolean; effectIndex: EffectIndex; staticDamageProfile?: StaticDamageProfile; scratch?: DamageScratch }
+): DamageResult {
   if (!options?.effectIndex) throw new Error("calculateDamageJob requires an effectIndex");
-  const detail = options.detail ?? "full";
-  const traceEnabled = detail === "full" && options.trace === true;
+  // The damage math is one path; `trace` only decides whether we also capture the (expensive)
+  // per-bucket contributor/aggregation detail. `detail` drives the existing helpers unchanged.
+  const traceEnabled = options.trace === true;
+  const detail: DamageDetail = traceEnabled ? "full" : "fast";
   const staticProfile = options.staticDamageProfile ?? buildStaticDamageProfile(fighters, activeEffects);
   const attacker = fighters[job.attackerSide];
   const defender = fighters[job.defenderSide];
@@ -173,32 +186,17 @@ export function calculateDamageJob(
       }
     : undefined;
 
-  const fast = detail === "fast";
   const returnedConsumedEffectIds =
-    fast && consumedEffectIds.size === 0 ? job.consumedEffectIds ?? EMPTY_CONSUMED_EFFECT_IDS : [...consumedEffectIds, ...(job.consumedEffectIds ?? [])];
+    consumedEffectIds.size === 0 ? job.consumedEffectIds ?? EMPTY_CONSUMED_EFFECT_IDS : [...consumedEffectIds, ...(job.consumedEffectIds ?? [])];
 
   return {
-    jobId: job.id,
-    kind: job.kind,
-    sourceEffectId: job.sourceEffectId,
-    sourceSkillReportKey: job.sourceSkillReportKey,
-    attackerSide: job.attackerSide,
-    attackerUnit: job.attackerUnit,
-    defenderSide: job.defenderSide,
-    defenderUnit: job.defenderUnit,
     kills,
-    counterDeltas: fast
-      ? EMPTY_COUNTER_DELTAS
-      : [
-          { side: job.attackerSide, unit: job.attackerUnit, counter: "attacks", by: 1, cause: job.kind === "skill" ? "extra_skill_attack" : "normal_attack" },
-          { side: job.defenderSide, unit: job.defenderUnit, counter: "received_attacks", by: 1, cause: job.kind === "skill" ? "extra_skill_attack" : "normal_attack" }
-        ],
-    appliedEffectIds: fast ? EMPTY_APPLIED_EFFECT_IDS : appliedEffects.map((effect) => effect.effectId),
-    appliedEffects,
     consumedEffectIds: returnedConsumedEffectIds,
     consumedEffectUseKey: job.consumedEffectUseKey,
     consumedEffectUseId: job.consumedEffectUseId,
     consumedEffectUseIds: job.consumedEffectUseIds,
+    appliedEffectIds: traceEnabled ? appliedEffects.map((effect) => effect.effectId) : undefined,
+    appliedEffects: traceEnabled ? appliedEffects : undefined,
     trace
   };
 }

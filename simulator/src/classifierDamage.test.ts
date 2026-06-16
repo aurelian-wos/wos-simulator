@@ -396,10 +396,10 @@ test("turn-duration bucket effects are visible on the attack outcome without bei
     duration: { type: "round" as const, value: 1 }
   };
 
-  const outcome = calculateIndexedDamageJob(job, simpleFighters(), [turnEffect], { trace: false });
+  const outcome = calculateIndexedDamageJob(job, simpleFighters(), [turnEffect], { trace: true });
 
   assert.equal(outcome.consumedEffectIds.includes("bad-luck-like"), false);
-  assert.ok(outcome.appliedEffectIds.includes("BadLuckStreak/1"));
+  assert.ok(outcome.appliedEffectIds?.includes("BadLuckStreak/1"));
   assert.deepEqual(outcome.appliedEffects, [
     {
       effectId: "BadLuckStreak/1",
