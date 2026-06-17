@@ -222,12 +222,64 @@ function applyBucketCandidates(
         maxGroups.set(key, { selected: candidate, candidates: [candidate] });
       }
     } else {
-      applyBucketCandidateGroup(candidate, [candidate], buckets, detail, appliedEffects, rejectedEffects, consumedEffectIds);
+      applyBucketCandidate(candidate, buckets, detail, appliedEffects, rejectedEffects, consumedEffectIds);
     }
   }
   if (!maxGroups) return;
   for (const group of maxGroups.values()) {
     applyBucketCandidateGroup(group.selected, group.candidates, buckets, detail, appliedEffects, rejectedEffects, consumedEffectIds);
+  }
+}
+
+// Apply the selected candidate's value to its bucket and (in trace mode) record it; returns the
+// applied percentage. Shared by the single-candidate and max-group paths.
+function applySelectedBucket(
+  selected: BucketCandidate,
+  buckets: NumericDamageBuckets,
+  detail: DamageDetail,
+  appliedEffects: DamageEquationTrace["appliedEffects"]
+): number {
+  const appliedValuePct = applyBucketValue(
+    buckets,
+    selected.bucket,
+    selected.valuePct,
+    detail === "full" ? selected.effect.source.effectId ?? selected.effect.id : "",
+    detail === "full" ? sourceLabel(selected.effect) : "",
+    detail === "full" ? selected.effect.ownerSide : undefined,
+    selected.bucket,
+    selected.effect.stackingKey,
+    selected.effect.sameEffectStacking
+  );
+  if (appliedValuePct !== 0 && detail === "full") {
+    const appliedEffect: DamageEquationTrace["appliedEffects"][number] = {
+      effectId: selected.effect.source.effectId ?? selected.effect.id,
+      bucket: selected.bucket,
+      valuePct: appliedValuePct,
+      source: sourceLabel(selected.effect),
+      sourceSide: selected.effect.ownerSide,
+      sameEffectStacking: selected.effect.sameEffectStacking
+    };
+    if (selected.effect.stackingKey !== undefined) appliedEffect.stackingKey = selected.effect.stackingKey;
+    appliedEffects.push(appliedEffect);
+  }
+  return appliedValuePct;
+}
+
+// Lone-candidate fast path (the common case): no max-stacking group, so no temporary [candidate]
+// array and no suppressed-sibling bookkeeping.
+function applyBucketCandidate(
+  candidate: BucketCandidate,
+  buckets: NumericDamageBuckets,
+  detail: DamageDetail,
+  appliedEffects: DamageEquationTrace["appliedEffects"],
+  rejectedEffects: DamageEquationTrace["rejectedEffects"],
+  consumedEffectIds: Set<string>
+): void {
+  const appliedValuePct = applySelectedBucket(candidate, buckets, detail, appliedEffects);
+  if (appliedValuePct !== 0) {
+    if (candidate.effect.duration.type === "attack") consumedEffectIds.add(candidate.effect.id);
+  } else if (detail === "full") {
+    rejectedEffects.push({ effectId: candidate.effect.source.effectId ?? candidate.effect.id, reason: "same_effect_max_superseded" });
   }
 }
 
@@ -240,30 +292,8 @@ function applyBucketCandidateGroup(
   rejectedEffects: DamageEquationTrace["rejectedEffects"],
   consumedEffectIds: Set<string>
 ): void {
-  const appliedValuePct = applyBucketValue(
-    buckets,
-    selected.bucket,
-    selected.valuePct,
-    detail === "full" ? selected.effect.source.effectId ?? selected.effect.id : "",
-    detail === "full" ? sourceLabel(selected.effect) : "",
-    detail === "full" ? selected.effect.ownerSide : undefined,
-    selected.bucket,
-    selected.effect.stackingKey,
-    selected.effect.sameEffectStacking
-  );
+  const appliedValuePct = applySelectedBucket(selected, buckets, detail, appliedEffects);
   if (appliedValuePct !== 0) {
-    if (detail === "full") {
-      const appliedEffect: DamageEquationTrace["appliedEffects"][number] = {
-        effectId: selected.effect.source.effectId ?? selected.effect.id,
-        bucket: selected.bucket,
-        valuePct: appliedValuePct,
-        source: sourceLabel(selected.effect),
-        sourceSide: selected.effect.ownerSide,
-        sameEffectStacking: selected.effect.sameEffectStacking
-      };
-      if (selected.effect.stackingKey !== undefined) appliedEffect.stackingKey = selected.effect.stackingKey;
-      appliedEffects.push(appliedEffect);
-    }
     for (const candidate of candidates) {
       if (candidate.effect.duration.type === "attack") consumedEffectIds.add(candidate.effect.id);
       if (detail === "full" && candidate !== selected) {
