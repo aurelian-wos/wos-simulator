@@ -237,6 +237,15 @@ test("runTestcases applies possible stat rounding correction to exact determinis
   assert.equal(summary?.gameStatAdjustment?.unadjusted.bias_raw, -2);
 });
 
+test("runTestcases skips stat rounding correction for stochastic misses", () => {
+  const config = loadSimulatorConfig();
+  const report = runTestcases({ matching: "greg_mia_combo", repeat: 5, calibrationReportPath: "/tmp/does-not-exist.json" }, config);
+  const summaries = Object.values(report.testcases);
+
+  assert.ok(summaries.some((summary) => summary.deterministic === false && summary.game?.passes === false));
+  assert.deepEqual(summaries.map((summary) => summary.gameStatAdjustment), summaries.map(() => undefined));
+});
+
 test("runTestcases default round cap lets long no-hero baselines reach battle end", () => {
   const config = loadSimulatorConfig();
   const report = runTestcases({ matching: "1-testcases_no-heroes_t6_single-type_nc.json", repeat: 1 }, config);

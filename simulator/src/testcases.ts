@@ -17,6 +17,7 @@ import type { BattleInput, BattleResult, FighterInput, SimulatorConfig, StatBloc
 const DEFAULT_STOCHASTIC_REPEAT = 100;
 const STAT_ROUNDING_MAX_ADJUSTMENT = 0.05;
 const STAT_ROUNDING_SCAN_STEPS = 50;
+const STAT_ROUNDING_INTERPOLATION_LIMIT = STAT_ROUNDING_SCAN_STEPS;
 
 export interface TestcaseRunOptions {
   testcaseRoot?: string;
@@ -434,40 +435,75 @@ function findGameStatAdjustment(options: {
   deterministic: boolean;
   thresholds?: Record<string, number>;
 }): InternalStatAdjustment | undefined {
-  const shouldCorrect = options.deterministic ? options.game.bias_raw !== 0 : !options.game.passes;
-  if (!shouldCorrect || options.game.bias_raw === 0) return undefined;
+  if (!options.deterministic || options.game.bias_raw === 0) return undefined;
   const direction = -Math.sign(options.game.bias_raw);
-  const candidates = statAdjustmentCandidates(direction);
-  let best: InternalStatAdjustment | undefined;
-  for (const value of candidates) {
-    const adjustedInput = inputWithStatAdjustment(options.input, value);
-    const candidateStats = simulateAdjustedDistribution(adjustedInput, options.job, options.config);
-    const adjusted = compareOutcomeDistribution({
-      candidate: { n: candidateStats.n, mu: candidateStats.mu, sigma: candidateStats.sigma },
-      reference: options.reference,
-      initialTroops: options.initialTroops,
-      deterministic: options.deterministic,
-      thresholds: options.thresholds
-    });
-    const candidate = {
-      value,
-      mode: adjustmentMode(options.game, adjusted, options.deterministic),
-      unadjusted: options.game,
-      adjusted: adjustedForRoundingRules(adjusted, options.deterministic)
-    };
-    if (!best || correctionScore(candidate.adjusted, options.deterministic) < correctionScore(best.adjusted, options.deterministic)) best = candidate;
-    if (options.deterministic && candidate.mode === "deterministic_exact") return candidate;
+  const maxCandidate = evaluateStatAdjustment(options, direction * STAT_ROUNDING_MAX_ADJUSTMENT);
+  let best = maxCandidate;
+  if (maxCandidate.mode === "deterministic_exact") return maxCandidate;
+
+  let low = { value: 0, bias: options.game.bias_raw };
+  let high = { value: maxCandidate.value, bias: maxCandidate.adjusted.bias_raw };
+  if (!biasesBracketZero(low.bias, high.bias)) return maxCandidate;
+
+  const tested = new Set<number>([maxCandidate.value]);
+  for (let iteration = 0; iteration < STAT_ROUNDING_INTERPOLATION_LIMIT; iteration += 1) {
+    const value = interpolatedZeroAdjustment(low, high);
+    if (value === undefined || tested.has(value)) break;
+    tested.add(value);
+
+    const candidate = evaluateStatAdjustment(options, value);
+    if (correctionScore(candidate.adjusted, options.deterministic) < correctionScore(best.adjusted, options.deterministic)) best = candidate;
+    if (candidate.mode === "deterministic_exact") return candidate;
+
+    if (Math.sign(candidate.adjusted.bias_raw) === Math.sign(low.bias)) {
+      low = { value: candidate.value, bias: candidate.adjusted.bias_raw };
+    } else {
+      high = { value: candidate.value, bias: candidate.adjusted.bias_raw };
+    }
   }
-  if (best && !options.deterministic && best.adjusted.passes) return { ...best, mode: "stochastic_tolerance" };
+
   return best;
 }
 
-function statAdjustmentCandidates(direction: number): number[] {
-  const values: number[] = [];
-  for (let step = STAT_ROUNDING_SCAN_STEPS; step >= 1; step -= 1) {
-    values.push(roundStatAdjustment(direction * (STAT_ROUNDING_MAX_ADJUSTMENT * step) / STAT_ROUNDING_SCAN_STEPS));
-  }
-  return values;
+function evaluateStatAdjustment(options: {
+  game: ParityComparisonMetrics;
+  input: BattleInput;
+  config: SimulatorConfig;
+  job: TestcaseExecutionJob;
+  reference: { n: number; mu: number; sigma: number };
+  initialTroops: number;
+  deterministic: boolean;
+  thresholds?: Record<string, number>;
+}, value: number): InternalStatAdjustment {
+  const adjustedInput = inputWithStatAdjustment(options.input, value);
+  const candidateStats = simulateAdjustedDistribution(adjustedInput, options.job, options.config);
+  const adjusted = compareOutcomeDistribution({
+    candidate: { n: candidateStats.n, mu: candidateStats.mu, sigma: candidateStats.sigma },
+    reference: options.reference,
+    initialTroops: options.initialTroops,
+    deterministic: options.deterministic,
+    thresholds: options.thresholds
+  });
+  return {
+    value: roundStatAdjustment(value),
+    mode: adjustmentMode(options.game, adjusted, options.deterministic),
+    unadjusted: options.game,
+    adjusted: adjustedForRoundingRules(adjusted, options.deterministic)
+  };
+}
+
+function biasesBracketZero(first: number, second: number): boolean {
+  return first === 0 || second === 0 || Math.sign(first) !== Math.sign(second);
+}
+
+function interpolatedZeroAdjustment(low: { value: number; bias: number }, high: { value: number; bias: number }): number | undefined {
+  const biasRange = high.bias - low.bias;
+  if (biasRange === 0) return undefined;
+  const value = low.value - (low.bias * (high.value - low.value)) / biasRange;
+  const min = Math.min(low.value, high.value);
+  const max = Math.max(low.value, high.value);
+  if (value < min || value > max) return undefined;
+  return roundStatAdjustment(value);
 }
 
 function simulateAdjustedDistribution(input: BattleInput, job: TestcaseExecutionJob, config: SimulatorConfig): SampleStats {
