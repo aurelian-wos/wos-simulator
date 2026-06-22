@@ -1,4 +1,4 @@
-import type { OptimizeRatioRequestPayload, OptimizeRatioResult, SimulateApiResult, SimulateRequestPayload, SimulateTrace } from "@/lib/simulate-run";
+import type { BearSimRequestPayload, BearSimResult, OptimizeRatioRequestPayload, OptimizeRatioResult, SimulateApiResult, SimulateRequestPayload, SimulateTrace } from "@/lib/simulate-run";
 import type { TournamentRequestPayload, TournamentResult } from "@/lib/tournament";
 import { createProgressThrottle } from "./progress-throttle";
 import type { SimulatorWorkerRequest, SimulatorWorkerResponse } from "./worker-protocol";
@@ -8,6 +8,8 @@ let nextJobId = 1;
 type WorkerJobRequest =
   | Omit<Extract<SimulatorWorkerRequest, { type: "simulate" }>, "id">
   | Omit<Extract<SimulatorWorkerRequest, { type: "simulateTrace" }>, "id">
+  | Omit<Extract<SimulatorWorkerRequest, { type: "bearSim" }>, "id">
+  | Omit<Extract<SimulatorWorkerRequest, { type: "bearTrace" }>, "id">
   | Omit<Extract<SimulatorWorkerRequest, { type: "optimizeRatio" }>, "id">
   | Omit<Extract<SimulatorWorkerRequest, { type: "tournament" }>, "id">;
 
@@ -24,6 +26,21 @@ export function runWorkerSimulationTrace(
   onProgress: (done: number, total: number) => void
 ): { promise: Promise<SimulateTrace>; cancel: () => void } {
   return runWorkerJob<SimulateTrace>({ type: "simulateTrace", payload, seed }, "simulateTraceResult", onProgress);
+}
+
+export function runWorkerBearSimulation(
+  payload: BearSimRequestPayload,
+  onProgress: (done: number, total: number) => void
+): { promise: Promise<BearSimResult>; cancel: () => void } {
+  return runWorkerJob<BearSimResult>({ type: "bearSim", payload }, "bearResult", onProgress);
+}
+
+export function runWorkerBearSimulationTrace(
+  payload: BearSimRequestPayload,
+  seed: string | number,
+  onProgress: (done: number, total: number) => void
+): { promise: Promise<SimulateTrace>; cancel: () => void } {
+  return runWorkerJob<SimulateTrace>({ type: "bearTrace", payload, seed }, "bearTraceResult", onProgress);
 }
 
 export function runWorkerOptimizeRatio(

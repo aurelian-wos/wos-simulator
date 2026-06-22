@@ -1,4 +1,5 @@
 import { runOptimizeRatio } from "@/lib/simulator/optimise";
+import { runBearSimulation, runBearSimulationTrace } from "@/lib/simulator/bear";
 import { runSimulation, runSimulationTrace } from "@/lib/simulator/simulate";
 import type { SimulatorWorkerRequest, SimulatorWorkerResponse } from "@/lib/simulator/worker-protocol";
 import { runBattleTasksDirect, runTournament, type BattleSummary, type BattleTask, type TournamentRunOptions } from "@/lib/tournament";
@@ -31,6 +32,17 @@ async function handleMessage(request: SimulatorWorkerRequest): Promise<void> {
         onProgress: (done, total) => postIfActive(request.id, { id: request.id, type: "progress", done, total }),
       });
       postIfActive(request.id, { id: request.id, type: "simulateTraceResult", data });
+    } else if (request.type === "bearSim") {
+      const data = runBearSimulation(request.payload, {
+        seedBase: `bear:${request.id}`,
+        onProgress: (done, total) => postIfActive(request.id, { id: request.id, type: "progress", done, total }),
+      });
+      postIfActive(request.id, { id: request.id, type: "bearResult", data });
+    } else if (request.type === "bearTrace") {
+      const data = runBearSimulationTrace(request.payload, request.seed, {
+        onProgress: (done, total) => postIfActive(request.id, { id: request.id, type: "progress", done, total }),
+      });
+      postIfActive(request.id, { id: request.id, type: "bearTraceResult", data });
     } else if (request.type === "optimizeRatio") {
       const data = runOptimizeRatio(request.payload, {
         seedBase: `optimize:${request.id}`,

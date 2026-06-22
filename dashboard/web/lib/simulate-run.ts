@@ -136,6 +136,33 @@ export interface SimulateApiResult {
   };
 }
 
+export interface BearSimRequestPayload {
+  player: SimulateSidePayload;
+  replicates: number;
+  trace_seed?: number;
+}
+
+export interface BearScoreRun {
+  score: number;
+  seed: string | number;
+}
+
+export interface BearSimResult {
+  replicates: number;
+  summary: {
+    mean: number;
+    std: number;
+    best: { value: number };
+    worst: { value: number };
+    avg_skill_activations: number;
+    avg_skill_damage: number;
+  };
+  scores: number[];
+  score_runs?: BearScoreRun[];
+  trace?: SimulateTrace;
+  skills: SimulateSkillSummary[];
+}
+
 export interface OptimizeRatioRequestPayload extends SimulateRequestPayload {
   grid_step: number;
   search_replicates: number;
