@@ -50,19 +50,42 @@ changed later when calibration data is available.
 ## Browser Payload
 
 Add a bear request/result type in the dashboard web layer. The request contains
-one `SimulateSidePayload` for the user army plus replicates if the UI keeps the
-existing multi-run behavior. The result should focus on score:
+one `SimulateSidePayload` for the user army plus replicates. The result should
+mirror the existing simulate result shape where practical so the current chart
+and example-battle UI can be reused:
 
 - Replicates run.
-- Mean score.
-- Standard deviation.
-- Best and worst score.
-- Optional per-seed score samples for charts or examples.
+- Summary values for mean score, standard deviation, best score, and worst
+  score.
+- Per-seed score samples in the same spirit as `outcome_runs`, with score
+  replacing signed survivor margin.
+- Trace/example data for a selected seed so the existing example-battle details
+  UI can show the 10 bear rounds.
 - Skill activation and skill-damage summary for the user army.
 
-Normal saved simulate runs do not need to support Bear Sim in the first pass
-unless it falls out cheaply. The page can compute locally through the existing
-worker path.
+The existing saved-run shape can remain simulate-only in the first pass if
+including Bear Sim would make the initial change large. The page should compute
+locally through the existing worker path.
+
+## Bear Optimise
+
+Bear Sim should include ratio optimisation, reusing the standard simulator's
+optimise controls and layout as much as possible. The search changes only the
+user army troop mix while keeping total troops, heroes, tiers, stats, active
+modifiers, and the fixed bear opponent unchanged.
+
+The optimisation objective is maximum average bear score, not win rate or
+survivor margin. The result should preserve the useful existing concepts:
+
+- Search mode, ratio reps, grid step, infantry min/max band, top results, and
+  "use selected ratio".
+- 3D sample chart, with the vertical/value dimension representing average bear
+  score.
+- Top ratios table, with score replacing win rate/margin language.
+
+Implementation should prefer adapting the current optimise machinery behind a
+small scoring callback or bear-specific optimiser wrapper over duplicating the
+whole algorithm.
 
 ## Bear Page UI
 
@@ -76,6 +99,11 @@ The page should reuse existing simulator UI concepts:
 - Rally mode is fixed on. The user should not need to toggle it.
 - The run panel should say Bear Sim and show score-centric results, not survivor
   margins.
+- The score chart and selected-seed example battle details should match the
+  standard simulate page's interaction model, with the axis/labels changed from
+  survivor margin to bear score.
+- The optimise panel should match the standard simulator's controls and flow,
+  with score-focused labels and results.
 
 If the existing simulator page components are too coupled to attacker/defender
 state, extract narrow shared helpers/components rather than copying the whole
@@ -107,7 +135,9 @@ Add dashboard tests after the core behavior exists:
 
 - Bear payload converts one user army into the expected simulator input.
 - Worker handles bear simulation requests.
-- `/bear` renders, exposes stat presets, and can start a bear run.
+- Worker handles bear optimisation requests.
+- `/bear` renders, exposes stat presets, can start a bear run, and exposes the
+  optimise controls.
 
 Run at least the relevant TypeScript tests and dashboard typecheck before
 calling the work complete.
@@ -116,5 +146,4 @@ calling the work complete.
 
 - Calibrating the bear defense value.
 - Full saved-run/share-link support for Bear Sim.
-- Ratio optimisation for Bear Sim.
 - Reworking the standard simulator page beyond the extraction needed for reuse.
