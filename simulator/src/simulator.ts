@@ -2,6 +2,7 @@ import type {
   ActiveEffect,
   AttackIntent,
   AttackOutcome,
+  BearBattleResult,
   BattleInput,
   BattleRandomness,
   BattleResult,
@@ -40,6 +41,9 @@ import { emptyTroops, resolveFighter } from "./resolve";
 import { buildStaticDamageProfile, type StaticDamageProfile } from "./staticDamageProfile";
 
 const DEFAULT_MAX_ROUNDS = 1500;
+const BEAR_ROUNDS = 10;
+const BEAR_DEFENSE = 100;
+const BEAR_TROOP_ID = "bear_infantry";
 const REPORT_KEY_CACHE = new WeakMap<ResolvedSkill, string>();
 
 interface Runtime {
@@ -81,10 +85,56 @@ interface BattleRun {
   rounds: number;
   attacks: AttackOutcome[];
   trace?: BattleTrace;
+  score?: number;
+}
+
+interface RunLoopOptions {
+  capRoundKills: boolean;
+  commitLosses: boolean;
+  scoreSide?: {
+    attackerSide: SideId;
+    defenderSide: SideId;
+  };
 }
 
 export function simulateBattle(input: BattleInput, config: SimulatorConfig, options: SimulationOptions = {}): BattleResult {
   return buildBattleResult(runBattle(input, config, options));
+}
+
+export function bearFighterInput(): FighterInput {
+  return {
+    name: "Bear",
+    troops: { [BEAR_TROOP_ID]: 5000 },
+    stats: {
+      infantry: { attack: 0, defense: 0, lethality: 0, health: 0 }
+    },
+    heroes: {},
+    joiner_heroes: {}
+  };
+}
+
+export function simulateBearBattle(
+  player: FighterInput,
+  config: SimulatorConfig,
+  seed: string | number = "bear-default",
+  options: SimulationOptions = {}
+): BearBattleResult {
+  const input: BattleInput = {
+    attacker: player,
+    defender: bearFighterInput(),
+    seed,
+    maxRounds: BEAR_ROUNDS,
+    engagement_type: "rally"
+  };
+  const run = runBattle(input, configWithBearTroop(config), options, undefined, {
+    capRoundKills: false,
+    commitLosses: false,
+    scoreSide: { attackerSide: "attacker", defenderSide: "defender" }
+  });
+  return {
+    ...buildBattleResult(run),
+    score: run.score ?? bearScore(run.attacks)
+  };
 }
 
 /**
@@ -190,28 +240,61 @@ function cloneSkillReports(reports: Record<SideId, Map<string, SkillReportEntry>
   return { attacker: cloneSide(reports.attacker), defender: cloneSide(reports.defender) };
 }
 
-function runBattle(input: BattleInput, config: SimulatorConfig, options: SimulationOptions, prepared?: CompiledBattle): BattleRun {
+function configWithBearTroop(config: SimulatorConfig): SimulatorConfig {
+  return {
+    ...config,
+    troopStats: {
+      ...config.troopStats,
+      [BEAR_TROOP_ID]: {
+        id: BEAR_TROOP_ID,
+        type: "infantry",
+        tier: 1,
+        stats: {
+          attack: 0,
+          defense: BEAR_DEFENSE,
+          lethality: 0,
+          health: 10
+        }
+      }
+    }
+  };
+}
+
+function runBattle(
+  input: BattleInput,
+  config: SimulatorConfig,
+  options: SimulationOptions,
+  prepared?: CompiledBattle,
+  loopOptions: RunLoopOptions = { capRoundKills: true, commitLosses: true }
+): BattleRun {
   if (prepared?.template) {
     const fighters: Record<SideId, ResolvedFighter> = {
       attacker: cloneFighterForRun(prepared.fighters.attacker),
       defender: cloneFighterForRun(prepared.fighters.defender)
     };
     const runtime = cloneRuntime(prepared.template, createSeededRng(input.seed ?? "simulator-default"));
-    return runLoop(input, fighters, runtime, options);
+    return runLoop(input, fighters, runtime, options, loopOptions);
   }
   const attacker = prepared ? cloneFighterForRun(prepared.fighters.attacker) : resolveFighter(input.attacker, "attacker", config, input.engagement_type);
   const defender = prepared ? cloneFighterForRun(prepared.fighters.defender) : resolveFighter(input.defender, "defender", config, input.engagement_type);
   const fighters: Record<SideId, ResolvedFighter> = { attacker, defender };
   const runtime = setupRuntime(fighters, input, input.seed ?? "simulator-default");
-  return runLoop(input, fighters, runtime, options);
+  return runLoop(input, fighters, runtime, options, loopOptions);
 }
 
-function runLoop(input: BattleInput, fighters: Record<SideId, ResolvedFighter>, runtime: Runtime, options: SimulationOptions): BattleRun {
+function runLoop(
+  input: BattleInput,
+  fighters: Record<SideId, ResolvedFighter>,
+  runtime: Runtime,
+  options: SimulationOptions,
+  loopOptions: RunLoopOptions
+): BattleRun {
   const mode = options.mode ?? "standard";
   const recorder = createRecorder(mode, runtime.skillReports, () => buildResolved(fighters.attacker, fighters.defender));
   const maxRounds = input.maxRounds ?? DEFAULT_MAX_ROUNDS;
 
   let rounds = 0;
+  let score = 0;
   for (let round = 1; round <= maxRounds; round += 1) {
     if (winnerFor(fighters)) break;
     rounds = round;
@@ -248,11 +331,19 @@ function runLoop(input: BattleInput, fighters: Record<SideId, ResolvedFighter>, 
         scratch: recorder.capturesTrace ? undefined : runtime.damageScratch
       });
       results.push({ job, result });
+      if (
+        loopOptions.scoreSide &&
+        job.attackerSide === loopOptions.scoreSide.attackerSide &&
+        job.defenderSide === loopOptions.scoreSide.defenderSide
+      ) {
+        score += result.kills;
+      }
       consumeEffects(runtime, result.consumedEffectIds, result.consumedEffectUseKey, result.consumedEffectUseId, result.consumedEffectUseIds);
     }
 
-    capRoundKills(results, roundStartTroops);
-    commitRound(cancelled, results, fighters, runtime);
+    if (loopOptions.capRoundKills) capRoundKills(results, roundStartTroops);
+    if (loopOptions.commitLosses) commitRound(cancelled, results, fighters, runtime);
+    else commitRoundCounters(cancelled, results, runtime);
 
     for (const entry of cancelled) recorder.recordCancelled(entry.intent, entry.effectId, entry.reason, entry.consumedEffectIds);
     for (const entry of results) recorder.recordDamageJob(entry.job, entry.result);
@@ -266,7 +357,8 @@ function runLoop(input: BattleInput, fighters: Record<SideId, ResolvedFighter>, 
     winner,
     rounds,
     attacks: recorder.attacks,
-    trace: recorder.trace
+    trace: recorder.trace,
+    score
   };
 }
 
@@ -769,20 +861,26 @@ function capRoundKills(results: DamageJobResult[], roundStartTroops: DamageJob["
 // counters. Every declared attack (each damage job and each cancelled attack) counts as one
 // attack for its attacker unit and one received for its defender unit.
 function commitRound(cancelled: CancelledAttack[], results: DamageJobResult[], fighters: Record<SideId, ResolvedFighter>, runtime: Runtime): void {
-  for (const entry of cancelled) {
-    runtime.counters.attacks[entry.intent.attackerSide][entry.intent.attackerUnit] += 1;
-    runtime.counters.received[entry.intent.defenderSide][entry.intent.defenderUnit] += 1;
-  }
+  commitRoundCounters(cancelled, results, runtime);
   const losses: Record<SideId, Record<UnitType, number>> = { attacker: emptyTroops(), defender: emptyTroops() };
   for (const { job, result } of results) {
     losses[job.defenderSide][job.defenderUnit] += result.kills;
-    runtime.counters.attacks[job.attackerSide][job.attackerUnit] += 1;
-    runtime.counters.received[job.defenderSide][job.defenderUnit] += 1;
   }
   for (const side of ["attacker", "defender"] as SideId[]) {
     for (const unit of UNIT_TYPES) {
       fighters[side].troops[unit] = Math.max(0, fighters[side].troops[unit] - losses[side][unit]);
     }
+  }
+}
+
+function commitRoundCounters(cancelled: CancelledAttack[], results: DamageJobResult[], runtime: Runtime): void {
+  for (const entry of cancelled) {
+    runtime.counters.attacks[entry.intent.attackerSide][entry.intent.attackerUnit] += 1;
+    runtime.counters.received[entry.intent.defenderSide][entry.intent.defenderUnit] += 1;
+  }
+  for (const { job, result } of results) {
+    runtime.counters.attacks[job.attackerSide][job.attackerUnit] += 1;
+    runtime.counters.received[job.defenderSide][job.defenderUnit] += 1;
   }
 }
 
@@ -852,6 +950,12 @@ export function signedRemainingScore(result: BattleResult): number {
   if (result.winner === "attacker") return total(result.remaining.attacker);
   if (result.winner === "defender") return -total(result.remaining.defender);
   return 0;
+}
+
+function bearScore(attacks: AttackOutcome[]): number {
+  return attacks
+    .filter((attack) => attack.attackerSide === "attacker" && attack.defenderSide === "defender")
+    .reduce((sum, attack) => sum + attack.kills, 0);
 }
 
 function total(troops: Record<UnitType, number>): number {

@@ -393,6 +393,10 @@ export interface BattleResult {
   trace?: BattleTrace;
 }
 
+export interface BearBattleResult extends BattleResult {
+  score: number;
+}
+
 export interface BattleRandomness {
   deterministic: boolean;
   chanceSkillIds: Record<SideId, string[]>;

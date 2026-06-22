@@ -6,8 +6,8 @@ import { fileURLToPath } from "node:url";
 import { loadSimulatorConfig } from "./config";
 import { createSeededRng, chancePasses } from "./effects";
 import { applyHeroGenerationStats, resolveFighter } from "./resolve";
-import { prepareBattle, runPrepared, simulateBattle, signedRemainingScore } from "./simulator";
-import type { BattleInput, EffectIntentDefinition, ResolvedSkill, SimulatorConfig, SkillFile, UnitType } from "./types";
+import { prepareBattle, runPrepared, simulateBattle, simulateBearBattle, signedRemainingScore } from "./simulator";
+import type { BattleInput, EffectIntentDefinition, FighterInput, ResolvedSkill, SimulatorConfig, SkillFile, UnitType } from "./types";
 
 test("runPrepared reuses the compiled input seed when no override is supplied", () => {
   const config = loadSimulatorConfig();
@@ -60,6 +60,54 @@ test("simulateBattle returns structured result for a no-hero battle", () => {
   assert.ok(result.trace?.resolved.attacker.troops.infantry);
   assert.deepEqual(result.resolved.attacker.heroes, []);
   assert.ok(result.skillReport.attacker.some((entry) => entry.sourceKind === "troop_skill"));
+});
+
+test("simulateBearBattle runs exactly 10 rounds and leaves the bear army unchanged", () => {
+  const player: FighterInput = {
+    name: "Player",
+    troops: { infantry_t1: 100 },
+    stats: {
+      infantry: {
+        attack: 100000,
+        defense: 100,
+        lethality: 100000,
+        health: 100
+      }
+    },
+    heroes: {}
+  };
+
+  const result = simulateBearBattle(player, minimalConfig(), "bear-fixed");
+
+  assert.equal(result.rounds, 10);
+  assert.equal(result.remaining.defender.infantry, 5000);
+  assert.equal(result.remaining.defender.lancer, 0);
+  assert.equal(result.remaining.defender.marksman, 0);
+  assert.ok(result.score > 5000);
+});
+
+test("simulateBearBattle always resolves the player army as a rally attacker", () => {
+  const config = sameEffectStackingConfig("RallyHero", "add", "active.hero.lethality.up");
+  config.heroDefinitions.RallyHero.skills.Overlap.requirements = [
+    { level: 1, type: "engagement_type", value: "rally" }
+  ];
+  const player: FighterInput = {
+    name: "Player",
+    troops: { infantry_t1: 100 },
+    stats: {
+      infantry: {
+        attack: 100,
+        defense: 100,
+        lethality: 100,
+        health: 100
+      }
+    },
+    heroes: { RallyHero: { skill_1: 1 } }
+  };
+
+  const result = simulateBearBattle(player, config, "bear-rally");
+
+  assert.ok(result.skillReport.attacker.some((row) => row.skillName === "Overlap"));
 });
 
 test("simulateBattle calculates all same-round damage from the round-start troop snapshot", () => {
@@ -1854,4 +1902,3 @@ function minimalConfig(heroDefinitions: Record<string, SkillFile> = {}): Simulat
     diagnostics: { legacyFields: [], effectTypes: {}, unsupportedEffects: [], ambiguousTurnTriggerSelectors: [] }
   };
 }
-
