@@ -120,9 +120,9 @@ export const BUCKETS = {
         up: { role: "attacker", valueType: "pct", update: "add_pct_factor", placement: "numerator", appliesTo: "normal" },
         down: { role: "attacker", valueType: "pct", update: "add_pct_factor", placement: "denominator", appliesTo: "normal" }
       },
-      defense: {
-        up: { role: "defender", valueType: "pct", update: "add_pct_factor", placement: "denominator", appliesTo: "normal" },
-        down: { role: "defender", valueType: "pct", update: "add_pct_factor", placement: "numerator", appliesTo: "normal" }
+      damageTaken: {
+        up: { role: "defender", valueType: "pct", update: "add_pct_factor", placement: "numerator", appliesTo: "normal" },
+        down: { role: "defender", valueType: "pct", update: "add_pct_factor", placement: "denominator", appliesTo: "normal" }
       }
     },
     skill: {
@@ -130,9 +130,9 @@ export const BUCKETS = {
         up: { role: "attacker", valueType: "pct", update: "add_pct_factor", placement: "numerator", appliesTo: "skill" },
         down: { role: "attacker", valueType: "pct", update: "add_pct_factor", placement: "denominator", appliesTo: "skill" }
       },
-      defense: {
-        up: { role: "defender", valueType: "pct", update: "add_pct_factor", placement: "denominator", appliesTo: "skill" },
-        down: { role: "defender", valueType: "pct", update: "add_pct_factor", placement: "numerator", appliesTo: "skill" }
+      damageTaken: {
+        up: { role: "defender", valueType: "pct", update: "add_pct_factor", placement: "numerator", appliesTo: "skill" },
+        down: { role: "defender", valueType: "pct", update: "add_pct_factor", placement: "denominator", appliesTo: "skill" }
       }
     }
   },

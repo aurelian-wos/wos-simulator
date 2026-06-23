@@ -17,7 +17,7 @@
       },
       "effects": {
         "WildlingRoar/1": {
-          "type": "active.hero.defense.up",
+          "type": "active.hero.damageTaken.down",
           "value": [
             10,
             20,

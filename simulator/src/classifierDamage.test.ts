@@ -145,10 +145,10 @@ test("classifier routes the complete native bucket policy into atomic buckets", 
     ["active.hero.damageTaken.down", "active.hero.damageTaken.down"],
     ["active.troop.damageTaken.up", "active.troop.damageTaken.up"],
     ["active.troop.damageTaken.down", "active.troop.damageTaken.down"],
-    ["type.normal.defense.up", "type.normal.defense.up"],
-    ["type.normal.defense.down", "type.normal.defense.down"],
-    ["type.skill.defense.up", "type.skill.defense.up"],
-    ["type.skill.defense.down", "type.skill.defense.down"]
+    ["type.normal.damageTaken.up", "type.normal.damageTaken.up"],
+    ["type.normal.damageTaken.down", "type.normal.damageTaken.down"],
+    ["type.skill.damageTaken.up", "type.skill.damageTaken.up"],
+    ["type.skill.damageTaken.down", "type.skill.damageTaken.down"]
   ]);
   const defenderEffectTypes = new Set([
     "active.hero.defense.up",
@@ -159,10 +159,10 @@ test("classifier routes the complete native bucket policy into atomic buckets", 
     "active.hero.damageTaken.down",
     "active.troop.damageTaken.up",
     "active.troop.damageTaken.down",
-    "type.normal.defense.up",
-    "type.normal.defense.down",
-    "type.skill.defense.up",
-    "type.skill.defense.down"
+    "type.normal.damageTaken.up",
+    "type.normal.damageTaken.down",
+    "type.skill.damageTaken.up",
+    "type.skill.damageTaken.down"
   ]);
 
   for (const [type, expectedBucket] of expected) {

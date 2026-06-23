@@ -51,7 +51,7 @@
       },
       "effects": {
         "IronStrength/1": {
-          "type": "active.hero.lethality.down",
+          "type": "active.hero.damage.down",
           "value": [
             10,
             20,

@@ -24,7 +24,7 @@
           }
         },
         "ViperFormation/2": {
-          "type": "active.hero.defense.up",
+          "type": "active.hero.damageTaken.down",
           "value": [
             10,
             15,
@@ -46,7 +46,7 @@
           "same_effect_stacking": "max"
         },
         "ViperFormation/3": {
-          "type": "active.hero.defense.up",
+          "type": "active.hero.damageTaken.down",
           "value": [
             10,
             25,
@@ -75,7 +75,7 @@
       },
       "effects": {
         "PrayerOfFlame/1": {
-          "type": "active.hero.lethality.up",
+          "type": "active.hero.damage.up",
           "value": [
             20,
             40,
@@ -99,7 +99,7 @@
       },
       "effects": {
         "BladeOfLight/1": {
-          "type": "active.hero.lethality.up",
+          "type": "active.hero.damage.up",
           "value": [
             12,
             24,
@@ -118,7 +118,7 @@
           }
         },
         "BladeOfLight/2": {
-          "type": "active.hero.defense.down",
+          "type": "active.hero.damageTaken.up",
           "value": [
             5,
             10,
@@ -131,8 +131,7 @@
           },
           "duration": {
             "type": "turn",
-            "value": 1,
-            "delay": 1
+            "value": 1
           },
           "same_effect_stacking": "add"
         }

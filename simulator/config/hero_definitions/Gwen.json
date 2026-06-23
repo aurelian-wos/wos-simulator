@@ -10,7 +10,7 @@
       },
       "effects": {
         "EagleVision/1": {
-          "type": "active.hero.defense.down",
+          "type": "active.hero.damageTaken.up",
           "value": [
             5,
             10,

@@ -12,7 +12,7 @@
       },
       "effects": {
         "VenomInfusion/1": {
-          "type": "active.hero.lethality.up",
+          "type": "active.hero.damage.up",
           "value": [
             20,
             40,
@@ -32,7 +32,7 @@
           }
         },
         "VenomInfusion/2": {
-          "type": "active.hero.lethality.down",
+          "type": "active.hero.damage.down",
           "value": [
             4,
             8,
@@ -59,7 +59,7 @@
       },
       "effects": {
         "ChemicalTerror/1": {
-          "type": "active.hero.lethality.up",
+          "type": "active.hero.damage.up",
           "value": [
             30,
             60,
@@ -80,7 +80,7 @@
           "same_effect_stacking": "max"
         },
         "ChemicalTerror/2": {
-          "type": "active.hero.lethality.down",
+          "type": "active.hero.damage.down",
           "value": [
             6,
             12,
@@ -108,7 +108,7 @@
       },
       "effects": {
         "ToxicRelease/1": {
-          "type": "active.hero.defense.down",
+          "type": "active.hero.damageTaken.up",
           "value": [
             6,
             12,
@@ -126,7 +126,7 @@
           "same_effect_stacking": "max"
         },
         "ToxicRelease/2": {
-          "type": "active.hero.lethality.down",
+          "type": "active.hero.damage.down",
           "value": [
             6,
             12,

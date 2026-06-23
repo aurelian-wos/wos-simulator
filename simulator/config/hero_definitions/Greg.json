@@ -17,7 +17,7 @@
       },
       "effects": {
         "SwordOfJustice/1": {
-          "type": "active.hero.lethality.up",
+          "type": "active.hero.damage.up",
           "value": [
             8,
             16,
@@ -51,7 +51,7 @@
       },
       "effects": {
         "DeterrenceOfLaw/1": {
-          "type": "active.hero.lethality.down",
+          "type": "active.hero.damage.down",
           "value": [
             10,
             20,

@@ -67,7 +67,7 @@
       },
       "effects": {
         "TacticalAssistance/1": {
-          "type": "active.hero.lethality.up",
+          "type": "active.hero.damage.up",
           "value": [
             6,
             12,

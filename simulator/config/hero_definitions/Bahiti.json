@@ -10,7 +10,7 @@
       },
       "effects": {
         "SixthSense/1": {
-          "type": "active.hero.defense.up",
+          "type": "active.hero.damageTaken.down",
           "value": [
             4,
             8,
@@ -35,7 +35,7 @@
       },
       "effects": {
         "Fluorescence/1": {
-          "type": "extra_skill_attack",
+          "type": "active.hero.lethality.up",
           "value": [
             10,
             20,
@@ -44,19 +44,12 @@
             50
           ],
           "units": {
-            "applies_to": "trigger.source",
-            "applies_vs": "trigger.target"
+            "applies_to": "trigger.source"
           },
           "duration": {
             "type": "attack",
             "value": 1
-          },
-          "trigger_damage_jobs": [
-            {
-              "source": "use.source",
-              "target": "effect.applies_vs"
-            }
-          ]
+          }
         }
       }
     }

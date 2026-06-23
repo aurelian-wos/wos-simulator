@@ -17,7 +17,7 @@
       },
       "effects": {
         "BadLuckStreak/1": {
-          "type": "active.hero.defense.down",
+          "type": "active.hero.damageTaken.up",
           "value": [
             10,
             20,
@@ -90,7 +90,7 @@
       },
       "effects": {
         "RitualDeciphering/1": {
-          "type": "active.hero.defense.up",
+          "type": "active.hero.damageTaken.down",
           "value": [
             10,
             20,
