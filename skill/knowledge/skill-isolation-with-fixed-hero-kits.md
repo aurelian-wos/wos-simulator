@@ -14,6 +14,11 @@ In game:
 hero = all currently unlocked and leveled Expedition skills
 ```
 
+Army deployment also allows only one main hero per troop class. A battle side
+can have at most one infantry-class hero, one lancer-class hero, and one
+marksman-class hero. Testcase specs that request two heroes of the same class on
+the same side are invalid game lineups, not hero-picker failures.
+
 Not possible in ordinary testing:
 
 ```text
