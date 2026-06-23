@@ -1,0 +1,24 @@
+{
+  "test_id": "wos451_gordon_s21_lancer_damage_up_bucket",
+  "description": "WOS-451 Gordon S2/1 lancer damage-dealt-up bucket discriminator. minxxx attacks WIP with Gordon + Flint + Jasser and 360 T6 lancers into 2100 T6 infantry. Candidate buckets: active.hero.damage.up, active.hero.attack.up, active.hero.lethality.up.",
+  "emulator": {
+    "attacker": { "instance": "minxxx" },
+    "defender": { "instance": "WIP" }
+  },
+  "attacker": {
+    "heroes": {
+      "Gordon": {},
+      "Flint": {},
+      "Jasser": {}
+    },
+    "troops": {
+      "lancer_t6": 360
+    }
+  },
+  "defender": {
+    "heroes": {},
+    "troops": {
+      "infantry_t6": 2100
+    }
+  }
+}

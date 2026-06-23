@@ -1,0 +1,28 @@
+{
+  "test_id": "wos451_bradley_s3_all_damage_up_bucket",
+  "description": "WOS-451 Bradley S3 all-troops damage-up bucket confirmation. WIP attacks minxxx with Bradley + Flint + Jessie and 2160 each T6 mixed into 800 each T6 mixed. Candidate buckets: active.hero.damage.up, active.hero.attack.up, active.hero.lethality.up.",
+  "emulator": {
+    "attacker": { "instance": "WIP" },
+    "defender": { "instance": "minxxx" }
+  },
+  "attacker": {
+    "heroes": {
+      "Bradley": {},
+      "Flint": {},
+      "Jessie": {}
+    },
+    "troops": {
+      "infantry_t6": 2160,
+      "lancer_t6": 2160,
+      "marksman_t6": 2160
+    }
+  },
+  "defender": {
+    "heroes": {},
+    "troops": {
+      "infantry_t6": 800,
+      "lancer_t6": 800,
+      "marksman_t6": 800
+    }
+  }
+}

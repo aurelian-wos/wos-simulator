@@ -12,7 +12,7 @@
       },
       "effects": {
         "VenomInfusion/1": {
-          "type": "active.hero.damage.up",
+          "type": "active.hero.attack.up",
           "value": [
             20,
             40,
@@ -23,8 +23,7 @@
           "units": {
             "applies_to": [
               "lancer"
-            ],
-            "applies_vs": "trigger.target"
+            ]
           },
           "duration": {
             "type": "attack",
@@ -41,8 +40,7 @@
             20
           ],
           "units": {
-            "applies_to": "trigger.target",
-            "applies_vs": "any"
+            "applies_to": "trigger.target"
           },
           "duration": {
             "type": "turn",
@@ -70,8 +68,7 @@
           "units": {
             "applies_to": [
               "lancer"
-            ],
-            "applies_vs": "any"
+            ]
           },
           "duration": {
             "type": "turn",

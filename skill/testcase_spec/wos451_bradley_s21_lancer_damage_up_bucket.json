@@ -1,0 +1,24 @@
+{
+  "test_id": "wos451_bradley_s21_lancer_damage_up_bucket",
+  "description": "WOS-451 Bradley S2/1 damage-to-lancer-up bucket discriminator. WIP attacks minxxx with Bradley + Flint + Jessie and 2800 T6 marksmen into 1040 T6 lancers. Candidate buckets: active.hero.damage.up, active.hero.attack.up, active.hero.lethality.up.",
+  "emulator": {
+    "attacker": { "instance": "WIP" },
+    "defender": { "instance": "minxxx" }
+  },
+  "attacker": {
+    "heroes": {
+      "Bradley": {},
+      "Flint": {},
+      "Jessie": {}
+    },
+    "troops": {
+      "marksman_t6": 2800
+    }
+  },
+  "defender": {
+    "heroes": {},
+    "troops": {
+      "lancer_t6": 1040
+    }
+  }
+}

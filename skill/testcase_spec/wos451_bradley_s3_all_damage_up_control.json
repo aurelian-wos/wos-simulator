@@ -1,0 +1,24 @@
+{
+  "test_id": "wos451_bradley_s3_all_damage_up_control",
+  "description": "WOS-451 paired no-hero control for Bradley S3 all-troops damage-up confirmation. WIP attacks minxxx with 2160 each T6 mixed into 800 each T6 mixed, matching the hero fixture accounts, roles, troop counts, and report path.",
+  "emulator": {
+    "attacker": { "instance": "WIP" },
+    "defender": { "instance": "minxxx" }
+  },
+  "attacker": {
+    "heroes": {},
+    "troops": {
+      "infantry_t6": 2160,
+      "lancer_t6": 2160,
+      "marksman_t6": 2160
+    }
+  },
+  "defender": {
+    "heroes": {},
+    "troops": {
+      "infantry_t6": 800,
+      "lancer_t6": 800,
+      "marksman_t6": 800
+    }
+  }
+}

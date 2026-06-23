@@ -1,0 +1,83 @@
+[
+  {
+    "test_id": "wos451_gordon_s11_lancer_damage_up_bucket",
+    "description": "WOS-451 Gordon S1/1 lancer damage-dealt-up bucket discriminator. minxxx attacks WIP with Gordon + Flint + Jasser and 500 T6 lancers into 2990 T6 infantry. Candidate buckets: active.hero.damage.up, active.hero.attack.up, active.hero.lethality.up.",
+    "attacker": {
+      "name": "[ARK]Piddlyminxx",
+      "heroes": {
+        "Flint": {
+          "skill_1": 2,
+          "skill_2": 2,
+          "skill_3": 1
+        },
+        "Gordon": {
+          "skill_1": 2,
+          "skill_2": 2,
+          "skill_3": 1
+        },
+        "Jasser": {
+          "skill_1": 4,
+          "skill_2": 4
+        }
+      },
+      "troops": {
+        "lancer_t6": 500
+      },
+      "stats": {
+        "inf": {
+          "attack": 384.7,
+          "defense": 373.5,
+          "lethality": 215.3,
+          "health": 216.5
+        },
+        "lanc": {
+          "attack": 485.5,
+          "defense": 480.8,
+          "lethality": 199.7,
+          "health": 201.0
+        },
+        "mark": {
+          "attack": 351.0,
+          "defense": 348.0,
+          "lethality": 221.8,
+          "health": 216.9
+        }
+      },
+      "joiner_heroes": {}
+    },
+    "defender": {
+      "name": "BBQ]XxWIPxX",
+      "heroes": {},
+      "troops": {
+        "infantry_t6": 2990
+      },
+      "stats": {
+        "inf": {
+          "attack": 221.4,
+          "defense": 221.7,
+          "lethality": 147.3,
+          "health": 155.7
+        },
+        "lanc": {
+          "attack": 194.7,
+          "defense": 193.0,
+          "lethality": 157.3,
+          "health": 148.4
+        },
+        "mark": {
+          "attack": 194.7,
+          "defense": 192.0,
+          "lethality": 148.6,
+          "health": 149.5
+        }
+      },
+      "joiner_heroes": {}
+    },
+    "game_report_result": [
+      {
+        "attacker": 0,
+        "defender": 1517
+      }
+    ]
+  }
+]
