@@ -47,6 +47,7 @@ const DAMAGE_UP = ["active.hero.damage.up", "active.hero.attack.up", "active.her
 const DAMAGE_DOWN = ["active.hero.damage.down", "active.hero.attack.down", "active.hero.lethality.down"];
 const DAMAGE_TAKEN_DOWN = ["active.hero.damageTaken.down", "active.hero.defense.up", "active.hero.health.up"];
 const DAMAGE_TAKEN_UP = ["active.hero.damageTaken.up", "active.hero.defense.down", "active.hero.health.down"];
+const MAX_T6_PER_TYPE = 2999;
 
 const experiments: Experiment[] = [
   {
@@ -222,6 +223,7 @@ function runExperiment(experiment: Experiment) {
     target_effect: `${experiment.target.hero}/${experiment.target.effectId}`,
     account: experiment.account,
     emulator_runnable: experiment.target.forcedLevels === undefined,
+    max_t6_per_type: MAX_T6_PER_TYPE,
     notes: experiment.notes,
     attacker_troops: tuned.experiment.attackerTroops,
     defender_troops: tuned.experiment.defenderTroops,
@@ -239,6 +241,7 @@ function tuneTroops(experiment: Experiment): { experiment: Experiment; gap: numb
         attackerTroops: scaleTroops(experiment.attackerTroops, attackerStep / 100),
         defenderTroops: scaleTroops(experiment.defenderTroops, defenderStep / 100)
       };
+      if (!withinTroopCap(candidate.attackerTroops) || !withinTroopCap(candidate.defenderTroops)) continue;
       const scores = candidate.target.candidates.map((type) => {
         const result = simulateBattle(inputForExperiment(candidate), configWithPatchedEffect(candidate.target.hero, candidate.target.effectId, type), { mode: "fast" });
         return total(result.remaining.attacker) - total(result.remaining.defender);
@@ -252,6 +255,10 @@ function tuneTroops(experiment: Experiment): { experiment: Experiment; gap: numb
 
 function scaleTroops(troops: Record<string, number>, scale: number): Record<string, number> {
   return Object.fromEntries(Object.entries(troops).map(([key, value]) => [key, Math.max(1, Math.round(value * scale))]));
+}
+
+function withinTroopCap(troops: Record<string, number>): boolean {
+  return Object.values(troops).every((value) => value <= MAX_T6_PER_TYPE);
 }
 
 function configWithPatchedEffect(heroName: string, effectId: string, candidateType: string): SimulatorConfig {

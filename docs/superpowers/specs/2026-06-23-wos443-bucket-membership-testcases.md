@@ -35,6 +35,8 @@ Generate the current simulator matrix with:
 WOS443_PLAYER_HERO_SKILLS=skill/data/player_hero_skills.json npx --yes tsx scripts/wos443_bucket_membership_matrix.ts
 ```
 
+The generator enforces `max_t6_per_type: 2999` while tuning each fixture, per the review request to keep any single T6 troop type under 3000.
+
 Current captured levels used for the table below:
 
 - minxxx: Edith 3/3/3, Gordon 2/2/0, Bradley 4/3/3
@@ -46,17 +48,17 @@ Outcome is signed remaining score: positive means attacker survivors, negative m
 
 | Target skill | Runnable now? | Troop shape | Candidate outcomes | Minimum gap | Use |
 |---|---:|---|---|---:|---|
-| Edith S1/1 marksman damage taken down (`StrategicBalance/1`) | yes | WIP attacks 4800 marksman; minxxx defends Edith+Sergey+Patrick with 700 marksman | `damageTaken.down` = -25; `defense.up` = +158; `health.up` = +297 | 139 | Battle Runner-ready after exact no-hero control |
-| Edith S1/2 lancer damage dealt up (`StrategicBalance/2`) | yes | WIP attacks 9000 infantry; minxxx defends Edith+Patrick+Jasser with 1560 lancer | `damage.up` = +1619; `attack.up` = +1744; `lethality.up` = +1843 | 99 | Battle Runner-ready if troop availability supports counts |
-| Edith S2 infantry damage taken down (`Ironclad/1`) | yes | WIP attacks 8000 infantry; minxxx defends Edith+Sergey+Patrick with 2400 infantry | `damageTaken.down` = -839; `defense.up` = -824; `health.up` = -812 | 12 | Marginal but usable only if report parsing is tight; prefer rerun/tune if availability differs |
-| Gordon S1/1 lancer damage dealt up (`VenomInfusion/1`) | yes | minxxx attacks Gordon+Patrick+Jasser with 1000 lancer; WIP defends 6120 infantry | `damage.up` = +8; `attack.up` = -351; `lethality.up` = -776 | 359 | Battle Runner-ready only if WIP can field defender count; otherwise retune with fresh troop limits |
-| Gordon S1/2 target damage dealt down (`VenomInfusion/2`) | yes | minxxx defends Gordon+Sergey+Lynn with 720 lancer; WIP attacks 5700 lancer | `damage.down` = +1740; `attack.down` = +1772; `lethality.down` = +1769 | 3 | Not acceptable as a bucket discriminator; do not assign without a better design |
-| Gordon S2/1 lancer damage dealt up (`ChemicalTerror/1`) | yes | minxxx attacks Gordon+Patrick+Jasser with 1000 lancer; WIP defends 6120 infantry | `damage.up` = +7; `attack.up` = -352; `lethality.up` = -776 | 359 | Battle Runner-ready only if WIP can field defender count; otherwise retune with fresh troop limits |
-| Gordon S2/2 all enemy damage dealt down (`ChemicalTerror/2`) | yes | WIP attacks 3420 each mixed; minxxx defends Gordon+Sergey+Lynn with 3200 lancer | `damage.down` = +2791; `attack.down` = +3013; `lethality.down` = +2854 | 63 | Battle Runner-ready if troop availability supports counts |
-| Gordon S3/1 enemy infantry damage taken up (`ToxicRelease/1`) | no, captured S3=0 | simulator-only: minxxx attacks Gordon+Renee with 240 lancer; WIP defends 360 infantry | `damageTaken.up` = +232; `defense.down` = +232; `health.down` = +232 | 0 | Blocked: current accounts cannot check; also no live reference separates candidates |
-| Gordon S3/2 enemy marksman damage dealt down (`ToxicRelease/2`) | no, captured S3=0 | simulator-only: WIP attacks 7560 marksman; minxxx defends Gordon+Sergey+Lynn with 980 lancer | `damage.down` = +1056; `attack.down` = +1104; `lethality.down` = +1110 | 6 | Blocked by locked S3 and weak separation |
-| Bradley S2/1 damage to lancer up (`PowerShot/1`) | yes | minxxx attacks Bradley+Jasser with 1260 marksman; WIP defends 7560 lancer | `damage.up` = -775; `attack.up` = -1099; `lethality.up` = -1196 | 97 | Battle Runner-ready only if WIP can field defender count; otherwise retune with fresh troop limits |
-| Bradley S2/2 damage to infantry up (`PowerShot/2`) | yes | minxxx attacks Bradley+Jasser with 900 marksman; WIP defends 5760 infantry | `damage.up` = +57; `attack.up` = -162; `lethality.up` = -300 | 138 | Battle Runner-ready only if WIP can field defender count; otherwise retune with fresh troop limits |
+| Edith S1/1 marksman damage taken down (`StrategicBalance/1`) | yes | WIP attacks 2880 marksman; minxxx defends Edith+Sergey+Patrick with 400 marksman | `damageTaken.down` = +434; `defense.up` = +498; `health.up` = +539 | 41 | Battle Runner-ready after exact no-hero control |
+| Edith S1/2 lancer damage dealt up (`StrategicBalance/2`) | yes | WIP attacks 2520 infantry; minxxx defends Edith+Patrick+Jasser with 390 lancer | `damage.up` = +916; `attack.up` = +937; `lethality.up` = +954 | 17 | Below 20-troop discriminator threshold; do not assign without a stronger design |
+| Edith S2 infantry damage taken down (`Ironclad/1`) | yes | WIP attacks 2880 infantry; minxxx defends Edith+Sergey+Patrick with 900 infantry | `damageTaken.down` = -450; `defense.up` = -445; `health.up` = -440 | 5 | Not acceptable as a bucket discriminator under the troop cap |
+| Gordon S1/1 lancer damage dealt up (`VenomInfusion/1`) | yes | minxxx attacks Gordon+Patrick+Jasser with 200 lancer; WIP defends 1440 infantry | `damage.up` = -512; `attack.up` = -496; `lethality.up` = -513 | 1 | Not acceptable as a bucket discriminator under the troop cap |
+| Gordon S1/2 target damage dealt down (`VenomInfusion/2`) | yes | WIP attacks 2100 lancer; minxxx defends Gordon+Sergey+Lynn with 240 lancer | `damage.down` = +855; `attack.down` = +856; `lethality.down` = +849 | 1 | Not acceptable as a bucket discriminator under the troop cap |
+| Gordon S2/1 lancer damage dealt up (`ChemicalTerror/1`) | yes | minxxx attacks Gordon+Patrick+Jasser with 200 lancer; WIP defends 1440 infantry | `damage.up` = -512; `attack.up` = -496; `lethality.up` = -513 | 1 | Not acceptable as a bucket discriminator under the troop cap |
+| Gordon S2/2 all enemy damage dealt down (`ChemicalTerror/2`) | yes | WIP attacks 2700 each mixed; minxxx defends Gordon+Sergey+Lynn with 2560 lancer | `damage.down` = +558; `attack.down` = +593; `lethality.down` = -143 | 35 | Battle Runner-ready after exact no-hero control |
+| Gordon S3/1 enemy infantry damage taken up (`ToxicRelease/1`) | no, captured S3=0 | simulator-only: minxxx attacks Gordon+Renee with 240 lancer; WIP defends 360 infantry | `damageTaken.up` = +227; `defense.down` = +227; `health.down` = +227 | 0 | Blocked: current accounts cannot check; also no live reference separates candidates |
+| Gordon S3/2 enemy marksman damage dealt down (`ToxicRelease/2`) | no, captured S3=0 | simulator-only: WIP attacks 1080 marksman; minxxx defends Gordon+Sergey+Lynn with 140 lancer | `damage.down` = +75; `attack.down` = +73; `lethality.down` = +66 | 2 | Blocked by locked S3 and weak separation |
+| Bradley S2/1 damage to lancer up (`PowerShot/1`) | yes | minxxx attacks Bradley+Jasser with 180 marksman; WIP defends 360 lancer | `damage.up` = +153; `attack.up` = +153; `lethality.up` = +153 | 0 | Not acceptable as a bucket discriminator under the troop cap; current config maps this effect to `active.hero.lethality.up` |
+| Bradley S2/2 damage to infantry up (`PowerShot/2`) | yes | minxxx attacks Bradley+Jasser with 180 marksman; WIP defends 360 infantry | `damage.up` = +159; `attack.up` = +158; `lethality.up` = +158 | 0 | Not acceptable as a bucket discriminator under the troop cap; current config maps this effect to `active.hero.lethality.up` |
 | Bradley S3 all troops damage up (`TacticalAssistance/1`) | yes | WIP attacks Bradley+Jasser with 2520 each mixed; minxxx defends 900 each mixed | `damage.up` = +1395; `attack.up` = +479; `lethality.up` = -93 | 572 | Battle Runner-ready if WIP can field attacker count |
 
 ## Non-goals
@@ -68,7 +70,7 @@ Outcome is signed remaining score: positive means attacker survivors, negative m
 
 ## Acceptance criteria
 
-- CEO/board confirms which Battle Runner-ready probes to run.
+- CEO/board confirms whether to run the three capped Battle Runner-ready probes: Edith S1/1, Gordon S2/2, and Bradley S3.
 - Fresh hero skill capture exists for both instances before the batch.
 - Each selected hero fixture has a same-session exact no-hero control.
 - Live observed signed remaining score lands clearly closest to one candidate row and at least 20 troops away from the next candidate row.
@@ -85,8 +87,8 @@ WOS443_PLAYER_HERO_SKILLS=skill/data/player_hero_skills.json npx --yes tsx scrip
 
 ## Risk notes
 
-- Several strong probes require thousands of troops on one side. Battle Runner must verify troop availability before execution. If counts are unavailable, retune with the script using actual limits; do not shrink counts blindly and keep the old expected rows.
-- Gordon S1/2 is currently too weak to prove bucket membership.
+- The current capped search leaves only three probes above the 20-troop discriminator threshold. Battle Runner must not run the weak rows as bucket proof without a revised matrix.
+- Gordon S1/1, Gordon S1/2, Gordon S2/1, Edith S1/2, Edith S2, and Bradley S2 are currently too weak to prove bucket membership under the per-type T6 cap.
 - Gordon S3 is blocked by captured skill level 0 on both minxxx and WIP.
 - The simulator matrix uses captured skill levels from `skill/data/player_hero_skills.json`. Refresh this file before final assignment if account skills changed.
 
