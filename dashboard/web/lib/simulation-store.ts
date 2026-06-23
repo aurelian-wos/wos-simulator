@@ -7,6 +7,7 @@ import { resolveSimulatorRoot } from "@/lib/simulator-root";
 import {
   buildSimulationShareUrl,
   buildSimulationRunTitle,
+  isSavedSimulationKind,
   type SavedSimulationKind,
   type SavedSimulationRequest,
   type SavedSimulationResult,
@@ -20,6 +21,18 @@ const ID_RE = /^[A-Za-z0-9_-]{8,128}$/;
 export const SIM_RUNS_DIR =
   process.env.SIM_RUNS_DIR ??
   path.join(resolveSimulatorRoot(), "tmp", "simulate-runs");
+
+export interface SimulationRunListOptions {
+  limit?: number;
+  offset?: number;
+  kinds?: readonly SavedSimulationKind[];
+}
+
+export interface SimulationRunListPage {
+  runs: SavedSimulationRunListItem[];
+  has_more: boolean;
+  next_offset: number;
+}
 
 function runPath(id: string): string {
   if (!ID_RE.test(id)) {
@@ -37,7 +50,7 @@ function withShareUrl(
 ): SavedSimulationRunResponse {
   return {
     ...doc,
-    share_url: buildSimulationShareUrl(doc.id),
+    share_url: buildSimulationShareUrl(doc.id, doc.kind),
   };
 }
 
@@ -52,7 +65,7 @@ function assertSavedSimulationDoc(
     doc.version !== 1 ||
     typeof doc.id !== "string" ||
     !ID_RE.test(doc.id) ||
-    (doc.kind !== "simulate" && doc.kind !== "optimize_ratio") ||
+    !isSavedSimulationKind(doc.kind) ||
     typeof doc.created_at !== "string" ||
     doc.request === undefined ||
     doc.result === undefined
@@ -109,8 +122,20 @@ export async function readSimulationRun(
 export async function listSimulationRuns(
   limit = 20,
 ): Promise<SavedSimulationRunListItem[]> {
+  return (await listSimulationRunsPage({ limit })).runs;
+}
+
+export async function listSimulationRunsPage(
+  options: SimulationRunListOptions = {},
+): Promise<SimulationRunListPage> {
   await ensureStoreDir();
   return withDirectoryLock(SIM_RUNS_DIR, async () => {
+    const limit = Math.max(1, Math.min(100, Math.floor(options.limit ?? 20)));
+    const offset = Math.max(0, Math.floor(options.offset ?? 0));
+    const kindSet =
+      options.kinds && options.kinds.length > 0
+        ? new Set(options.kinds)
+        : null;
     const entries = await fs.readdir(SIM_RUNS_DIR, { withFileTypes: true });
     const docs: SavedSimulationRunDocument[] = [];
 
@@ -121,22 +146,27 @@ export async function listSimulationRuns(
           path.join(SIM_RUNS_DIR, entry.name),
           "utf8",
         );
-        docs.push(assertSavedSimulationDoc(JSON.parse(raw)));
+        const doc = assertSavedSimulationDoc(JSON.parse(raw));
+        if (kindSet && !kindSet.has(doc.kind)) continue;
+        docs.push(doc);
       } catch {
         // Ignore partial or stale scratch files so one bad save does not break
         // the recent-run picker.
       }
     }
 
-    return docs
-      .sort((a, b) => b.created_at.localeCompare(a.created_at))
-      .slice(0, Math.max(1, Math.min(100, limit)))
-      .map((doc) => ({
+    const sorted = docs.sort((a, b) => b.created_at.localeCompare(a.created_at));
+    const pageDocs = sorted.slice(offset, offset + limit);
+    return {
+      runs: pageDocs.map((doc) => ({
         id: doc.id,
         kind: doc.kind,
         created_at: doc.created_at,
-        share_url: buildSimulationShareUrl(doc.id),
-        title: buildSimulationRunTitle(doc.request),
-      }));
+        share_url: buildSimulationShareUrl(doc.id, doc.kind),
+        title: buildSimulationRunTitle(doc.request, doc.kind),
+      })),
+      has_more: offset + pageDocs.length < sorted.length,
+      next_offset: offset + pageDocs.length,
+    };
   });
 }

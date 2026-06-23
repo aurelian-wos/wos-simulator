@@ -1,6 +1,6 @@
 import SimulateClient from "./SimulateClient";
 import { readSimulationRun } from "@/lib/simulation-store";
-import type { SavedSimulationRunResponse } from "@/lib/simulate-run";
+import { isPvpSavedSimulationKind, type SavedSimulationRunResponse } from "@/lib/simulate-run";
 
 export const dynamic = "force-dynamic";
 
@@ -15,9 +15,13 @@ export default async function SimulatePage({ searchParams }: PageProps) {
 
   if (run) {
     try {
-      initialSavedRun = await readSimulationRun(run);
-      if (!initialSavedRun) {
+      const saved = await readSimulationRun(run);
+      if (!saved) {
         initialSavedRunError = `No saved simulation found for ${run}`;
+      } else if (!isPvpSavedSimulationKind(saved.kind)) {
+        initialSavedRunError = `Saved run ${run} belongs to Bear Sim.`;
+      } else {
+        initialSavedRun = saved;
       }
     } catch (err) {
       initialSavedRunError =

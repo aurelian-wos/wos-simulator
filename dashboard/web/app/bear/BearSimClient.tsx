@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type FocusEventHandler } from "react";
+import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useMemo, useRef, useState, type FocusEventHandler } from "react";
 import OptimizeRatioScatterChart from "@/components/OptimizeRatioScatterChart";
 import SimulateOutcomeChart from "@/components/SimulateOutcomeChart";
-import type { OcrResult, OcrSideData, UploadActiveModifiers } from "@/components/UploadReportModal";
+import type { OcrResult, UploadActiveModifiers } from "@/components/UploadReportModal";
 import type { TroopCategory } from "@/lib/heroes-catalogue";
 import {
   DEFAULT_INFANTRY_MAX_PCT,
@@ -28,9 +29,20 @@ import type {
   BearOptimizeRatioPoint,
   BearOptimizeRatioRequestPayload,
   BearOptimizeRatioResult,
+  BearOptimizeRatioApiResponse,
   BearSimRequestPayload,
   BearSimResult,
+  BearSimApiResponse,
   SimulateTrace,
+} from "@/lib/simulate-run";
+import {
+  BEAR_SAVED_RUN_KINDS,
+  buildSimulationRunTitle,
+  isBearSavedSimulationKind,
+  type SavedSimulationKind,
+  type SavedSimulationResult,
+  type SavedSimulationRunListItem,
+  type SavedSimulationRunResponse,
 } from "@/lib/simulate-run";
 import {
   cleanStatPresetName,
@@ -53,17 +65,62 @@ import {
   mergeSideFromOcr,
   newStatPresetId,
   ProgressBar,
+  RecentRunsModal,
   ResultCard,
   saveLocalStatPresets,
   SidePanel,
   sideWithPresetStats,
+  sideFromPayload,
   SkillUseTable,
   toApiPayload,
   type SideState,
 } from "@/app/simulate/SimulateClient";
 
-const CATEGORIES: TroopCategory[] = ["infantry", "lancer", "marksman"];
 const RALLY_MODE = true;
+const RECENT_RUNS_PAGE_SIZE = 20;
+const DEFAULT_PAGE_TITLE = "Bear Sim - WOS Simulator Dashboard";
+const SAVED_RUN_DATE_FORMATTER = new Intl.DateTimeFormat("en-GB", {
+  dateStyle: "medium",
+  timeStyle: "medium",
+  timeZone: "UTC",
+  hour12: false,
+});
+
+interface BearSimClientProps {
+  initialRunId?: string | null;
+  initialSavedRun?: SavedSimulationRunResponse | null;
+  initialSavedRunError?: string | null;
+}
+
+interface SavedRunMeta {
+  id: string;
+  kind: SavedSimulationKind;
+  createdAt: string;
+  shareUrl: string;
+  title: string;
+}
+
+interface SaveMetaPayload {
+  saved_run_id?: string;
+  saved_at?: string;
+  saved_kind?: SavedSimulationKind;
+  share_url?: string;
+}
+
+interface InitialBearSavedRunState {
+  player: SideState;
+  replicates: number;
+  result: BearSimApiResponse | null;
+  optimizeResult: BearOptimizeRatioApiResponse | null;
+  optimizeReplicates: number;
+  optimizeStepInput: string;
+  optimizeInfantryMinPct: number;
+  optimizeInfantryMaxPct: number;
+  optimizeSearchMode: OptimizeSearchMode;
+  loadedPresetName: string | null;
+  savedRunMeta: SavedRunMeta | null;
+  savedRunError: string | null;
+}
 
 const selectFocusedInputText: FocusEventHandler<HTMLDivElement> = (event) => {
   const target = event.target;
@@ -170,12 +227,119 @@ function bearPointForStandardChart(point: BearOptimizeRatioPoint): OptimizeRatio
   };
 }
 
-export default function BearSimClient() {
-  const [player, setPlayer] = useState<SideState>(() => defaultSide());
-  const [replicates, setReplicates] = useState(1000);
+function clampValue(value: number | undefined, fallback: number): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+function formatSavedRunTimestamp(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) {
+    return iso;
+  }
+  return `${SAVED_RUN_DATE_FORMATTER.format(date)} UTC`;
+}
+
+function buildInitialBearSavedRunState(
+  saved: SavedSimulationRunResponse | null,
+  error: string | null,
+): InitialBearSavedRunState {
+  const base: InitialBearSavedRunState = {
+    player: defaultSide(),
+    replicates: 1000,
+    result: null,
+    optimizeResult: null,
+    optimizeReplicates: DEFAULT_OPTIMIZE_REPLICATES,
+    optimizeStepInput: "",
+    optimizeInfantryMinPct: DEFAULT_INFANTRY_MIN_PCT,
+    optimizeInfantryMaxPct: DEFAULT_INFANTRY_MAX_PCT,
+    optimizeSearchMode: DEFAULT_OPTIMIZE_SEARCH_MODE,
+    loadedPresetName: null,
+    savedRunMeta: null,
+    savedRunError: error ?? null,
+  };
+
+  if (!saved) return base;
+  if (!isBearSavedSimulationKind(saved.kind)) {
+    return {
+      ...base,
+      savedRunError: `Saved run ${saved.id} belongs to the PvP simulator.`,
+    };
+  }
+
+  const request = saved.request as BearSimRequestPayload | BearOptimizeRatioRequestPayload;
+  const loadedPresetName =
+    typeof request.player?.stat_profile_name === "string"
+      ? request.player.stat_profile_name
+      : null;
+  const savedRunMeta = {
+    id: saved.id,
+    kind: saved.kind,
+    createdAt: saved.created_at,
+    shareUrl: saved.share_url,
+    title: buildSimulationRunTitle(saved.request, saved.kind),
+  };
+
+  if (saved.kind === "bear_simulate") {
+    return {
+      ...base,
+      player: sideFromPayload(request.player),
+      replicates: Math.max(1, Math.min(5000, clampValue(request.replicates, 1000))),
+      loadedPresetName,
+      savedRunMeta,
+      result: {
+        ...(saved.result as BearSimResult),
+        saved_run_id: saved.id,
+        saved_at: saved.created_at,
+        saved_kind: saved.kind,
+        share_url: saved.share_url,
+      },
+      savedRunError: null,
+    };
+  }
+
+  const optimizeRequest = request as BearOptimizeRatioRequestPayload;
+  return {
+    ...base,
+    player: sideFromPayload(optimizeRequest.player),
+    replicates: Math.max(1, Math.min(5000, clampValue(optimizeRequest.replicates, 1000))),
+    loadedPresetName,
+    savedRunMeta,
+    optimizeResult: {
+      ...(saved.result as BearOptimizeRatioResult),
+      saved_run_id: saved.id,
+      saved_at: saved.created_at,
+      saved_kind: saved.kind,
+      share_url: saved.share_url,
+    },
+    optimizeReplicates: Math.max(
+      1,
+      Math.min(500, clampValue(optimizeRequest.search_replicates, DEFAULT_OPTIMIZE_REPLICATES)),
+    ),
+    optimizeStepInput: Number.isFinite(optimizeRequest.grid_step)
+      ? String(optimizeRequest.grid_step)
+      : "",
+    optimizeInfantryMinPct: clampValue(optimizeRequest.infantry_min_pct, DEFAULT_INFANTRY_MIN_PCT),
+    optimizeInfantryMaxPct: clampValue(optimizeRequest.infantry_max_pct, DEFAULT_INFANTRY_MAX_PCT),
+    optimizeSearchMode: optimizeRequest.search_mode === "grid" ? "grid" : DEFAULT_OPTIMIZE_SEARCH_MODE,
+    savedRunError: null,
+  };
+}
+
+export default function BearSimClient({
+  initialRunId = null,
+  initialSavedRun = null,
+  initialSavedRunError = null,
+}: BearSimClientProps) {
+  const router = useRouter();
+  const initialState = useMemo(
+    () => buildInitialBearSavedRunState(initialSavedRun, initialSavedRunError),
+    [initialSavedRun, initialSavedRunError],
+  );
+  const [player, setPlayer] = useState<SideState>(() => initialState.player);
+  const [replicates, setReplicates] = useState(() => initialState.replicates);
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<BearSimResult | null>(null);
-  const [battleTrace, setBattleTrace] = useState<SimulateTrace | null>(null);
+  const [result, setResult] = useState<BearSimResult | BearSimApiResponse | null>(() => initialState.result);
+  const [battleTrace, setBattleTrace] = useState<SimulateTrace | null>(() => initialState.result?.trace ?? null);
   const [traceLoadingSeed, setTraceLoadingSeed] = useState<string | number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [traceError, setTraceError] = useState<string | null>(null);
@@ -185,22 +349,33 @@ export default function BearSimClient() {
 
   const [statPresets, setStatPresets] = useState<PlayerStatPreset[]>([]);
   const [loadedPresetId, setLoadedPresetId] = useState<string | null>(null);
-  const [loadedPresetName, setLoadedPresetName] = useState<string | null>(null);
+  const [loadedPresetName, setLoadedPresetName] = useState<string | null>(() => initialState.loadedPresetName);
   const [presetOpen, setPresetOpen] = useState(false);
   const [presetDraftName, setPresetDraftName] = useState("Bear profile");
   const [presetStatus, setPresetStatus] = useState<{ kind: "ok" | "error"; message: string } | null>(null);
 
   const [optimizeLoading, setOptimizeLoading] = useState(false);
   const [optimizeError, setOptimizeError] = useState<string | null>(null);
-  const [optimizeResult, setOptimizeResult] = useState<BearOptimizeRatioResult | null>(null);
+  const [optimizeResult, setOptimizeResult] = useState<BearOptimizeRatioResult | BearOptimizeRatioApiResponse | null>(() => initialState.optimizeResult);
   const [selectedOptimizeKey, setSelectedOptimizeKey] = useState<string | null>(null);
   const [optimizePanelOpen, setOptimizePanelOpen] = useState(false);
-  const [optimizeReplicates, setOptimizeReplicates] = useState(DEFAULT_OPTIMIZE_REPLICATES);
-  const [optimizeStepInput, setOptimizeStepInput] = useState("");
-  const [optimizeInfantryMinPct, setOptimizeInfantryMinPct] = useState(DEFAULT_INFANTRY_MIN_PCT);
-  const [optimizeInfantryMaxPct, setOptimizeInfantryMaxPct] = useState(DEFAULT_INFANTRY_MAX_PCT);
-  const [optimizeSearchMode, setOptimizeSearchMode] = useState<OptimizeSearchMode>(DEFAULT_OPTIMIZE_SEARCH_MODE);
+  const [optimizeReplicates, setOptimizeReplicates] = useState(() => initialState.optimizeReplicates);
+  const [optimizeStepInput, setOptimizeStepInput] = useState(() => initialState.optimizeStepInput);
+  const [optimizeInfantryMinPct, setOptimizeInfantryMinPct] = useState(() => initialState.optimizeInfantryMinPct);
+  const [optimizeInfantryMaxPct, setOptimizeInfantryMaxPct] = useState(() => initialState.optimizeInfantryMaxPct);
+  const [optimizeSearchMode, setOptimizeSearchMode] = useState<OptimizeSearchMode>(() => initialState.optimizeSearchMode);
   const [optimizeProgress, setOptimizeProgress] = useState<{ done: number; total: number } | null>(null);
+  const [savedRunMeta, setSavedRunMeta] = useState<SavedRunMeta | null>(() => initialState.savedRunMeta);
+  const [savedRunError, setSavedRunError] = useState<string | null>(() => initialState.savedRunError);
+  const [loadingSavedRun, setLoadingSavedRun] = useState(false);
+  const [recentRunsOpen, setRecentRunsOpen] = useState(false);
+  const [recentRuns, setRecentRuns] = useState<SavedSimulationRunListItem[]>([]);
+  const [recentRunsLoading, setRecentRunsLoading] = useState(false);
+  const [recentRunsLoadingMore, setRecentRunsLoadingMore] = useState(false);
+  const [recentRunsHasMore, setRecentRunsHasMore] = useState(false);
+  const [recentRunsError, setRecentRunsError] = useState<string | null>(null);
+  const loadedRunIdRef = useRef<string | null>(initialSavedRun?.id ?? null);
+  const previousInitialRunIdRef = useRef<string | null>(initialRunId);
 
   useEffect(() => {
     try {
@@ -212,6 +387,180 @@ export default function BearSimClient() {
       });
     }
   }, []);
+
+  useEffect(() => {
+    document.title = savedRunMeta
+      ? `${savedRunMeta.title} - WOS Simulator`
+      : DEFAULT_PAGE_TITLE;
+    return () => {
+      document.title = "WOS Simulator Dashboard";
+    };
+  }, [savedRunMeta]);
+
+  useEffect(() => {
+    if (!recentRunsOpen) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setRecentRunsOpen(false);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [recentRunsOpen]);
+
+  const fetchRecentRuns = useCallback(async (offset: number) => {
+    if (offset === 0) setRecentRunsLoading(true);
+    else setRecentRunsLoadingMore(true);
+    setRecentRunsError(null);
+    try {
+      const params = new URLSearchParams({
+        limit: String(RECENT_RUNS_PAGE_SIZE),
+        offset: String(offset),
+        kinds: BEAR_SAVED_RUN_KINDS.join(","),
+      });
+      const res = await fetch(`/api/simulate/runs?${params}`, {
+        cache: "no-store",
+      });
+      const data = (await res.json()) as {
+        runs?: SavedSimulationRunListItem[];
+        has_more?: boolean;
+        next_offset?: number;
+        error?: string;
+      };
+      if (!res.ok) {
+        throw new Error(data.error || `Recent runs request failed with ${res.status}`);
+      }
+      setRecentRuns((prev) => offset === 0 ? data.runs ?? [] : [...prev, ...(data.runs ?? [])]);
+      setRecentRunsHasMore(Boolean(data.has_more));
+    } catch (err) {
+      setRecentRunsError(err instanceof Error ? err.message : "Failed to load recent runs");
+    } finally {
+      if (offset === 0) setRecentRunsLoading(false);
+      else setRecentRunsLoadingMore(false);
+    }
+  }, []);
+
+  const refreshRecentRuns = useCallback(async () => {
+    await fetchRecentRuns(0);
+  }, [fetchRecentRuns]);
+
+  const loadMoreRecentRuns = useCallback(async () => {
+    await fetchRecentRuns(recentRuns.length);
+  }, [fetchRecentRuns, recentRuns.length]);
+
+  useEffect(() => {
+    if (recentRunsOpen) void refreshRecentRuns();
+  }, [recentRunsOpen, refreshRecentRuns]);
+
+  const storeSavedRunMeta = useCallback((meta: SavedRunMeta) => {
+    loadedRunIdRef.current = meta.id;
+    setSavedRunMeta(meta);
+    setSavedRunError(null);
+  }, []);
+
+  const applySavedRun = useCallback((saved: SavedSimulationRunResponse) => {
+    if (!isBearSavedSimulationKind(saved.kind)) {
+      setSavedRunError(`Saved run ${saved.id} belongs to the PvP simulator.`);
+      return;
+    }
+
+    const request = saved.request as BearSimRequestPayload | BearOptimizeRatioRequestPayload;
+    setPlayer(sideFromPayload(request.player));
+    setLoadedPresetId(null);
+    setLoadedPresetName(
+      typeof request.player?.stat_profile_name === "string"
+        ? request.player.stat_profile_name
+        : null,
+    );
+    setReplicates(Math.max(1, Math.min(5000, clampValue(request.replicates, 1000))));
+    setUploadWarnings([]);
+    setError(null);
+    setTraceError(null);
+    setOptimizeError(null);
+
+    if (saved.kind === "bear_simulate") {
+      setResult({
+        ...(saved.result as BearSimResult),
+        saved_run_id: saved.id,
+        saved_at: saved.created_at,
+        saved_kind: saved.kind,
+        share_url: saved.share_url,
+      });
+      setBattleTrace((saved.result as BearSimResult).trace ?? null);
+      setOptimizeResult(null);
+      setSelectedOptimizeKey(null);
+    } else {
+      const optimizeRequest = saved.request as BearOptimizeRatioRequestPayload;
+      setOptimizeReplicates(Math.max(1, Math.min(500, clampValue(optimizeRequest.search_replicates, DEFAULT_OPTIMIZE_REPLICATES))));
+      setOptimizeStepInput(Number.isFinite(optimizeRequest.grid_step) ? String(optimizeRequest.grid_step) : "");
+      setOptimizeInfantryMinPct(clampValue(optimizeRequest.infantry_min_pct, DEFAULT_INFANTRY_MIN_PCT));
+      setOptimizeInfantryMaxPct(clampValue(optimizeRequest.infantry_max_pct, DEFAULT_INFANTRY_MAX_PCT));
+      setOptimizeSearchMode(optimizeRequest.search_mode === "grid" ? "grid" : DEFAULT_OPTIMIZE_SEARCH_MODE);
+      setResult(null);
+      setBattleTrace(null);
+      setSelectedOptimizeKey(null);
+      setOptimizeResult({
+        ...(saved.result as BearOptimizeRatioResult),
+        saved_run_id: saved.id,
+        saved_at: saved.created_at,
+        saved_kind: saved.kind,
+        share_url: saved.share_url,
+      });
+    }
+
+    storeSavedRunMeta({
+      id: saved.id,
+      kind: saved.kind,
+      createdAt: saved.created_at,
+      shareUrl: saved.share_url,
+      title: buildSimulationRunTitle(saved.request, saved.kind),
+    });
+  }, [storeSavedRunMeta]);
+
+  useEffect(() => {
+    const previousInitialRunId = previousInitialRunIdRef.current;
+    previousInitialRunIdRef.current = initialRunId;
+    if (!initialRunId) {
+      if (!previousInitialRunId) {
+        setLoadingSavedRun(false);
+        return;
+      }
+      setLoadingSavedRun(false);
+      setSavedRunMeta(null);
+      setSavedRunError(null);
+      loadedRunIdRef.current = null;
+      return;
+    }
+    if (loadedRunIdRef.current === initialRunId) {
+      setLoadingSavedRun(false);
+      return;
+    }
+
+    let cancelled = false;
+    setLoadingSavedRun(true);
+    setSavedRunError(null);
+
+    void (async () => {
+      try {
+        const res = await fetch(`/api/simulate/runs/${encodeURIComponent(initialRunId)}`, {
+          cache: "no-store",
+        });
+        const data = (await res.json()) as SavedSimulationRunResponse | { error?: string };
+        if (!res.ok) {
+          throw new Error(("error" in data && data.error) || `Saved run request failed with ${res.status}`);
+        }
+        if (cancelled) return;
+        applySavedRun(data as SavedSimulationRunResponse);
+      } catch (err) {
+        if (cancelled) return;
+        setSavedRunError(err instanceof Error ? err.message : "Failed to load saved run");
+      } finally {
+        if (!cancelled) setLoadingSavedRun(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [applySavedRun, initialRunId]);
 
   const totalTroops = useMemo(() => totalTroopsForCounts(player.troops), [player.troops]);
   const resolvedOptimizeStep = useMemo(() => {
@@ -297,6 +646,64 @@ export default function BearSimClient() {
     setPresetStatus({ kind: "ok", message: `Loaded ${preset.name}.` });
   }
 
+  function maybeActivateSavedRun(
+    meta: SaveMetaPayload,
+    request: BearSimRequestPayload | BearOptimizeRatioRequestPayload,
+  ) {
+    if (
+      typeof meta.saved_run_id !== "string" ||
+      typeof meta.saved_at !== "string" ||
+      typeof meta.share_url !== "string" ||
+      !meta.saved_kind ||
+      !isBearSavedSimulationKind(meta.saved_kind)
+    ) {
+      return;
+    }
+    const id = meta.saved_run_id;
+    const kind = meta.saved_kind;
+    const createdAt = meta.saved_at;
+    const shareUrl = meta.share_url;
+    const title = buildSimulationRunTitle(request, kind);
+    storeSavedRunMeta({ id, kind, createdAt, shareUrl, title });
+    if (
+      typeof window !== "undefined" &&
+      `${window.location.pathname}${window.location.search}` !== shareUrl
+    ) {
+      window.history.pushState(null, "", shareUrl);
+    }
+    router.push(shareUrl, { scroll: false });
+    setRecentRuns((prev) => [
+      {
+        id,
+        kind,
+        created_at: createdAt,
+        share_url: shareUrl,
+        title,
+      },
+      ...prev.filter((run) => run.id !== id),
+    ]);
+  }
+
+  async function saveComputedRun(
+    kind: SavedSimulationKind,
+    request: BearSimRequestPayload | BearOptimizeRatioRequestPayload,
+    computedResult: SavedSimulationResult,
+  ): Promise<SaveMetaPayload | null> {
+    const res = await fetch("/api/simulate/runs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ kind, request, result: computedResult }),
+    });
+    const data = (await res.json()) as SaveMetaPayload | { error?: string };
+    if (!res.ok) {
+      throw new Error(
+        ("error" in data && data.error) ||
+          `Saved run request failed with ${res.status}`,
+      );
+    }
+    return data as SaveMetaPayload;
+  }
+
   async function runBear() {
     setLoading(true);
     setError(null);
@@ -305,11 +712,23 @@ export default function BearSimClient() {
     setResult(null);
     setOptimizeError(null);
     setOptimizeResult(null);
+    setSavedRunError(null);
     setProgress({ done: 0, total: replicates });
     try {
       const payload = bearRequest(player, replicates, loadedPresetName);
       const job = runWorkerBearSimulation(payload, (done, total) => setProgress({ done, total }));
-      setResult(await job.promise);
+      const computed = await job.promise;
+      setResult(computed);
+      try {
+        const saveMeta = await saveComputedRun("bear_simulate", payload, computed);
+        if (saveMeta) maybeActivateSavedRun(saveMeta, payload);
+      } catch (saveErr) {
+        setSavedRunError(
+          saveErr instanceof Error
+            ? saveErr.message
+            : "Bear simulation completed but failed to save",
+        );
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -339,6 +758,7 @@ export default function BearSimClient() {
     setOptimizeError(null);
     setOptimizeResult(null);
     setSelectedOptimizeKey(null);
+    setSavedRunError(null);
     setOptimizeProgress({ done: 0, total: estimatedOptimizeCompositions });
     try {
       const payload = bearOptimizeRequest(player, loadedPresetName, {
@@ -349,7 +769,18 @@ export default function BearSimClient() {
         searchMode: optimizeSearchMode,
       });
       const job = runWorkerBearOptimizeRatio(payload, (done, total) => setOptimizeProgress({ done, total }));
-      setOptimizeResult(await job.promise);
+      const computed = await job.promise;
+      setOptimizeResult(computed);
+      try {
+        const saveMeta = await saveComputedRun("bear_optimize_ratio", payload, computed);
+        if (saveMeta) maybeActivateSavedRun(saveMeta, payload);
+      } catch (saveErr) {
+        setSavedRunError(
+          saveErr instanceof Error
+            ? saveErr.message
+            : "Bear ratio search completed but failed to save",
+        );
+      }
     } catch (err) {
       setOptimizeError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -391,15 +822,53 @@ export default function BearSimClient() {
             Enter one rally army and score uncapped damage against the fixed 5k infantry bear over 10 rounds.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => setUploadOpen(true)}
-          className="rounded px-3 py-2 text-xs font-bold min-h-[44px]"
-          style={{ border: "1px solid var(--border-color)", backgroundColor: "var(--sidebar-bg)", color: "var(--sidebar-active)" }}
-        >
-          Upload report
-        </button>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <button
+            type="button"
+            onClick={() => setRecentRunsOpen(true)}
+            className="rounded px-3 py-2 text-xs font-bold min-h-[44px]"
+            style={{ border: "1px solid var(--border-color)", backgroundColor: "var(--sidebar-bg)", color: "var(--main-text)" }}
+          >
+            Recent runs
+          </button>
+          <button
+            type="button"
+            onClick={() => setUploadOpen(true)}
+            className="rounded px-3 py-2 text-xs font-bold min-h-[44px]"
+            style={{ border: "1px solid var(--border-color)", backgroundColor: "var(--sidebar-bg)", color: "var(--sidebar-active)" }}
+          >
+            Upload report
+          </button>
+        </div>
       </div>
+
+      {(loadingSavedRun || savedRunMeta || savedRunError) && (
+        <div
+          className="mb-4 rounded px-3 py-2 text-xs font-mono"
+          style={{
+            border: `1px solid ${savedRunError ? "#f38ba8" : "var(--border-color)"}`,
+            backgroundColor: "var(--sidebar-bg)",
+            color: savedRunError ? "#f38ba8" : "var(--main-text)",
+          }}
+          data-testid="bear-saved-run-banner"
+        >
+          {loadingSavedRun ? (
+            <span>Loading saved bear run...</span>
+          ) : savedRunError ? (
+            <span>Saved run load failed: {savedRunError}</span>
+          ) : savedRunMeta ? (
+            <span>
+              Loaded saved{" "}
+              {savedRunMeta.kind === "bear_simulate"
+                ? "bear simulation"
+                : "bear ratio search"}{" "}
+              <code className="font-mono">{savedRunMeta.id}</code> from{" "}
+              {formatSavedRunTimestamp(savedRunMeta.createdAt)}. The current URL
+              points at this saved snapshot.
+            </span>
+          ) : null}
+        </div>
+      )}
 
       {uploadWarnings.length > 0 && (
         <div className="mb-4 rounded px-3 py-2 text-xs font-mono" style={{ border: "1px solid var(--border-color)", backgroundColor: "var(--sidebar-bg)", color: "#f9e2af" }}>
@@ -549,6 +1018,23 @@ export default function BearSimClient() {
           setUploadWarnings(ocr.warnings ?? []);
         }}
       />
+
+      {recentRunsOpen && (
+        <RecentRunsModal
+          runs={recentRuns}
+          loading={recentRunsLoading}
+          loadingMore={recentRunsLoadingMore}
+          hasMore={recentRunsHasMore}
+          error={recentRunsError}
+          onClose={() => setRecentRunsOpen(false)}
+          onRefresh={() => void refreshRecentRuns()}
+          onLoadMore={() => void loadMoreRecentRuns()}
+          onChoose={(run) => {
+            setRecentRunsOpen(false);
+            router.push(run.share_url, { scroll: false });
+          }}
+        />
+      )}
 
       {result && (
         <div className="mb-6 rounded p-3 sm:p-4" style={{ border: "1px solid var(--border-color)", backgroundColor: "var(--sidebar-bg)" }}>

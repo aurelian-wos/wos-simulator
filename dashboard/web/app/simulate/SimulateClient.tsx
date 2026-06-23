@@ -53,6 +53,7 @@ import {
 } from "@/lib/optimize-ratio";
 import {
   buildSimulationRunTitle,
+  PVP_SAVED_RUN_KINDS,
   type SavedSimulationRunListItem,
   OptimizeRatioApiResponse,
   OptimizeRatioRequestPayload,
@@ -152,6 +153,7 @@ const SAVED_RUN_DATE_FORMATTER = new Intl.DateTimeFormat("en-GB", {
   timeZone: "UTC",
   hour12: false,
 });
+const RECENT_RUNS_PAGE_SIZE = 20;
 
 export interface HeroSlotState {
   name: string | null;
@@ -189,6 +191,13 @@ interface SaveMetaPayload {
 }
 
 type PresetStatus = { kind: "ok" | "error"; message: string } | null;
+
+function savedRunKindLabel(kind: SavedSimulationKind): string {
+  if (kind === "simulate") return "Simulation";
+  if (kind === "optimize_ratio") return "Ratio search";
+  if (kind === "bear_simulate") return "Bear sim";
+  return "Bear ratio search";
+}
 
 function formatSavedRunTimestamp(iso: string): string {
   const date = new Date(iso);
@@ -1103,6 +1112,8 @@ export default function SimulateClient({
   const [recentRunsOpen, setRecentRunsOpen] = useState(false);
   const [recentRuns, setRecentRuns] = useState<SavedSimulationRunListItem[]>([]);
   const [recentRunsLoading, setRecentRunsLoading] = useState(false);
+  const [recentRunsLoadingMore, setRecentRunsLoadingMore] = useState(false);
+  const [recentRunsHasMore, setRecentRunsHasMore] = useState(false);
   const [recentRunsError, setRecentRunsError] = useState<string | null>(null);
   const toastIdRef = useRef(0);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1162,29 +1173,47 @@ export default function SimulateClient({
     };
   }, []);
 
-  const refreshRecentRuns = useCallback(async () => {
-    setRecentRunsLoading(true);
+  const fetchRecentRuns = useCallback(async (offset: number) => {
+    if (offset === 0) setRecentRunsLoading(true);
+    else setRecentRunsLoadingMore(true);
     setRecentRunsError(null);
     try {
-      const res = await fetch("/api/simulate/runs?limit=20", {
+      const params = new URLSearchParams({
+        limit: String(RECENT_RUNS_PAGE_SIZE),
+        offset: String(offset),
+        kinds: PVP_SAVED_RUN_KINDS.join(","),
+      });
+      const res = await fetch(`/api/simulate/runs?${params}`, {
         cache: "no-store",
       });
       const data = (await res.json()) as {
         runs?: SavedSimulationRunListItem[];
+        has_more?: boolean;
+        next_offset?: number;
         error?: string;
       };
       if (!res.ok) {
         throw new Error(data.error || `Recent runs request failed with ${res.status}`);
       }
-      setRecentRuns(data.runs ?? []);
+      setRecentRuns((prev) => offset === 0 ? data.runs ?? [] : [...prev, ...(data.runs ?? [])]);
+      setRecentRunsHasMore(Boolean(data.has_more));
     } catch (err) {
       setRecentRunsError(
         err instanceof Error ? err.message : "Failed to load recent runs",
       );
     } finally {
-      setRecentRunsLoading(false);
+      if (offset === 0) setRecentRunsLoading(false);
+      else setRecentRunsLoadingMore(false);
     }
   }, []);
+
+  const refreshRecentRuns = useCallback(async () => {
+    await fetchRecentRuns(0);
+  }, [fetchRecentRuns]);
+
+  const loadMoreRecentRuns = useCallback(async () => {
+    await fetchRecentRuns(recentRuns.length);
+  }, [fetchRecentRuns, recentRuns.length]);
 
   useEffect(() => {
     if (recentRunsOpen) void refreshRecentRuns();
@@ -2061,9 +2090,12 @@ export default function SimulateClient({
         <RecentRunsModal
           runs={recentRuns}
           loading={recentRunsLoading}
+          loadingMore={recentRunsLoadingMore}
+          hasMore={recentRunsHasMore}
           error={recentRunsError}
           onClose={() => setRecentRunsOpen(false)}
           onRefresh={() => void refreshRecentRuns()}
+          onLoadMore={() => void loadMoreRecentRuns()}
           onChoose={(run) => {
             setRecentRunsOpen(false);
             router.push(run.share_url, { scroll: false });
@@ -2813,19 +2845,25 @@ export default function SimulateClient({
   );
 }
 
-function RecentRunsModal({
+export function RecentRunsModal({
   runs,
   loading,
+  loadingMore,
+  hasMore,
   error,
   onClose,
   onRefresh,
+  onLoadMore,
   onChoose,
 }: {
   runs: SavedSimulationRunListItem[];
   loading: boolean;
+  loadingMore: boolean;
+  hasMore: boolean;
   error: string | null;
   onClose: () => void;
   onRefresh: () => void;
+  onLoadMore: () => void;
   onChoose: (run: SavedSimulationRunListItem) => void;
 }) {
   return (
@@ -2914,13 +2952,29 @@ function RecentRunsModal({
                   </span>
                   <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-[10px] opacity-55">
                     <span>
-                      {run.kind === "simulate" ? "Simulation" : "Ratio search"}
+                      {savedRunKindLabel(run.kind)}
                     </span>
                     <span>{formatSavedRunTimestamp(run.created_at)}</span>
                     <span className="truncate">{run.id}</span>
                   </span>
                 </button>
               ))}
+              {hasMore && (
+                <button
+                  type="button"
+                  onClick={onLoadMore}
+                  disabled={loadingMore}
+                  className="rounded px-3 py-2 text-xs font-bold"
+                  style={{
+                    border: "1px solid var(--border-color)",
+                    backgroundColor: "transparent",
+                    color: "var(--main-text)",
+                    opacity: loadingMore ? 0.6 : 1,
+                  }}
+                >
+                  {loadingMore ? "Loading more…" : "Load more"}
+                </button>
+              )}
             </div>
           )}
         </div>
