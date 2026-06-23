@@ -1,0 +1,24 @@
+{
+  "test_id": "wos444_edith_s12_lancer_damage_dealt_hero_nc",
+  "description": "WOS-444 Edith S1/2 lancer damage-dealt bucket probe. WIP attacks 2520 T6 infantry; minxxx defends Edith+Patrick+Jasser with 390 T6 lancer. Candidate signed remaining scores: damage.up +916, attack.up +937, lethality.up +954.",
+  "emulator": {
+    "attacker": { "instance": "WIP" },
+    "defender": { "instance": "minxxx" }
+  },
+  "attacker": {
+    "heroes": {},
+    "troops": {
+      "infantry_t6": 2520
+    }
+  },
+  "defender": {
+    "heroes": {
+      "Edith": {},
+      "Patrick": {},
+      "Jasser": {}
+    },
+    "troops": {
+      "lancer_t6": 390
+    }
+  }
+}

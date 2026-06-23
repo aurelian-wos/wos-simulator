@@ -1,0 +1,24 @@
+{
+  "test_id": "wos444_edith_s11_mark_damage_taken_hero_nc",
+  "description": "WOS-444 Edith S1/1 marksman damage-taken bucket probe. WIP attacks 2880 T6 marksman; minxxx defends Edith+Sergey+Patrick with 400 T6 marksman. Candidate signed remaining scores: damageTaken.down +498, defense.up +434, health.up +539.",
+  "emulator": {
+    "attacker": { "instance": "WIP" },
+    "defender": { "instance": "minxxx" }
+  },
+  "attacker": {
+    "heroes": {},
+    "troops": {
+      "marksman_t6": 2880
+    }
+  },
+  "defender": {
+    "heroes": {
+      "Edith": {},
+      "Sergey": {},
+      "Patrick": {}
+    },
+    "troops": {
+      "marksman_t6": 400
+    }
+  }
+}

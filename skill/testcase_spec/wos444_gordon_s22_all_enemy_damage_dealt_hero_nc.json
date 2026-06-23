@@ -1,0 +1,26 @@
+{
+  "test_id": "wos444_gordon_s22_all_enemy_damage_dealt_hero_nc",
+  "description": "WOS-444 Gordon S2/2 all-enemy damage-dealt-down bucket probe. WIP attacks 2700 each T6 mixed; minxxx defends Gordon+Sergey+Lynn with 2560 T6 lancer. Candidate signed remaining scores: damage.down +558, attack.down +593, lethality.down -143.",
+  "emulator": {
+    "attacker": { "instance": "WIP" },
+    "defender": { "instance": "minxxx" }
+  },
+  "attacker": {
+    "heroes": {},
+    "troops": {
+      "infantry_t6": 2700,
+      "lancer_t6": 2700,
+      "marksman_t6": 2700
+    }
+  },
+  "defender": {
+    "heroes": {
+      "Gordon": {},
+      "Sergey": {},
+      "Lynn": {}
+    },
+    "troops": {
+      "lancer_t6": 2560
+    }
+  }
+}
