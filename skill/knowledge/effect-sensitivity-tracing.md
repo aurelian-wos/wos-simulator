@@ -1,188 +1,168 @@
-# Effect Sensitivity and Tracing
+# Effect Sensitivity And Tracing
 
-## Read this when
+## Read This When
 
-Read this before implementing:
+Read this before implementing or changing:
 
-- per-round traces
-- applied-benefit logs
+- trace output
+- effect rejection diagnostics
 - chance/proc diagnostics
-- one-effect ablation reports
-- semantic perturbation reports
+- one-effect ablation or semantic perturbation reports
 - grouped residual dashboard views
-- survivor-scale error metrics
+- testcase detail artifacts
 
-Trace the shared skill schema. Do not add special trace terms for mechanics already represented as skills.
+## Existing Trace Shape
 
-## Minimal useful trace
+The current TypeScript simulator already has trace mode. Use it before adding new trace surfaces.
 
-If implementing only one trace, emit one row per damage pass with:
+Run options:
 
-- testcase id
-- round index
-- side
-- attacking troop type
-- primary target type
-- actual damage target type
-- damage kind: `normal` or `extra`
-- base kills
-- final kills
-- applied Benefits list
-- evaluated effects that did not apply, with rejection reason
-
-The most important field is `applied_benefits`. It must include hero skills and troop skills using the same schema.
-
-## Damage-pass trace schema
-
-Recommended JSONL row:
-
-```json
-{
-  "testcase_id": "path/or/id",
-  "round_idx": 12,
-  "side": "attacker",
-  "attacking_unit_type": "infantry",
-  "primary_target_type": "lancer",
-  "damage_target_type": "lancer",
-  "damage_kind": "normal",
-  "army_term": 12345.0,
-  "attack_value": 98.7,
-  "defense_value": 65.4,
-  "base_kills": 123.45,
-  "effective_coef": 1.10,
-  "normal_coef": 1.00,
-  "extra_coef": 1.00,
-  "extra_mult": 1.00,
-  "final_kills": 135.79,
-  "applied_benefits": [],
-  "rejected_effects": []
-}
+```ts
+simulateBattle(input, config, { mode: "trace" })
+runPrepared(compiled, seed, { mode: "trace" })
 ```
 
-For an extra pass, `normal_coef` can remain present for consistency but should not drive the extra damage calculation.
+Relevant types in `simulator/src/types.ts`:
 
-## Applied Benefit schema
+- `BattleResult.trace`
+- `AttackOutcome.trace`
+- `DamageEquationTrace`
+- `DamageBucketTrace`
+- `DamageAggregationGroupTrace`
+- `AppliedEffectTrace`
 
-Each applied Benefit should be auditable back to source data:
-
-```json
-{
-  "skill_type": "troop_skill",
-  "skill_name": "Master Brawler",
-  "effect_id": "Master Brawler/1",
-  "effect_type": "DamageUp",
-  "effect_op": 901,
-  "effect_value": 10,
-  "extra_attack": false,
-  "affects_opponent": false,
-  "skill_is_chance": false,
-  "effect_is_chance": false,
-  "trigger_for": "infantry",
-  "trigger_vs": "lancer",
-  "benefit_for": "infantry",
-  "benefit_vs": "lancer",
-  "duration_type": "permanent",
-  "duration_value": null,
-  "effect_lag": 0
-}
-```
-
-Do not replace this with source-specific fields such as `class_advantage_coef`. Class advantage should appear as ordinary applied Benefits from troop-skill data.
-
-## Rejected effect reasons
-
-Rejected effects are as useful as applied effects. Include a reason such as:
+`DamageEquationTrace` contains:
 
 ```text
-wrong_trigger_for
-wrong_trigger_vs
-wrong_benefit_for
-wrong_benefit_vs
+roundStartTroops
+armyTerm
+atomicBuckets
+aggregationGroups
+appliedEffects
+rejectedEffects
+rawDamage
+finalKills
+```
+
+Do not invent parallel trace names unless the existing shape cannot represent the needed evidence.
+
+## Minimal Useful Trace Review
+
+For a failing testcase, inspect each relevant `AttackOutcome`:
+
+- `kind`: `normal` or `skill`
+- `sourceEffectId` and `sourceSkillReportKey` for skill damage
+- attacker/defender side and unit
+- `kills`
+- `appliedEffects`
+- `consumedEffectIds`
+- `trace.atomicBuckets`
+- `trace.aggregationGroups`
+- `trace.rejectedEffects`
+
+The main question is whether the expected `ActiveEffect` landed in the expected bucket for the expected `DamageJob` shape.
+
+## Applied Effects
+
+Current `AppliedEffectTrace` fields are:
+
+```text
+effectId
+bucket
+valuePct
+source
+sourceSide
+stackingKey
+sameEffectStacking
+```
+
+Use `effectId` plus `BattleResult.skillReport` and config files to map back to hero/troop skill data. If adding richer source fields, extend this trace shape rather than replacing it with legacy `Benefit` terminology.
+
+## Rejected Effects
+
+Rejected effects are as useful as applied effects. Current rejection entries are `{ effectId, reason }`.
+
+Useful reasons include:
+
+```text
 not_active_this_round
-frequency_not_reached
-lag_not_elapsed
-chance_failed
-source_skill_disabled
-no_valid_extra_target
+not_applicable_to_job
+not_applicable_to_job_kind
+unsupported_attacker_effect
+unsupported_defender_effect
+wrong_side
+not_bucket_effect
 ```
 
-This makes it possible to distinguish a missing skill from a correctly rejected skill.
+If adding new rejection reasons, keep them tied to the current classifier/indexing path:
 
-## Chance/proc trace
+- `basicEffectApplies()` in `classifier.ts`
+- `bucketCandidatesForJob()` in `effectIndex.ts`
+- `isEffectActive()` in `effects.ts`
 
-When chance is involved, log enough to identify granularity:
-
-```json
-{
-  "round_idx": 7,
-  "side": "defender",
-  "skill_name": "Example",
-  "effect_id": "Example/2",
-  "chance_scope": "per_round|per_attack|per_target|per_effect",
-  "chance_value": 0.4,
-  "roll": 0.271,
-  "proc": true,
-  "shared_with_effects": ["Example/2a", "Example/2b"]
-}
-```
-
-The exact random number is only needed in stochastic simulation modes. In deterministic expected-value mode, record the expected chance coefficient instead.
-
-## Effect sensitivity report
-
-For a failing testcase, generate a simulator-only report:
-
-| Run | Meaning |
-|---|---|
-| baseline | normal simulator result |
-| disable one effect | one hydrated effect removed |
-| reclassify one effect | temporary semantic variant, e.g. `extra_attack` -> `DamageUp` |
-| chance variant | temporary granularity change |
-| target variant | temporary `benefit_vs` or fanout change |
-| timing variant | temporary lag/frequency/duration shift |
-
-Report fields:
-
-```text
-testcase
-effect_id
-skill_name
-variant
-baseline_result
-variant_result
-delta_from_baseline
-direction_toward_game
-controls_regressed
-```
+## Sensitivity Reports
 
 Sensitivity reports rank hypotheses. They do not prove game behavior by themselves.
 
-## Grouped residual dimensions
+Useful simulator-only variants:
 
-Dashboard grouping should support the shared effect schema:
+- disable one `ResolvedSkill` or `ActiveEffect`
+- change one effect `type` to another bucket path
+- change `trigger.source` or `trigger.target`
+- change `units.applies_to` or `units.applies_vs`
+- change `trigger.probability` or force chance pass/fail
+- change `duration`, `delay`, or `trigger.every`
+- change `extra_skill_attack.trigger_damage_jobs`
+- change `same_effect_stacking`
+
+Report at least:
 
 ```text
-skill_type
-skill_name
-effect_type
-extra_attack
-effect_is_chance
-skill_is_chance
-trigger_for
-trigger_vs
-benefit_for
-benefit_vs
-duration_type
-frequency_type
-effect_lag
-special flags
+testcase
+effect or skill id
+variant
+baseline simulator result
+variant simulator result
+game reference
+delta toward/away from game
+control regression status
+```
+
+Keep variants local and reversible. Do not commit a semantic change just because it improves one testcase.
+
+## Grouped Residual Dimensions
+
+Dashboard grouping should follow current native schema fields:
+
+```text
+hero name / troop skill id
+sourceKind
+skill name
+trigger.type
+trigger.probability
+trigger.every
+trigger.source
+trigger.target
+effect.type
+effect.value
+effect.units.applies_to
+effect.units.applies_vs
+effect.duration.type/value/delay
+effect.trigger_damage_jobs
+effect.same_effect_stacking
+DamageJob.kind
+attacker unit / defender unit
+troop composition
+target composition
+report parser version
 ```
 
 Useful outputs per group:
 
 ```text
 testcase count
-observation count
+game observation count
+simulator sample count
 mean signed error
 median signed error
 weighted absolute error
@@ -190,15 +170,19 @@ worst cases
 recent drift
 ```
 
-## Survivor-scale metrics
+## Metric Naming
 
-Keep existing normalized metrics, but name them by denominator and add companion fields:
+Name metrics by reference set and denominator.
+
+Prefer:
 
 ```text
 signed_outcome_error_pct_initial
 signed_outcome_error_pct_game_survivor
 absolute_survivor_delta
 relative_survivor_delta
+game_bias_pct
+base_bias_pct
 ```
 
-This prevents a small initial-army-normalized error from hiding a large survivor-relative miss.
+Avoid ambiguous labels such as `bias_pct` unless the UI names the reference next to the value.

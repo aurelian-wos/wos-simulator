@@ -1,134 +1,156 @@
 # Testcase Dashboard Calibration
 
-## Read this when
+## Read This When
 
 Read this before changing:
 
-- the TypeScript testcase runner in `simulator/src/testcases.ts` and `scripts/run_testcases.ts`
+- `simulator/src/testcases.ts`
+- `scripts/run_testcases.ts`
 - testcase result storage
-- dashboard metrics
+- dashboard parity pages
 - regression history
-- grouped residual reports
 - stochastic repeat handling
-- quality gates
+- grouped residuals or quality gates
 
-## Collection vs simulation
+## Collection vs Simulation
 
-`run-testcase` is an in-game observation collector. It should deploy the armies, capture the resulting battle report, and append one observation to `game_report_result`.
+`wosctl run-testcase` is an in-game observation collector. It deploys armies, captures battle reports, and appends observations under `game_report_result`.
 
-It must not run the simulator, update simulator comparison fields, or write `sim_result` into testcase JSON. This keeps captured fixture data separate from analysis output.
+It must not run the simulator, update parity fields, or write `sim_result` into testcase JSON.
 
-For RNG-heavy battles, run the same testcase spec with `run-testcase --repeat N` until `game_report_result` has enough observations to estimate the game mean and spread. After collection, run the TypeScript simulator testcase runner from the monorepo root, for example `npx tsx scripts/run_testcases.ts --matching <pattern>`, to compare simulator output against the captured observations.
+After collection, run the TypeScript parity runner from the repo root:
 
-## Dashboard purpose
+```bash
+npx tsx scripts/run_testcases.ts --matching <pattern>
+npx tsx scripts/run_testcases.ts --matching <pattern> --repeat 100
+npx tsx scripts/run_testcases.ts --matching <pattern> --workers 4 --human
+```
+
+The runner writes a run snapshot by default and emits a `simulator-parity-summary`.
+
+## Current Runner Shapes
+
+`TestcaseRunReport` fields include:
+
+```text
+reportKind
+schemaVersion
+createdAt
+options
+calibrationReportPath
+artifactRoot
+counts
+warnings
+errors
+testcases
+details
+```
+
+Each `TestcaseSummaryEntry` includes:
+
+```text
+file
+testcase_id
+idx
+detailArtifact
+deterministic
+sampleCount
+game
+baseline
+gameStatAdjustment
+```
+
+Each `TestcaseCaseReport` can include `result`, `simulatorStats`, `simulatorSampleOutcomes`, `gameResult`, `calibration`, `visibility`, diagnostics, and error details.
+
+Use these names in dashboard and docs instead of old Python result shapes.
+
+## Dashboard Purpose
 
 The dashboard is for calibration and regression review. It should answer:
 
 - Did the latest change improve or regress known fixtures?
-- Are failures clustered by mechanic, hero, troop composition, or parser source?
 - Are deterministic controls still tight?
-- Are stochastic cases represented by enough observations?
+- Are failures clustered by mechanic, hero, troop composition, or parser source?
+- Are stochastic cases represented by enough observations and simulator samples?
 - Which code/config diff caused a testcase shift?
 
-It is not an issue tracker. Do not list current active issues in `KNOWLEDGE_INDEX.md`; use the project board for that.
+It is not an issue tracker. Do not list active issues in `KNOWLEDGE_INDEX.md`.
 
-## Minimum fields for each testcase result
+## Stochastic Cases
 
-Store or derive:
-
-```text
-testcase path/id
-run id
-git commit
-simulation result
-game result or game-result mean
-number of game observations
-expected stochastic flag
-hydrated stochastic flag
-signed outcome error
-absolute outcome error
-initial-army-normalized error
-survivor-normalized error, if available
-hero list
-troop composition
-skill/effect metadata summary
-```
-
-## Stochastic cases
-
-A testcase is stochastic if hydrated skill data contains chance at the skill or effect level, even if the filename says `_nc`.
+A testcase is stochastic when hydrated simulator skills contain chance triggers, even if a filename says `_nc`.
 
 For stochastic cases:
 
-- preserve individual game observations
-- preserve individual simulation repeats when stochastic simulation is enabled
+- preserve individual `game_report_result` observations
+- preserve simulator sample outcomes when `--repeat` is used
 - show mean and variance
 - warn if observation count is too low
-- avoid treating a single game observation as decisive
-- collect additional `game_report_result` observations with `run-testcase --repeat N` before drawing conclusions
+- avoid treating a single observation as decisive
+- collect more game observations with `wosctl run-testcase --repeat N` before making semantic changes
 
-Filename suffixes are hints only. Hydrated skill metadata is authoritative.
+## Deterministic Controls
 
-## Deterministic controls
-
-Deterministic controls should be easy to identify and should run first in analysis:
+Run and review controls first:
 
 - no-hero single-type
 - no-hero mixed
 - no-hero role swap
 - troop-skill/class-advantage controls
-- small-count rounding controls
+- small-count rounding/capping controls
 
-A hero-specific change that regresses deterministic controls is probably not ready.
+A hero-specific change that regresses deterministic controls is not ready.
 
-## Grouped residuals
+## Grouped Residuals
 
-Group failures by mechanics, not just testcase names:
+Group failures by current simulator schema, not only testcase names:
 
 ```text
 hero
-skill_type
-skill_name
-effect_type
-extra_attack
-effect_is_chance
-skill_is_chance
-benefit_for
-benefit_vs
-trigger_for
-trigger_vs
-duration/frequency/lag
+sourceKind
+skill name
+trigger.type/probability/every/source/target
+effect.type
+effect.units.applies_to
+effect.units.applies_vs
+effect.duration
+effect.trigger_damage_jobs
+same_effect_stacking
+DamageJob.kind
+attacker unit / defender unit
 troop composition shape
 target composition shape
 report parser version
 ```
 
-This lets agents identify patterns such as:
+This helps identify patterns such as:
 
-- all `extra_attack + benefit_vs=all` cases are biased
-- every-N-attack skills fail at boundaries
+- all `extra_skill_attack` jobs for one selector shape are biased
+- every-N attack skills fail at boundaries
 - no-hero mixed cases drifted after parser changes
 - chance cases have too few observations
 
-## Metric naming
+## Metric Naming
 
-Every percentage metric should reveal its denominator.
+Every percentage metric should reveal its reference and denominator.
 
 Prefer:
 
 ```text
+game_bias_pct
+base_bias_pct
 signed_outcome_error_pct_initial
 signed_outcome_error_pct_game_survivor
 relative_survivor_delta
 ```
 
-Avoid ambiguous names like `bias_pct` unless the UI explains the denominator next to the value.
+Avoid ambiguous names unless the UI explains the reference next to the value.
 
-## Run-review checklist
+## Run-Review Checklist
 
 Before accepting a simulator change:
 
-1. Compare current run to previous run.
+1. Compare current run to the previous snapshot.
 2. Check no-hero controls first.
 3. Check deterministic hero cases next.
 4. Check stochastic means and variance separately.

@@ -1,61 +1,76 @@
 # Skill Divergence Debugging
 
-## Read this when
+## Read This When
 
-Read this before changing code or skill data because a testcase differs from the game.
+Read this before changing simulator code, hero config, troop-skill config, report parsing, or dashboard thresholds because a testcase differs from the game.
 
 Core rule:
 
 > If no-hero controls pass, assume the remaining divergence is skill semantics, target selection, timing, chance, stale data, or report parsing until evidence proves otherwise.
 
-## Required workflow
+## Required Workflow
 
-### 1. Reproduce the divergence
+### 1. Reproduce The Divergence
 
-Run the failing testcase with the same command used by the dashboard or regression suite. Record:
+Run the same TypeScript testcase command used by the dashboard or regression suite:
 
-- testcase path
+```bash
+npx tsx scripts/run_testcases.ts --matching <pattern> --human
+```
+
+For stochastic cases, use enough samples:
+
+```bash
+npx tsx scripts/run_testcases.ts --matching <pattern> --repeat 100 --human
+```
+
+Record:
+
+- testcase path/id
 - current git commit
-- simulator result
-- game result or game-result mean
+- command and options
+- simulator mean/result
+- game mean/result and observation count
+- deterministic flag from `BattleResult.randomness`
 - signed error and absolute error
-- whether the case is deterministic or stochastic
-- number of game observations
+- detail artifact or run snapshot path
 
-Do not infer anything from a single stochastic observation unless the result is only being used as a weak clue.
+Do not draw strong conclusions from one stochastic observation.
 
-### 2. Check paired controls
+### 2. Check Paired Controls
 
-Before touching skill data, find or create controls with the same accounts, stats, troop tiers, and army scale:
+Before touching skill data, find or create controls with the same accounts, stats, troop ids, and army scale:
 
 - no-hero single-type control
 - no-hero mixed control if the failing case is mixed
 - role-swapped control if attacker/defender role may matter
-- target-composition control if the failing case depends on `benefit_vs` or `trigger_vs`
+- target-composition control if the case depends on `trigger.target`, `units.applies_vs`, or extra skill target jobs
 
-If controls fail, debug stats, report parsing, unit data, target selection, or formula before hero skills.
+If controls fail, debug stats, report parsing, troop data, target order, rounding, capping, or bucket aggregation before hero skills.
 
-### 3. Classify the failure
+### 3. Classify The Failure
 
 | Pattern | First suspicion |
 |---|---|
-| No-hero single-type controls fail | stats, base unit data, core formula, rounding, report parsing |
-| No-hero mixed controls fail | troop aggregation, mixed-tier data, target order, final rounding |
-| Only one hero fails | that hero's skill schema, chance, duration, lag, target gating |
-| Multiple heroes with the same effect type fail | shared Benefit handling for that effect type |
-| All chance-heavy cases are noisy | repeat count, chance granularity, stochastic model |
-| Only `benefit_vs=all` or splash cases fail | extra target fanout, primary-target inclusion, extra pass semantics |
-| Every-N attack/round cases fail | frequency off-by-one, lag, duration boundary |
-| Dashboard residual changed after parser/capture change | stale or malformed report data |
+| No-hero single-type controls fail | stats, troop data, base bucket aggregation, rounding/capping, report parsing |
+| No-hero mixed controls fail | troop id aggregation, mixed-tier data, target order, final capping |
+| Only one hero fails | that hero's `SkillFile`, trigger, chance, duration, delay, selectors, or effect bucket |
+| Multiple heroes with same effect type fail | shared bucket/classifier handling for that effect type |
+| All chance-heavy cases are noisy | repeat count, chance trigger scope, seed handling, stochastic model |
+| Skill-damage cases fail | `extra_skill_attack.trigger_damage_jobs`, `sourceMultiplier`, `DamageJob.kind`, target job selectors |
+| Every-N attack/round cases fail | `trigger.every`, `crossedFrequency()`, attack counters, round boundary |
+| Dashboard residual changed after parser/capture change | stale or malformed `game_report_result` data |
 
-### 4. Form one narrow hypothesis
+### 4. Form One Narrow Hypothesis
 
-Good hypotheses are testable and local:
+Good hypotheses are local and testable:
 
-- `effect_is_chance` is rolled per round but should be per attacking unit type.
-- `benefit_vs=all` should exclude the primary target for this effect.
-- an every-2-attacks effect fires after two completed attacks, not on the second attack.
-- an effect encoded as `extra_attack` should be a normal `DamageUp` modifier.
+- `trigger.source` matches the wrong attacking unit for this hero.
+- `units.applies_vs` should target `trigger.target` instead of `enemy.any`.
+- an `extra_skill_attack` needs a different `trigger_damage_jobs.target`.
+- an effect belongs in `type.skill.damage.up` rather than `active.hero.damage.up`.
+- `same_effect_stacking` should be `max` for this effect family.
+- `duration.delay` is off by one round.
 
 Bad hypotheses are broad:
 
@@ -64,32 +79,42 @@ Bad hypotheses are broad:
 - chance is broken
 - all extra damage is wrong
 
-### 5. Use simulator-side sensitivity before changing behavior
+### 5. Use Trace And Sensitivity Before Changing Defaults
 
-For the failing testcase, run counterfactuals that do not permanently change the default engine:
+First run or inspect trace mode:
 
-- disable one hydrated effect at a time
-- reclassify one ambiguous effect as a temporary variant
-- switch chance granularity for one effect
-- switch `benefit_vs` behavior for one effect
-- test duration/lag off-by-one variants
+- `AttackOutcome.kind`
+- `sourceEffectId`
+- `trace.atomicBuckets`
+- `trace.aggregationGroups`
+- `trace.appliedEffects`
+- `trace.rejectedEffects`
+- `skillReport`
 
-A sensitivity run is not proof. It ranks which effect could explain the residual and helps design the next fixture.
+Then run reversible simulator-side variants:
 
-### 6. Make the narrowest supported change
+- disable one hydrated skill/effect
+- temporarily change one effect bucket path
+- change one selector
+- change one chance or duration field
+- change one `trigger_damage_jobs` entry
+
+Sensitivity ranks hypotheses. It is not proof of game behavior.
+
+### 6. Make The Narrowest Supported Change
 
 A permanent change should:
 
 - improve the target testcase or grouped residual class
 - not regress no-hero controls
 - not regress unrelated deterministic hero cases
-- be documented in the dashboard run or commit message
-- include a trace or fixture explanation if the change is semantic
+- pass `loadSimulatorConfig()` validation
+- include a trace, fixture, or dashboard-run explanation if the change is semantic
 
-## What not to do
+## What Not To Do
 
-- Do not restore fatigue because a hero testcase underpredicts or overpredicts.
-- Do not add a global class-advantage multiplier; class advantage is skill data.
-- Do not rename stochastic cases `_nc` unless hydrated skills confirm no chance effects.
-- Do not change formula, parser, and skill data in the same commit unless there is no alternative.
+- Do not restore fatigue because a hero testcase misses.
+- Do not add a global class-advantage multiplier; class advantage is troop-skill data.
+- Do not rename stochastic cases `_nc` unless hydrated skills confirm no chance triggers.
+- Do not change formula, parser, and skill data in the same commit unless the evidence demands it.
 - Do not use old battle reports after account stats, hero levels, buffs, or troop tiers changed.

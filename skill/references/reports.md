@@ -1,12 +1,12 @@
 # Reports Reference
 
-## Read this when
+## Read This When
 
 Read this before changing report docs, report parsing, capture diagnostics, or testcase ingestion from reports.
 
-## Battle report behavior
+## Battle Report Behavior
 
-A valid parsed battle report must contain a battle overview and enough captured content to reach the report bottom.
+A valid parsed battle report must contain a battle overview and confirmed bottom-of-report content.
 
 Single-report behavior:
 
@@ -15,11 +15,11 @@ Single-report behavior:
 
 Batch behavior:
 
-- Batch mode may skip non-battle reports while searching for a battle report.
+- Batch mode may skip non-battle reports while searching for battle reports.
 - Skipped reports should be recorded or logged.
 - Skipped non-battle reports must not be emitted as zero/default battle reports.
 
-## Required parsed fields
+## Required Parsed Fields
 
 A battle report parser should capture:
 
@@ -29,8 +29,8 @@ is battle report
 report bottom reached
 attacker name/role
 defender name/role
-attacker stats
-defender stats
+attacker stat bonuses by unit
+defender stat bonuses by unit
 attacker troops: type, tier, fire-crystal level, count
 defender troops: type, tier, fire-crystal level, count
 survivors/losses/result values
@@ -38,9 +38,19 @@ warnings and parser confidence
 parser version
 ```
 
-Troop tier and fire-crystal level are separate fields. Do not collapse them if downstream simulator input needs both.
+Troop tier and fire-crystal level are separate fields. Do not collapse them if downstream code needs to map reports to current `troop_stats.json` ids or TypeScript `FighterInput.troops`.
 
-## Incomplete capture behavior
+## Testcase Boundary
+
+Captured report data belongs in testcase JSON as game observations, normally under `game_report_result`.
+
+Do not add simulator output to captured testcase files. Run parity separately:
+
+```bash
+npx tsx scripts/run_testcases.ts --matching <pattern>
+```
+
+## Incomplete Capture Behavior
 
 If the bottom of the page was not reached:
 
@@ -49,7 +59,7 @@ If the bottom of the page was not reached:
 - include the diagnostic directory in the error
 - do not parse partial screenshots as a complete battle report
 
-## Non-battle examples
+## Non-Battle Examples
 
 Examples of reports that should fail or skip rather than parse as zeros:
 

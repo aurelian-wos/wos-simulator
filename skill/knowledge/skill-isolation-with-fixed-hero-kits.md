@@ -1,95 +1,85 @@
 # Skill Isolation With Fixed Hero Kits
 
-## Read this when
+## Read This When
 
-Read this before designing in-game fixtures for hero skills.
+Read this before designing in-game fixtures for hero mechanics or adding testcase specs that claim to isolate a skill.
 
-The game usually does not allow individual Expedition skills to be disabled or set to arbitrary levels. A hero is tested as the full current account kit. Skill isolation must therefore be indirect.
+## Constraint
 
-## The constraint
-
-In game:
+The game usually does not allow individual Expedition skills to be disabled or set to arbitrary levels:
 
 ```text
-hero = all currently unlocked and leveled Expedition skills
+hero fixture = all currently unlocked and leveled Expedition skills on that account
 ```
 
-Army deployment also allows only one main hero per troop class. A battle side
-can have at most one infantry-class hero, one lancer-class hero, and one
-marksman-class hero. Testcase specs that request two heroes of the same class on
-the same side are invalid game lineups, not hero-picker failures.
+The simulator can ablate individual `ResolvedSkill` or `ActiveEffect` entries, but that is a counterfactual diagnostic, not a direct game fixture.
 
-Not possible in ordinary testing:
+Army deployment also allows at most one main hero per troop class on a side. A testcase spec that requests two same-class main heroes on one side is an invalid game lineup, not a picker failure.
 
-```text
-Mia S1 only
-Greg S2 disabled
-Reina dodge off
-Norah splash only
-```
+## Testcase Shape
 
-Simulator-side ablation can do those things, but those are counterfactual diagnostics, not direct game fixtures.
+Use current simulator shapes:
 
-## Practical isolation methods
+- `FighterInput.troops`: troop ids from `simulator/config/troop_stats.json`.
+- `FighterInput.stats`: unit keys (`infantry`, `lancer`, `marksman`) with player stat bonuses.
+- `FighterInput.heroes`: main heroes with captured skill levels.
+- `FighterInput.joiner_heroes`: joiner heroes, if the fixture uses them.
+- `BattleInput.engagement_type`: required when testing rally/garrison-gated skills.
 
-### 1. Paired no-hero controls
+Do not write or expect `sim_result` in captured fixture JSON. Game observations belong under `game_report_result`; simulator output comes from the TypeScript testcase runner.
+
+## Practical Isolation Methods
+
+### 1. Paired No-Hero Controls
 
 Every hero fixture should have a same-session no-hero control with the same:
 
 - accounts
 - attacker/defender roles
-- troop counts
+- troop ids and counts
 - troop tiers and fire-crystal levels
-- buffs and stats snapshot
-- report-capture method
+- buffs and stat snapshot
+- report-capture path
 
-Use the control to separate skill mismatch from stale stats or parser issues.
+Use the control to separate skill mismatch from stale stats, troop data, or parser issues.
 
-### 2. Full-kit single-hero fixtures
+### 2. Full-Kit Single-Hero Fixtures
 
 When possible, test one hero as a full kit against no heroes. Label it accurately:
 
-```text
-single_hero_full_kit
-skill_isolation = false
+```json
+{
+  "fixture_type": "single_hero_full_kit",
+  "skill_isolation": false
+}
 ```
 
 Do not describe it as an isolated skill test.
 
-### 3. Attacker troop-composition gating
+### 3. Attacker Composition Gating
 
-Some effects only trigger for or benefit a troop type. Change the attacking army to make effects eligible or ineligible.
-
-Examples:
+Some effects only trigger for or apply to a source unit. Change the attacking army to make effects eligible or ineligible.
 
 | Goal | Fixture shape |
 |---|---|
-| Gate marksman-only effects | run with marksmen present vs no marksmen |
-| Gate lancer-only effects | run with lancers present vs no lancers |
-| Test mixed-body interactions | compare single-type, two-type, and three-type armies |
+| Gate marksman effects | marksmen present vs no marksmen |
+| Gate lancer effects | lancers present vs no lancers |
+| Test mixed-body interactions | single-type, two-type, and three-type armies |
 
-### 4. Defender target-composition gating
+### 4. Defender Target Gating
 
-Some effects depend on target type or fanout target selection. Change the defender composition.
-
-Examples:
+Some effects depend on target type or generated skill-damage jobs. Change the defender composition.
 
 | Goal | Fixture shape |
 |---|---|
-| Test `benefit_vs=infantry` | defender infantry-only vs no infantry |
-| Test splash/fanout | defender one type vs all three types |
-| Test primary-target inclusion | tiny frontline plus large backline |
+| Test `trigger.target` / `units.applies_vs` | defender type present vs absent |
+| Test skill-damage fanout | defender one type vs all three types |
+| Test primary-target inclusion | tiny frontline plus larger backline |
 | Test current-target behavior | setup where frontline changes during the fight |
 
-### 5. Battle-length gating
+### 5. Battle-Length Gating
 
-Frequency, lag, and duration bugs are often exposed by fight length.
-
-Use:
-
-- short fights that end before a trigger
-- boundary fights that reach exactly the expected trigger
-- long fights with multiple triggers
+Frequency, delay, and duration bugs often need boundary fights.
 
 Compare candidate semantics:
 
@@ -97,38 +87,31 @@ Compare candidate semantics:
 fires on Nth attack
 fires after N completed attacks
 fires at round start
-fires at round end
-fires immediately, then every N
+fires after delay
+expires after N rounds
+expires after N uses
 ```
 
-### 6. Repeated stochastic observations
+### 6. Repeated Stochastic Observations
 
-Chance cases need repeated game reports. Store the individual game outcomes, not just the mean.
+A testcase is stochastic if hydrated skills have `trigger.probability`, regardless of filename.
 
-Use enough repeats to estimate:
+Store individual game observations, not just the mean. Use enough repeats to estimate mean, variance, min/max, and distribution shape.
 
-- mean
-- variance
-- min/max
-- distribution shape
+### 7. Simulator-Side Ablation
 
-A deterministic expected-value simulator may match the mean but not the spread.
+Use ablation only to rank likely causes:
 
-### 7. Simulator-side ablation and sensitivity
+- disable each hydrated skill/effect one at a time
+- switch one effect bucket
+- switch trigger/source/target selectors
+- alter `trigger_damage_jobs`
+- force chance pass/fail for one trigger
+- shift duration/delay/frequency
 
-The simulator can temporarily disable or perturb individual effects. Use this to rank likely causes.
+Then design a better in-game fixture.
 
-Useful sensitivity runs:
-
-- disable each hydrated effect one at a time
-- switch an ambiguous `extra_attack` effect to normal `DamageUp`
-- switch chance from per-round to per-attack or per-target
-- switch `benefit_vs=all` to include/exclude the primary target
-- shift frequency timing by one attack or one round
-
-Do not treat sensitivity as proof. Use it to design better in-game fixtures.
-
-## Required fixture metadata
+## Required Fixture Metadata
 
 Use explicit metadata so future agents do not overinterpret the testcase:
 
@@ -137,13 +120,10 @@ Use explicit metadata so future agents do not overinterpret the testcase:
   "fixture_type": "single_hero_full_kit",
   "skill_isolation": false,
   "expected_stochastic": true,
-  "stochastic_reason": ["hydrated skill/effect contains chance"],
-  "accounts": {
-    "attacker_role": "default_current_attacker",
-    "defender_role": "default_current_defender"
-  },
-  "stats_snapshot": "fresh for this capture batch"
+  "stochastic_reason": ["hydrated trigger.probability"],
+  "stats_snapshot": "fresh for this capture batch",
+  "control_fixture": "matching_nohero_case_id"
 }
 ```
 
-Avoid `_nc` filenames unless the hydrated skill data confirms there are no chance skills or chance effects.
+Avoid `_nc` filenames unless hydrated skill data confirms there are no chance triggers.
