@@ -2006,6 +2006,33 @@ test('marked-gated effects only apply against currently-marked enemies', () => {
   assert.deepEqual(result.extraSkillAttackJobsByEffect, { followUp: 1 });
 });
 
+test("mark mechanic consistent with emulator result", () => {
+  const config = loadSimulatorConfig();
+  const fixturePath = fileURLToPath(new URL("../testcases/emulator_verified/renee_solo_nc.json", import.meta.url));
+  const testcases = JSON.parse(readFileSync(fixturePath, "utf8")) as Array<BattleInput & { test_id: string; game_report_result: Array<{ attacker: number; defender: number }> }>;
+  const input = testcases.find((testcase) => testcase.test_id === "renee_solo_nc");
+  if (!input) throw new Error("missing renee_solo_nc fixture");
+
+  const adjusted = structuredClone(input);
+  for (const [fighter, adjustment] of [
+    [adjusted.attacker, 0.05],
+    [adjusted.defender, -0.05]
+  ] as const) {
+    for (const stats of Object.values(fighter.stats ?? {})) {
+      for (const key of ["attack", "defense", "lethality", "health"] as const) {
+        if (stats[key] !== undefined) stats[key] = Number((Number(stats[key]) + adjustment).toFixed(3));
+      }
+    }
+  }
+  const { winner, remaining: { attacker, defender } } = simulateBattle(adjusted, config, { mode: "trace" });
+
+  assert.equal(winner, "defender");
+  const attackers = adjusted.game_report_result[0].attacker;
+  const defenders = adjusted.game_report_result[0].defender;
+  assert.equal(attackers, attacker.infantry + attacker.lancer + attacker.marksman);
+  assert.equal(defenders, defender.infantry + defender.lancer + defender.marksman);
+});
+
 function skillActivations(result: ReturnType<typeof simulateBattle>, skillId: string): number {
   return result.skillReport.attacker.find((entry) => entry.skillId === skillId)?.skillActivations ?? 0;
 }
