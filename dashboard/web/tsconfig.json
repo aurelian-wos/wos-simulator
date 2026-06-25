@@ -27,7 +27,7 @@
         "./*"
       ],
       "@simulator/*": [
-        "../../simulator/src/*.ts"
+        "./.simulator/src/*.ts"
       ]
     }
   },
