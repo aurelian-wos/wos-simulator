@@ -12,7 +12,7 @@
       },
       "effects": {
         "VenomInfusion/1": {
-          "type": "active.hero.attack.up",
+          "type": "type.normal.damage.up",
           "value": [
             20,
             40,
