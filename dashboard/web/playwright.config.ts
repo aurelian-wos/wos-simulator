@@ -28,8 +28,10 @@ export default defineConfig({
     ? {}
     : {
         webServer: {
-          command: `npm run start -- -p ${PORT}`,
-          url: BASE_URL,
+          command: `npm run dev -- -p ${PORT}`,
+           wait: {
+            stdout: /Local:\s+http:\/\/localhost:\d+/,
+          },
           // Never reuse: a stale process on this port is more likely to be a
           // different app than a clean dashboard build.
           reuseExistingServer: false,

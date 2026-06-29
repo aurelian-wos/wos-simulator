@@ -32,6 +32,9 @@ import {
 } from "@/lib/heroes-catalogue";
 import { HeroBaseStats, heroBaseStats } from "@/lib/hero-base-stats";
 import {
+  ADAPTIVE_FINAL_REPLICATES,
+  ADAPTIVE_PHASE1_REPLICATES,
+  ADAPTIVE_PHASE2_REPLICATES,
   DEFAULT_INFANTRY_MAX_PCT,
   DEFAULT_INFANTRY_MIN_PCT,
   DEFAULT_OPTIMIZE_SEARCH_MODE,
@@ -246,7 +249,7 @@ function useWideSimLayout() {
   const [wide, setWide] = useState(false);
 
   useEffect(() => {
-    const query = window.matchMedia("(min-width: 1536px)");
+    const query = window.matchMedia("(min-width: 1200px)");
     const update = () => setWide(query.matches);
     update();
     query.addEventListener("change", update);
@@ -287,7 +290,7 @@ export function saveLocalStatPresets(presets: PlayerStatPreset[]): void {
 export function defaultSide(): SideState {
   return {
     troops: { infantry: 1000, lancer: 1000, marksman: 1000 },
-    tiers: { infantry: "t6", lancer: "t6", marksman: "t6" },
+    tiers: { infantry: "t11_fc10", lancer: "t11_fc10", marksman: "t11_fc10" },
     heroes: {
       infantry: { name: null, skills: [0, 0, 0, 0] },
       lancer: { name: null, skills: [0, 0, 0, 0] },
@@ -956,7 +959,7 @@ function buildInitialSavedRunState(
       attacker: defaultSide(),
       defender: defaultSide(),
       loadedPresetNames: { attacker: null, defender: null },
-      replicates: 5000,
+      replicates: 1000,
       rallyMode: false,
       result: null,
       optimizeResult: null,
@@ -1146,6 +1149,7 @@ export default function SimulateClient({
     Record<Side, string | null>
   >(() => initialState.loadedPresetNames);
   const [presetModalSide, setPresetModalSide] = useState<Side | null>(null);
+  const [presetSelectedId, setPresetSelectedId] = useState("");
   const [presetDraftName, setPresetDraftName] = useState("");
   const [presetStatus, setPresetStatus] = useState<PresetStatus>(null);
   const [recentRunsOpen, setRecentRunsOpen] = useState(false);
@@ -1571,12 +1575,13 @@ export default function SimulateClient({
   const setSide = (side: Side) =>
     side === "attacker" ? setAttacker : setDefender;
 
-  const activePresetId = presetModalSide
+  const loadedPresetId = presetModalSide
     ? loadedPresetIds[presetModalSide] ?? ""
     : "";
 
   function openStatPresetModal(side: Side) {
     const loadedPreset = statPresets.find((p) => p.id === loadedPresetIds[side]);
+    setPresetSelectedId(loadedPreset?.id ?? loadedPresetIds[side] ?? "");
     setPresetModalSide(side);
     setPresetDraftName(
       loadedPreset?.name ??
@@ -1596,16 +1601,22 @@ export default function SimulateClient({
     setPresetStatus(null);
     const source = presetModalSide === "attacker" ? attacker : defender;
     try {
-      if (statPresets.length >= MAX_STAT_PRESETS) {
+      const cleanName = cleanStatPresetName(presetDraftName);
+      const fallbackName = `Preset ${statPresets.length + 1}`;
+      const presetName = cleanName || fallbackName;
+      const existingPreset =
+        statPresets.find((p) => p.id === presetSelectedId) ??
+        statPresets.find(
+          (p) => p.name.toLocaleLowerCase() === presetName.toLocaleLowerCase(),
+        );
+      if (!existingPreset && statPresets.length >= MAX_STAT_PRESETS) {
         throw new Error(`Preset limit reached (${MAX_STAT_PRESETS})`);
       }
       const timestamp = new Date().toISOString();
       const preset: PlayerStatPreset = {
-        id: newStatPresetId(),
-        name:
-          cleanStatPresetName(presetDraftName) ||
-          `Preset ${statPresets.length + 1}`,
-        created_at: timestamp,
+        id: existingPreset?.id ?? newStatPresetId(),
+        name: presetName,
+        created_at: existingPreset?.created_at ?? timestamp,
         updated_at: timestamp,
         stats: normalizeStatPresetStats(heroAdjustedStats(source, "subtract")),
       };
@@ -1617,10 +1628,11 @@ export default function SimulateClient({
       setStatPresets(nextPresets);
       setLoadedPresetIds((prev) => ({ ...prev, [presetModalSide]: preset.id }));
       setLoadedPresetNames((prev) => ({ ...prev, [presetModalSide]: preset.name }));
+      setPresetSelectedId(preset.id);
       setPresetDraftName(preset.name);
       setPresetStatus({
         kind: "ok",
-        message: `Created ${preset.name} from ${SIDE_LABELS[presetModalSide].toLowerCase()} stats.`,
+        message: `${existingPreset ? "Updated" : "Created"} ${preset.name} from ${SIDE_LABELS[presetModalSide].toLowerCase()} stats.`,
       });
     } catch (err) {
       setPresetStatus({
@@ -1632,7 +1644,24 @@ export default function SimulateClient({
 
   function chooseStatPreset(id: string) {
     if (!presetModalSide) return;
+    setPresetSelectedId(id);
     if (!id) {
+      setPresetDraftName(`${SIDE_LABELS[presetModalSide]} profile`);
+      setPresetStatus(null);
+      return;
+    }
+    const selectedPreset = statPresets.find((p) => p.id === id);
+    if (!selectedPreset) {
+      setPresetStatus({ kind: "error", message: "Choose a profile." });
+      return;
+    }
+    setPresetDraftName(selectedPreset.name);
+    setPresetStatus(null);
+  }
+
+  function loadSelectedStatPreset() {
+    if (!presetModalSide) return;
+    if (!presetSelectedId) {
       setLoadedPresetIds((prev) => ({ ...prev, [presetModalSide]: null }));
       setLoadedPresetNames((prev) => ({ ...prev, [presetModalSide]: null }));
       setPresetDraftName(`${SIDE_LABELS[presetModalSide]} profile`);
@@ -1642,7 +1671,7 @@ export default function SimulateClient({
       });
       return;
     }
-    const selectedPreset = statPresets.find((p) => p.id === id);
+    const selectedPreset = statPresets.find((p) => p.id === presetSelectedId);
     if (!selectedPreset) {
       setPresetStatus({ kind: "error", message: "Choose a profile to load." });
       return;
@@ -1883,6 +1912,7 @@ export default function SimulateClient({
     optimizeSide === "defender" ? SIDE_LABELS.defender : SIDE_LABELS.attacker;
   const staticSideLabel =
     optimizeSide === "defender" ? SIDE_LABELS.attacker : SIDE_LABELS.defender;
+  const actionHelpText = `Simulate runs the attacker and defender exactly as configured. Optimise searches ${optimizedSideLabel.toLowerCase()} troop ratios while keeping troops, tiers, heroes, stats, and the ${staticSideLabel.toLowerCase()} setup fixed.`;
 
   const resolvedOptimizeStep = useMemo(() => {
     const parsed = parseInt(optimizeStepInput, 10);
@@ -1939,6 +1969,7 @@ export default function SimulateClient({
     estimatedOptimizeCompositions > MAX_OPTIMIZE_COMPOSITIONS ||
     estimatedOptimizeBattles > MAX_OPTIMIZE_BATTLES;
   const optimizeInputsValid = resolvedInfantryBounds.isValid;
+  const optimizeHelpText = `Only the ${optimizedSideLabel.toLowerCase()} troop mix changes. Total troops, tiers, heroes, stats, and the ${staticSideLabel.toLowerCase()} setup stay fixed.`;
 
   return (
     <div
@@ -1958,7 +1989,7 @@ export default function SimulateClient({
         </div>
 
         <section className="sim-start-card" data-testid="simulate-start-card">
-          <div>
+          <div className="sim-start-file-actions">
             <button
               type="button"
               onClick={() => setUploadOpen(true)}
@@ -1966,8 +1997,16 @@ export default function SimulateClient({
             >
               <span className="block text-xs font-bold">Upload report</span>
             </button>
+            <button
+              type="button"
+              onClick={() => setRecentRunsOpen(true)}
+              className="sim-edit-chip min-h-[32px] px-3 text-xs font-bold"
+              data-testid="recent-runs-toggle"
+            >
+              Recent runs
+            </button>
           </div>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="sim-start-toggles">
             <label
               className="sim-toggle grid cursor-pointer grid-cols-[auto_minmax(0,1fr)] items-center gap-2 px-2.5 py-1.5 text-xs font-bold"
               data-active={rallyMode}
@@ -2006,14 +2045,7 @@ export default function SimulateClient({
               </span>
             </label>
           </div>
-          <button
-            type="button"
-            onClick={() => setRecentRunsOpen(true)}
-            className="sim-edit-chip min-h-[32px] px-3 text-xs font-bold"
-            data-testid="recent-runs-toggle"
-          >
-            Recent runs
-          </button>
+
         </section>
       </div>
 
@@ -2071,74 +2103,48 @@ export default function SimulateClient({
         </div>
       )}
 
-      <div className="sim-tab-shell" data-testid="sim-workbench-tabs">
-      {wideSimLayout ? (
-        <div
-          className="sim-workbench-tabs mb-3 grid grid-cols-2 gap-1"
-          role="tablist"
-          aria-label="Simulation workspace"
-        >
-          {([
-            ["setup", "Setup"],
-            ["results", "Results"],
-          ] as [SimWorkspaceTab, string][]).map(([tab, label]) => {
-            const active =
-              tab === "setup" ? mobileTab !== "results" : mobileTab === "results";
-            return (
-              <button
-                key={tab}
-                type="button"
-                role="tab"
-                aria-selected={active}
-                onClick={() => setMobileTab(tab)}
-                className="sim-tab px-2 py-2 text-xs font-black"
-                data-active={active}
-                data-testid={`sim-tab-${tab}`}
-              >
-                {label}
-              </button>
-            );
-          })}
-        </div>
-      ) : (
-        <div
-          className="sim-workbench-tabs mb-3 grid grid-cols-3 gap-1"
-          role="tablist"
-          aria-label="Simulation setup"
-        >
-          {([
-            ["attacker", "Attacker"],
-            ["defender", "Defender"],
-            ["results", "Results"],
-          ] as [SimWorkspaceTab, string][]).map(([tab, label]) => {
-            const active = mobileTab === tab;
-            return (
-              <button
-                key={tab}
-                type="button"
-                role="tab"
-                aria-selected={active}
-                onClick={() => setMobileTab(tab)}
-                className="sim-tab px-2 py-2 text-xs font-black"
-                data-active={active}
-                data-testid={`sim-tab-${tab}`}
-              >
-                {label}
-              </button>
-            );
-          })}
+      {!wideSimLayout && (
+        <div className="sim-tab-shell" data-testid="sim-workbench-tabs">
+          <div
+            className="sim-workbench-tabs mb-3 grid grid-cols-3 gap-1"
+            role="tablist"
+            aria-label="Simulation setup"
+          >
+            {([
+              ["attacker", "Attacker"],
+              ["defender", "Defender"],
+              ["results", "Results"],
+            ] as [SimWorkspaceTab, string][]).map(([tab, label]) => {
+              const active = mobileTab === tab;
+              return (
+                <button
+                  key={tab}
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  onClick={() => setMobileTab(tab)}
+                  className="sim-tab px-2 py-2 text-xs font-black"
+                  data-active={active}
+                  data-testid={`sim-tab-${tab}`}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
         </div>
       )}
-      </div>
 
       <div
-        className={`${mobileTab === "results" ? "hidden" : "block"} sim-panel-setup-shell`}
+        className={`${!wideSimLayout && mobileTab === "results" ? "hidden" : "block"} sim-panel-setup-shell`}
         data-testid="sim-panel-setup"
       >
       <div className="sim-role-grid mb-4 sm:mb-6">
         <div
           className="sim-role-slot min-w-0"
-          data-narrow-active={mobileTab === "attacker" || mobileTab === "setup"}
+          data-narrow-active={
+            wideSimLayout || mobileTab === "attacker" || mobileTab === "setup"
+          }
           style={{ order: sidesSwapped ? 3 : 1 }}
         >
           <SidePanel
@@ -2181,7 +2187,7 @@ export default function SimulateClient({
         </div>
         <div
           className="sim-role-slot min-w-0"
-          data-narrow-active={mobileTab === "defender"}
+          data-narrow-active={wideSimLayout || mobileTab === "defender"}
           style={{ order: sidesSwapped ? 1 : 3 }}
         >
           <SidePanel
@@ -2264,10 +2270,10 @@ export default function SimulateClient({
 
             <label className="mb-3 flex flex-col gap-1">
               <span className="sim-field-label">
-                Loaded profile
+                Profile
               </span>
               <select
-                value={activePresetId}
+                value={presetSelectedId}
                 onChange={(e) => chooseStatPreset(e.target.value)}
                 className="sim-input min-h-[40px] px-2 py-2 font-mono text-xs"
                 aria-label={`${presetModalSide} stat profile`}
@@ -2299,11 +2305,19 @@ export default function SimulateClient({
 
             <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
               <button
+                type="button"
+                onClick={loadSelectedStatPreset}
+                className="sim-edit-chip min-h-[40px] px-3 py-2 text-xs font-bold"
+                disabled={presetSelectedId === loadedPresetId}
+              >
+                Load selected
+              </button>
+              <button
                 type="submit"
                 className="sim-edit-chip min-h-[40px] px-3 py-2 text-xs font-bold"
                 style={{ color: "var(--sim-blue)" }}
               >
-                Create from current stats
+                Save current stats
               </button>
               <button
                 type="button"
@@ -2330,56 +2344,59 @@ export default function SimulateClient({
       )}
 
       <div className="sim-top-actions" data-testid="sim-action-dock">
-      <div className="sim-runbar mb-4 sm:mb-6" data-testid="simulate-runbar">
-        <label className="flex min-w-0 flex-col gap-1">
-          <span className="text-[10px] font-black uppercase tracking-wider" style={{ color: "var(--sim-muted)" }}>
-            Replicates
-          </span>
-          <input
-            type="number"
-            min={1}
-            max={10000}
-            value={replicates}
-            onChange={(e) =>
-              setReplicates(
-                Math.max(
-                  1,
-                  Math.min(10000, parseInt(e.target.value || "1", 10)),
-                ),
-              )
-            }
-            className="sim-input font-mono text-sm tabular-nums"
-            style={{ textAlign: "right" }}
-          />
-        </label>
-        <button
-          onClick={runSimulation}
-          disabled={loading}
-          className="sim-run-button px-5 py-2 text-sm font-black"
-          style={{
-            opacity: loading ? 0.55 : 1,
-            cursor: loading ? "wait" : "pointer",
-          }}
-        >
-          {loading ? "Simulating…" : "Simulate"}
-        </button>
-        {error && (
-          <span className="col-span-2 text-xs" style={{ color: "#f38ba8" }}>
-            {error}
-          </span>
-        )}
-        <div className="col-span-2">
-          <ProgressBar
-            active={loading}
-            done={simulateProgress?.done ?? 0}
-            total={simulateProgress?.total ?? replicates}
-          />
+      <div className="sim-action-card sim-action-card-run">
+        <div className="sim-runbar mb-4 sm:mb-6" data-testid="simulate-runbar">
+          <label className="flex min-w-0 flex-col gap-1">
+            <span className="text-[10px] font-black uppercase tracking-wider" style={{ color: "var(--sim-muted)" }}>
+              Replicates
+            </span>
+            <input
+              type="number"
+              min={1}
+              max={10000}
+              value={replicates}
+              onChange={(e) =>
+                setReplicates(
+                  Math.max(
+                    1,
+                    Math.min(10000, parseInt(e.target.value || "1", 10)),
+                  ),
+                )
+              }
+              className="sim-input font-mono text-sm tabular-nums"
+              style={{ textAlign: "right" }}
+            />
+          </label>
+          <button
+            onClick={runSimulation}
+            disabled={loading}
+            className="sim-run-button px-5 py-2 text-sm font-black"
+            style={{
+              opacity: loading ? 0.55 : 1,
+              cursor: loading ? "wait" : "pointer",
+            }}
+          >
+            {loading ? "Simulating…" : "Simulate"}
+          </button>
+          {error && (
+            <span className="col-span-2 text-xs" style={{ color: "#f38ba8" }}>
+              {error}
+            </span>
+          )}
+          <div className="col-span-2">
+            <ProgressBar
+              active={loading}
+              done={simulateProgress?.done ?? 0}
+              total={simulateProgress?.total ?? replicates}
+            />
+          </div>
         </div>
       </div>
-      <div
-        className="sim-tool-panel sim-optimize-command-panel order-2 mb-4 flex flex-col gap-4 p-3 sm:mb-6 sm:p-4"
-        data-testid="optimize-panel"
-      >
+      <div className="sim-action-card sim-action-card-optimize">
+        <div
+          className="sim-tool-panel sim-optimize-command-panel order-2 mb-4 flex flex-col gap-4 p-3 sm:mb-6 sm:p-4"
+          data-testid="optimize-panel"
+        >
         <div className="grid gap-4">
           <div className="sim-modifier-card p-3">
             <h3 className="sr-only">
@@ -2387,40 +2404,54 @@ export default function SimulateClient({
             </h3>
             <div className="sim-optimize-flow">
               <p className="sim-optimize-description text-xs opacity-60" id="optimize-help-text">
-                Keeps {optimizedSideLabel.toLowerCase()} total troops (
-                {optimizedTotalTroops.toLocaleString()}), tiers, heroes, stats,
-                and the full {staticSideLabel.toLowerCase()} setup fixed; only
-                the {optimizedSideLabel.toLowerCase()} troop mix changes.
+                {optimizeHelpText}
               </p>
-              <div className="sim-optimize-mode-grid grid gap-2 sm:grid-cols-2">
-                <fieldset className="flex flex-col gap-1">
-                  <legend className="sim-field-label">
-                    Optimise side
-                  </legend>
-                  <div className="sim-segmented">
-                    {(["attacker", "defender"] as OptimizeSide[]).map((side) => (
-                      <button
-                        key={side}
-                        type="button"
-                        onClick={() => setOptimizeSide(side)}
-                        data-active={optimizeSide === side}
-                      >
-                        {SIDE_LABELS[side]}
-                      </button>
-                    ))}
-                  </div>
-                </fieldset>
+              <button
+                type="button"
+                className="sim-optimize-side-toggle"
+                onClick={() =>
+                  setOptimizeSide((side) =>
+                    side === "attacker" ? "defender" : "attacker",
+                  )
+                }
+                aria-label={`Optimise ${optimizedSideLabel.toLowerCase()} ratio. Click to switch side.`}
+              >
+                <span>{optimizedSideLabel}</span>
+                <span aria-hidden="true">⇄</span>
+              </button>
+              <div className="sim-optimize-action-row">
                 <button
                   type="button"
-                  className="sim-help-button"
-                  aria-label="Optimise ratio help"
-                  aria-describedby="optimize-help-text"
-                  title={`Keeps ${optimizedSideLabel.toLowerCase()} total troops, tiers, heroes, stats, and the full ${staticSideLabel.toLowerCase()} setup fixed; only the ${optimizedSideLabel.toLowerCase()} troop mix changes.`}
+                  onClick={() => setOptimizePanelOpen((open) => !open)}
+                  aria-expanded={optimizePanelOpen}
+                  aria-controls="optimize-options-panel"
+                  aria-label={optimizePanelOpen ? "Hide optimise options" : "Show optimise options"}
+                  className="sim-options-toggle"
+                  data-testid="optimize-options-toggle"
                 >
-                  ?
+                  <span>Options</span>
+                  <span aria-hidden="true" className="sim-options-chevron" />
                 </button>
-              </div>
-              <div className="sim-optimize-action-row">
+                <span className="sim-action-help-row">
+                  <span className="sim-help-wrap">
+                    <button
+                      type="button"
+                      className="sim-help-button"
+                      aria-label="Simulation actions help"
+                      aria-describedby="action-help-tooltip"
+                    >
+                      ?
+                    </button>
+                    <span
+                      id="action-help-tooltip"
+                      role="tooltip"
+                      className="sim-help-tooltip"
+                      data-testid="optimize-help-tooltip"
+                    >
+                      {actionHelpText}
+                    </span>
+                  </span>
+                </span>
                 <button
                   type="button"
                   onClick={runOptimizeRatio}
@@ -2430,7 +2461,7 @@ export default function SimulateClient({
                     optimizedTotalTroops <= 0 ||
                     !optimizeInputsValid
                   }
-                  className="sim-edit-chip min-h-[42px] px-4 py-2 text-sm font-bold"
+                  className="sim-optimize-run-button"
                   style={{
                     opacity:
                       optimizeLoading ||
@@ -2456,20 +2487,10 @@ export default function SimulateClient({
                 >
                   {optimizeLoading ? "Optimising…" : "Optimise ratio"}
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setOptimizePanelOpen((open) => !open)}
-                  aria-expanded={optimizePanelOpen}
-                  aria-controls="optimize-options-panel"
-                  className="sim-edit-chip min-h-[42px] px-3 py-2 text-xs font-bold"
-                  data-testid="optimize-options-toggle"
-                >
-                  {optimizePanelOpen ? "Hide options" : "Show options"}
-                </button>
                 <span className="text-xs font-mono opacity-60">
                   {estimatedOptimizeCompositions.toLocaleString()} comps ·{" "}
                   {optimizeSearchMode === "adaptive"
-                    ? "30/10/100 reps"
+                    ? `${ADAPTIVE_PHASE1_REPLICATES}/${ADAPTIVE_PHASE2_REPLICATES}/${ADAPTIVE_FINAL_REPLICATES} reps`
                     : `${optimizeReplicates.toLocaleString()} reps`}{" "}
                   · {optimizeSearchMode === "adaptive" ? "up to " : ""}
                   {estimatedOptimizeBattles.toLocaleString()} battles
@@ -2484,7 +2505,7 @@ export default function SimulateClient({
                 Infantry search band: {resolvedInfantryBounds.minPct}% to{" "}
                 {resolvedInfantryBounds.maxPct}%.
                 {optimizeSearchMode === "adaptive"
-                  ? " Adaptive search starts on a 5% grid, then checks 1% neighbours and 100-rep finalists."
+                  ? ` Adaptive search starts on a 5% grid, then checks 1% neighbours and ${ADAPTIVE_FINAL_REPLICATES}-rep finalists.`
                   : optimizeStepInput.trim()
                   ? ` Step ${resolvedOptimizeStep.toLocaleString()} troops.`
                   : ` Auto step ${resolvedOptimizeStep.toLocaleString()} troops.`}
@@ -2605,10 +2626,10 @@ export default function SimulateClient({
               >
                 {!optimizeInputsValid
                   ? "Fix the infantry bounds before optimising."
-                  : optimizeBudgetTooLarge
-                    ? "Projected search is too large. Increase the grid step or lower ratio reps."
+                    : optimizeBudgetTooLarge
+                      ? "Projected search is too large. Increase the grid step or lower ratio reps."
                     : optimizeSearchMode === "adaptive"
-                      ? "Adaptive search uses 30-rep coarse checks, 10-rep local neighbours, then 100-rep finalists."
+                      ? `Adaptive search uses ${ADAPTIVE_PHASE1_REPLICATES}-rep coarse checks, ${ADAPTIVE_PHASE2_REPLICATES}-rep local neighbours, then ${ADAPTIVE_FINAL_REPLICATES}-rep finalists.`
                       : "Current grid settings are within the allowed optimise budget."}
               </p>
               {optimizeError && (
@@ -2617,6 +2638,7 @@ export default function SimulateClient({
                 </span>
               )}
             </div>
+            </div>
           </div>
         </div>
       </div>
@@ -2624,11 +2646,11 @@ export default function SimulateClient({
       </div>
 
       <div
-        className={`${mobileTab === "results" ? "block" : "hidden"} sim-panel-results-shell`}
+        className={`${wideSimLayout || mobileTab === "results" ? "block" : "hidden"} sim-panel-results-shell`}
         data-testid="sim-panel-results"
       >
         {!result && !optimizeResult ? (
-          <div className="sim-tool-panel mb-4 p-3 text-xs" style={{ color: "var(--sim-muted)" }}>
+          <div className="sim-tool-panel sim-results-placeholder mb-4 p-3 text-xs" style={{ color: "var(--sim-muted)" }}>
             Results will appear here after running a simulation or optimisation.
           </div>
         ) : null}
@@ -2645,7 +2667,7 @@ export default function SimulateClient({
       {result && (
         <div
           className={`${
-            mobileTab === "results" ? "block" : "hidden"
+            wideSimLayout || mobileTab === "results" ? "block" : "hidden"
           } sim-tool-panel sim-panel-results-shell mb-6 p-3 sm:p-4`}
         >
           <h3 className="mb-3 text-sm font-bold opacity-70">
@@ -2712,7 +2734,7 @@ export default function SimulateClient({
       {optimizeResult && (
         <div
           className={`${
-            mobileTab === "results" ? "block" : "hidden"
+            wideSimLayout || mobileTab === "results" ? "block" : "hidden"
           } sim-tool-panel sim-panel-results-shell mb-6 p-3 sm:p-4`}
           data-testid="optimize-results"
         >
@@ -3185,7 +3207,13 @@ function RoleSection({
   );
 }
 
-function TroopSetupPreview({ state }: { state: SideState }) {
+function TroopSetupPreview({
+  state,
+  fixedTroopTier = null,
+}: {
+  state: SideState;
+  fixedTroopTier?: string | null;
+}) {
   return (
     <div className="sim-summary-table sim-summary-table-troops" aria-hidden="true">
       {CATEGORIES.map((cat) => (
@@ -3196,7 +3224,7 @@ function TroopSetupPreview({ state }: { state: SideState }) {
           <span className="font-mono tabular-nums">
             {state.troops[cat].toLocaleString()}
           </span>
-          <span className="font-mono">{state.tiers[cat]}</span>
+          <span className="font-mono">{fixedTroopTier ?? state.tiers[cat]}</span>
           <span className="truncate">{state.heroes[cat].name ?? "None"}</span>
         </div>
       ))}
@@ -3333,6 +3361,8 @@ export function SidePanel({
   onStatSync,
   loadedPresetName,
   onOpenPreset,
+  hideTroopCount = false,
+  fixedTroopTier = null,
 }: {
   title: string;
   which: Side;
@@ -3344,6 +3374,8 @@ export function SidePanel({
   onStatSync: StatSyncHandler;
   loadedPresetName: string | null;
   onOpenPreset: () => void;
+  hideTroopCount?: boolean;
+  fixedTroopTier?: string | null;
 }) {
   const [activeSection, setActiveSection] =
     useState<SimRoleSectionId | null>("troops");
@@ -3378,6 +3410,7 @@ export function SidePanel({
   const totalTroops = CATEGORIES.reduce((sum, cat) => sum + state.troops[cat], 0);
   const heroSummary = CATEGORIES.map((cat) => state.heroes[cat].name ?? "None").join(" / ");
   const tierSummary = CATEGORIES.map((cat) => state.tiers[cat].toUpperCase()).join(" / ");
+  const fixedTierSummary = fixedTroopTier?.toUpperCase() ?? null;
   const activeJoiners = state.joiners.filter((slot) => slot.name).length;
   const cityActive = STAT_MODIFIER_NAMES.filter(
     (name) => state.statModifiers[name] !== 0,
@@ -3416,9 +3449,9 @@ export function SidePanel({
 
         <RoleSection
           id="troops"
-          title="Troops, tiers, heroes"
-          summary={`${totalTroops.toLocaleString()} troops · ${heroSummary} · ${tierSummary}`}
-          preview={<TroopSetupPreview state={state} />}
+          title={hideTroopCount && fixedTroopTier ? "Heroes" : hideTroopCount ? "Tiers & heroes" : "Troops, tiers, heroes"}
+          summary={hideTroopCount ? `${heroSummary} · ${fixedTierSummary ?? tierSummary}` : `${totalTroops.toLocaleString()} troops · ${heroSummary} · ${tierSummary}`}
+          preview={<TroopSetupPreview state={state} fixedTroopTier={fixedTroopTier} />}
           activeSection={activeSection}
           onActivate={setActiveSection}
           testid={`side-section-${which}-troops`}
@@ -3434,6 +3467,8 @@ export function SidePanel({
                 rallyMode={rallyMode}
                 syncStatsOnHeroChange={syncStatsOnHeroChange}
                 onStatSync={onStatSync}
+                hideTroopCount={hideTroopCount}
+                fixedTroopTier={fixedTroopTier}
                 countInputRef={(node) => {
                   troopCountRefs.current[cat] = node;
                 }}
@@ -3474,8 +3509,8 @@ export function SidePanel({
                 key={cat}
                 className="sim-stat-edit-row"
               >
-                <span className="sim-summary-name">
-                  {troopCategoryLabel(cat)}
+                <span className="sim-summary-name" title={troopCategoryLabel(cat)}>
+                  {troopSummaryInitial(cat)}
                 </span>
                 {STAT_NAMES.map((stat) => {
                   const skill4Bonus = sideSkill4BonusPercent(
@@ -3923,6 +3958,8 @@ function TroopColumn({
   rallyMode,
   syncStatsOnHeroChange,
   onStatSync,
+  hideTroopCount = false,
+  fixedTroopTier = null,
   countInputRef,
   onCountKeyDown,
 }: {
@@ -3933,6 +3970,8 @@ function TroopColumn({
   rallyMode: boolean;
   syncStatsOnHeroChange: boolean;
   onStatSync: StatSyncHandler;
+  hideTroopCount?: boolean;
+  fixedTroopTier?: string | null;
   countInputRef?: (node: HTMLInputElement | null) => void;
   onCountKeyDown?: KeyboardEventHandler<HTMLInputElement>;
 }) {
@@ -3952,51 +3991,55 @@ function TroopColumn({
       <span className="sim-unit-name truncate">
         {troopCategoryLabel(cat)}
       </span>
-      <label>
-        <span className="sim-field-label">Troops</span>
-        <input
-          ref={countInputRef}
-          type="number"
-          min={0}
-          inputMode="numeric"
-          value={state.troops[cat]}
-          onKeyDown={onCountKeyDown}
-          onChange={(e) => {
-            const v = parseInt(e.target.value || "0", 10);
-            setState((prev) => ({
-              ...prev,
-              troops: {
-                ...prev.troops,
-                [cat]: isNaN(v) ? 0 : Math.max(0, v),
-              },
-            }));
-          }}
-          className="sim-input font-mono text-xs tabular-nums"
-          style={{ textAlign: "right" }}
-          aria-label={`${cat} troop count`}
-        />
-      </label>
-      <label>
-        <span className="sim-field-label">Tier</span>
-        <select
-          value={state.tiers[cat]}
-          onChange={(e) => {
-            const v = e.target.value;
-            setState((prev) => ({
-              ...prev,
-              tiers: { ...prev.tiers, [cat]: v },
-            }));
-          }}
-          className="sim-input font-mono text-xs"
-          aria-label={`${cat} troop tier`}
-        >
-          {TROOP_TIERS.map((t) => (
-            <option key={t} value={t}>
-              {t}
-            </option>
-          ))}
-        </select>
-      </label>
+      {!hideTroopCount && (
+        <label>
+          <span className="sim-field-label">Troops</span>
+          <input
+            ref={countInputRef}
+            type="number"
+            min={0}
+            inputMode="numeric"
+            value={state.troops[cat]}
+            onKeyDown={onCountKeyDown}
+            onChange={(e) => {
+              const v = parseInt(e.target.value || "0", 10);
+              setState((prev) => ({
+                ...prev,
+                troops: {
+                  ...prev.troops,
+                  [cat]: isNaN(v) ? 0 : Math.max(0, v),
+                },
+              }));
+            }}
+            className="sim-input font-mono text-xs tabular-nums"
+            style={{ textAlign: "right" }}
+            aria-label={`${cat} troop count`}
+          />
+        </label>
+      )}
+      {!fixedTroopTier && (
+        <label>
+          <span className="sim-field-label">Tier</span>
+          <select
+            value={state.tiers[cat]}
+            onChange={(e) => {
+              const v = e.target.value;
+              setState((prev) => ({
+                ...prev,
+                tiers: { ...prev.tiers, [cat]: v },
+              }));
+            }}
+            className="sim-input font-mono text-xs"
+            aria-label={`${cat} troop tier`}
+          >
+            {TROOP_TIERS.map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
       <label className="sim-hero-field">
         <span className="sim-field-label">Hero</span>
         <select

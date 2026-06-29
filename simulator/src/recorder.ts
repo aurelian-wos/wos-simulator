@@ -106,9 +106,6 @@ class RecordingRecorder implements BattleRecorder {
       appliedEffectIds: result.appliedEffectIds ?? [],
       appliedEffects: result.appliedEffects ?? [],
       consumedEffectIds: result.consumedEffectIds,
-      consumedEffectUseKey: result.consumedEffectUseKey,
-      consumedEffectUseId: result.consumedEffectUseId,
-      consumedEffectUseIds: result.consumedEffectUseIds,
       trace: result.trace
     });
   }

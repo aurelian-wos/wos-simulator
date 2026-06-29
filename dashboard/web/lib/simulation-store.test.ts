@@ -13,6 +13,7 @@ import type {
   SimulateRequestPayload,
   SimulateApiResult,
 } from "@/lib/simulate-run";
+import type { SurfaceSweepPayload, SurfaceSweepResult } from "@/lib/simulator/surface";
 import {
   buildSimulationRunTitle,
   buildSimulationShareUrl,
@@ -114,13 +115,34 @@ const bearOptimizeResult: BearOptimizeRatioResult = {
   points: [],
 };
 
+const surfaceRequest: SurfaceSweepPayload = {
+  attacker: pvpRequest.attacker,
+  defender: pvpRequest.defender,
+  pointsPerEdge: 6,
+  total: 100_000,
+  tier: "t6",
+  replicates: 2,
+  rallyMode: false,
+  jobs: 1,
+};
+
+const surfaceResult: SurfaceSweepResult = {
+  points: [
+    { inf: 100_000, lanc: 0, mark: 0 },
+    { inf: 0, lanc: 100_000, mark: 0 },
+  ],
+  winrateMatrix: [0.5, 0.75, 0.25, 0.5],
+};
+
 test("saved run helpers route bear snapshots to the bear page", () => {
   assert.equal(buildSimulationShareUrl("abc123", "simulate"), "/simulate?run=abc123");
   assert.equal(buildSimulationShareUrl("abc123", "bear_simulate"), "/bear?run=abc123");
+  assert.equal(buildSimulationShareUrl("abc123", "surface_sweep"), "/surface?run=abc123");
   assert.match(buildSimulationRunTitle(bearRequest, "bear_simulate"), /^Bear: /);
+  assert.match(buildSimulationRunTitle(surfaceRequest, "surface_sweep"), /^Surface: /);
 });
 
-test("simulation store filters and pages PvP and bear run histories separately", async () => {
+test("simulation store filters and pages PvP, bear, and surface run histories separately", async () => {
   const dir = await mkdtemp(path.join(tmpdir(), "wos-sim-runs-"));
   process.env.SIM_RUNS_DIR = dir;
   const store = await import(`./simulation-store.ts?case=${Date.now()}`);
@@ -128,10 +150,12 @@ test("simulation store filters and pages PvP and bear run histories separately",
   const pvp = await store.saveSimulationRun("simulate", pvpRequest, pvpResult);
   const bear = await store.saveSimulationRun("bear_simulate", bearRequest, bearResult);
   const bearOpt = await store.saveSimulationRun("bear_optimize_ratio", bearOptimizeRequest, bearOptimizeResult);
+  const surface = await store.saveSimulationRun("surface_sweep", surfaceRequest, surfaceResult);
 
   assert.equal(pvp.share_url.startsWith("/simulate?run="), true);
   assert.equal(bear.share_url.startsWith("/bear?run="), true);
   assert.equal(bearOpt.share_url.startsWith("/bear?run="), true);
+  assert.equal(surface.share_url.startsWith("/surface?run="), true);
 
   const pvpPage = await store.listSimulationRunsPage({
     limit: 10,
@@ -156,4 +180,10 @@ test("simulation store filters and pages PvP and bear run histories separately",
   assert.equal(secondBearPage.runs.length, 1);
   assert.equal(secondBearPage.has_more, false);
   assert.equal(secondBearPage.runs.every((run: SavedSimulationRunListItem) => run.share_url.startsWith("/bear?run=")), true);
+
+  const surfacePage = await store.listSimulationRunsPage({
+    limit: 10,
+    kinds: ["surface_sweep"],
+  });
+  assert.deepEqual(surfacePage.runs.map((run: SavedSimulationRunListItem) => run.kind), ["surface_sweep"]);
 });

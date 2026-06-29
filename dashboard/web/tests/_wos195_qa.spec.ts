@@ -14,8 +14,13 @@ test.describe("WOS-195 Simulate page visual QA", () => {
     await page.goto("/simulate");
     await page.waitForLoadState("networkidle");
 
-    // Check overall page structure - should have attacker and defender headings
+    // 1280px uses the tabbed setup layout; the defender panel is shown via
+    // the workspace tab instead of being visible alongside the attacker.
     await expect(page.getByRole("heading", { name: "Attacker", exact: true })).toBeVisible();
+    await expect(page.getByTestId("sim-tab-defender")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Defender", exact: true })).not.toBeVisible();
+
+    await page.getByTestId("sim-tab-defender").click();
     await expect(page.getByRole("heading", { name: "Defender", exact: true })).toBeVisible();
 
     await page.screenshot({
@@ -48,7 +53,7 @@ test.describe("WOS-195 Simulate page visual QA", () => {
     });
   });
 
-  test("hero selects exist and skill selects disable when no hero", async ({
+  test("hero selects exist and skill selects render after hero selection", async ({
     page,
   }) => {
     await page.setViewportSize({ width: 1280, height: 900 });
@@ -59,10 +64,14 @@ test.describe("WOS-195 Simulate page visual QA", () => {
     const content = await page.content();
     expect(content).toContain("None"); // no hero option
 
-    // Skill selects - with no hero selected they should be disabled
-    const disabledSelects = page.locator("select[disabled]");
-    const disabledCount = await disabledSelects.count();
-    expect(disabledCount).toBeGreaterThan(0); // skill selects should be disabled
+    // Skill selects are only rendered once a hero is selected.
+    await expect(page.locator('select[aria-label="infantry skill 1"]')).toHaveCount(0);
+
+    await page.locator('select[aria-label="infantry hero"]').first().selectOption({ index: 1 });
+    await expect(page.locator('select[aria-label="infantry skill 1"]')).toBeVisible();
+
+    const disabledSkillSelects = page.locator(".sim-skill-strip select[disabled]");
+    await expect(disabledSkillSelects.first()).toBeVisible();
   });
 
   test("stats inputs exist (12 per side)", async ({ page }) => {
@@ -163,7 +172,6 @@ test.describe("WOS-195 Simulate page visual QA", () => {
       fullPage: true,
     });
 
-    const content = await page.content();
     const text = await page.evaluate(() => document.body.innerText);
 
     // Check key result stats are shown

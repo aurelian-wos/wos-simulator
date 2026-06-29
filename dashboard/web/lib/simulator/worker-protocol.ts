@@ -1,5 +1,6 @@
 import type { BearOptimizeRatioRequestPayload, BearOptimizeRatioResult, BearSimRequestPayload, BearSimResult, OptimizeRatioRequestPayload, OptimizeRatioResult, SimulateApiResult, SimulateRequestPayload, SimulateTrace } from "@/lib/simulate-run";
 import type { TournamentRequestPayload, TournamentResult } from "@/lib/tournament";
+import type { ProgressiveSurfaceStage, SurfaceSweepPayload, SurfaceSweepResult } from "@/lib/simulator/surface";
 
 export type SimulatorWorkerRequest =
   | { id: number; type: "simulate"; payload: SimulateRequestPayload }
@@ -9,6 +10,8 @@ export type SimulatorWorkerRequest =
   | { id: number; type: "bearOptimize"; payload: BearOptimizeRatioRequestPayload }
   | { id: number; type: "optimizeRatio"; payload: OptimizeRatioRequestPayload }
   | { id: number; type: "tournament"; payload: TournamentRequestPayload }
+  | { id: number; type: "surfaceSweep"; payload: SurfaceSweepPayload }
+  | { id: number; type: "progressiveSurfaceSweep"; payload: SurfaceSweepPayload }
   | { id: number; type: "cancel" };
 
 export type SimulatorWorkerResponse =
@@ -20,4 +23,6 @@ export type SimulatorWorkerResponse =
   | { id: number; type: "bearOptimizeResult"; data: BearOptimizeRatioResult }
   | { id: number; type: "optimizeResult"; data: OptimizeRatioResult }
   | { id: number; type: "tournamentResult"; data: TournamentResult }
+  | { id: number; type: "surfaceStage"; data: ProgressiveSurfaceStage }
+  | { id: number; type: "surfaceResult"; data: SurfaceSweepResult }
   | { id: number; type: "error"; message: string };

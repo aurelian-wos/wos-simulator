@@ -6,8 +6,8 @@
     "EagleVision": {
       "description": "Increasing target's damage taken by X%",
       "trigger": {
-        "type": "attack",
-        "every": 2
+        "type": "turn",
+        "source": "self.any"
       },
       "effects": {
         "EagleVision/1": {
@@ -20,7 +20,8 @@
             25
           ],
           "units": {
-            "applies_to": "trigger.target"
+            "applies_to": "trigger.target",
+            "applies_vs": "trigger.source"
           },
           "duration": {
             "type": "attack",

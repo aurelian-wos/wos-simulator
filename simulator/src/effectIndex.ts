@@ -58,9 +58,9 @@ export function indexEffect(index: EffectIndex, effect: ActiveEffect): void {
           definition.role === "attacker"
             ? damageJobShapeSlot(jobKind, effect.appliesTo.side, appliesToUnit, effect.appliesVs.side, appliesVsUnit)
             : damageJobShapeSlot(jobKind, effect.appliesVs.side, appliesVsUnit, effect.appliesTo.side, appliesToUnit);
-        const effects = index.damageByJobShape[slot];
+        const arr = index.damageByJobShape[slot];
         const candidate = { effect, bucket: definition.path };
-        if (effects) effects.push(candidate);
+        if (arr) arr.push(candidate);
         else index.damageByJobShape[slot] = [candidate];
       }
     }
@@ -73,20 +73,24 @@ export function pruneEffectIndex(index: EffectIndex, isActive: (effect: ActiveEf
   compactEffects(index.extraAttacks, isActive);
   compactEffects(index.battleOrder, isActive);
   for (let slot = 0; slot < index.damageByJobShape.length; slot += 1) {
-    const candidates = index.damageByJobShape[slot];
-    if (!candidates) continue;
-    compactCandidates(candidates, isActive);
-    if (candidates.length === 0) index.damageByJobShape[slot] = undefined;
+    const arr = index.damageByJobShape[slot];
+    if (!arr) continue;
+    compactCandidates(arr, isActive);
+    if (arr.length === 0) index.damageByJobShape[slot] = undefined;
   }
 }
 
 export function removeStaticProfileBucketEffects(index: EffectIndex): void {
   compactEffects(index.all, (effect) => !isStaticProfileEffect(effect));
   for (let slot = 0; slot < index.damageByJobShape.length; slot += 1) {
-    const candidates = index.damageByJobShape[slot];
-    if (!candidates) continue;
-    compactCandidates(candidates, (_effect, candidate) => !isStaticProfileBucket(candidate.bucket));
-    if (candidates.length === 0) index.damageByJobShape[slot] = undefined;
+    const arr = index.damageByJobShape[slot];
+    if (!arr) continue;
+    let write = 0;
+    for (let read = 0; read < arr.length; read += 1) {
+      if (!isStaticProfileBucket(arr[read].bucket)) { arr[write] = arr[read]; write += 1; }
+    }
+    arr.length = write;
+    if (arr.length === 0) index.damageByJobShape[slot] = undefined;
   }
 }
 
@@ -104,18 +108,17 @@ function damageJobShapeSlot(
   return (((kindIndex(jobKind) * 2 + sideIndex(attackerSide)) * 3 + unitIndex(attackerUnit)) * 2 + sideIndex(defenderSide)) * 3 + unitIndex(defenderUnit);
 }
 
-function kindIndex(kind: DamageKind): number {
-  return kind === "normal" ? 0 : 1;
-}
-
-function sideIndex(side: SideId): number {
-  return side === "attacker" ? 0 : 1;
-}
-
+function kindIndex(kind: DamageKind): number { return kind === "normal" ? 0 : 1; }
+function sideIndex(side: SideId): number { return side === "attacker" ? 0 : 1; }
 function unitIndex(unit: UnitType): number {
   if (unit === "infantry") return 0;
   if (unit === "lancer") return 1;
   return 2;
+}
+
+function isStaticProfileEffect(effect: ActiveEffect): boolean {
+  const definition = bucketDefinition(effect.intent.type);
+  return isStaticProfileBucket(effect.intent.type) || (definition !== undefined && isStaticProfileBucket(definition.path));
 }
 
 function compactEffects(effects: ActiveEffect[], isActive: (effect: ActiveEffect) => boolean): void {
@@ -129,16 +132,11 @@ function compactEffects(effects: ActiveEffect[], isActive: (effect: ActiveEffect
   effects.length = write;
 }
 
-function isStaticProfileEffect(effect: ActiveEffect): boolean {
-  const definition = bucketDefinition(effect.intent.type);
-  return isStaticProfileBucket(effect.intent.type) || (definition !== undefined && isStaticProfileBucket(definition.path));
-}
-
-function compactCandidates(candidates: IndexedBucketEffect[], isActive: (effect: ActiveEffect, candidate: IndexedBucketEffect) => boolean): void {
+function compactCandidates(candidates: IndexedBucketEffect[], isActive: (effect: ActiveEffect) => boolean): void {
   let write = 0;
   for (let read = 0; read < candidates.length; read += 1) {
     const candidate = candidates[read];
-    if (!isActive(candidate.effect, candidate)) continue;
+    if (!isActive(candidate.effect)) continue;
     candidates[write] = candidate;
     write += 1;
   }

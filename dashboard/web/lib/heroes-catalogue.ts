@@ -181,9 +181,9 @@ export const TROOP_TIERS: string[] = (() => {
   const out: string[] = [];
   for (let t = 1; t <= 9; t++) out.push(`t${t}`);
   out.push("t10");
-  for (let fc = 1; fc <= 8; fc++) out.push(`t10_fc${fc}`);
+  for (let fc = 1; fc <= 10; fc++) out.push(`t10_fc${fc}`);
   out.push("t11");
-  for (let fc = 1; fc <= 8; fc++) out.push(`t11_fc${fc}`);
+  for (let fc = 5; fc <= 10; fc++) out.push(`t11_fc${fc}`);
   return out;
 })();
 

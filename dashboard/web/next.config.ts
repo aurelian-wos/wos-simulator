@@ -19,6 +19,23 @@ const nextConfig: NextConfig = {
   // Prevent Next.js from walking up to the home-directory package-lock.json
   // and misidentifying the workspace root.
   outputFileTracingRoot: repoRoot,
+  outputFileTracingExcludes: {
+    "/*": [
+      "./next.config.ts",
+      "./playwright.config.ts",
+      "./eslint.config.mjs",
+      "./postcss.config.mjs",
+      "./tailwind.config.ts",
+      "./tsconfig.json",
+      "./tsconfig.tsbuildinfo",
+      "./app/**/*.test.ts",
+      "./components/**/*.test.tsx",
+      "./lib/**/*.test.ts",
+      "./tests/**",
+      "./test-results/**",
+      "./tmp/**",
+    ],
+  },
   turbopack: {
     root: repoRoot,
     resolveAlias: {

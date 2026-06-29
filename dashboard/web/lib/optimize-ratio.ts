@@ -1,14 +1,17 @@
 import type { TroopCategory } from "@/lib/heroes-catalogue";
 
-export const MAX_OPTIMIZE_COMPOSITIONS = 8_000;
-export const MAX_OPTIMIZE_BATTLES = 200_000;
+export const MAX_OPTIMIZE_COMPOSITIONS = 20_000;
+export const MAX_OPTIMIZE_BATTLES = 400_000;
 export const DEFAULT_OPTIMIZE_REPLICATES = 20;
 export const DEFAULT_TOP_RESULTS = 10;
 export const DEFAULT_INFANTRY_MIN_PCT = 30;
 export const DEFAULT_INFANTRY_MAX_PCT = 70;
 export const DEFAULT_OPTIMIZE_SEARCH_MODE = "adaptive" as const;
 export const DEFAULT_OPTIMIZE_SIDE = "attacker" as const;
-export const ADAPTIVE_MAX_PHASE2_SEEDS = 20;
+export const ADAPTIVE_PHASE1_REPLICATES = 20;
+export const ADAPTIVE_PHASE2_REPLICATES = 20;
+export const ADAPTIVE_FINAL_REPLICATES = 200;
+export const ADAPTIVE_MAX_PHASE2_SEEDS = 30;
 export const ADAPTIVE_LOCAL_NEIGHBOURS_PER_SEED = 49;
 export const ADAPTIVE_MAX_FINALISTS = 40;
 
@@ -89,9 +92,11 @@ export function estimateAdaptiveBattleCount(
   maxPct = DEFAULT_INFANTRY_MAX_PCT,
 ): number {
   return (
-    estimateAdaptivePhase1Count(minPct, maxPct) * 30 +
-    ADAPTIVE_MAX_PHASE2_SEEDS * ADAPTIVE_LOCAL_NEIGHBOURS_PER_SEED * 10 +
-    ADAPTIVE_MAX_FINALISTS * 100
+    estimateAdaptivePhase1Count(minPct, maxPct) * ADAPTIVE_PHASE1_REPLICATES +
+    ADAPTIVE_MAX_PHASE2_SEEDS *
+      ADAPTIVE_LOCAL_NEIGHBOURS_PER_SEED *
+      ADAPTIVE_PHASE2_REPLICATES +
+    ADAPTIVE_MAX_FINALISTS * ADAPTIVE_FINAL_REPLICATES
   );
 }
 

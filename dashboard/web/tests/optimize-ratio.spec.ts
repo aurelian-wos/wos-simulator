@@ -20,10 +20,10 @@ test.describe("optimize-ratio helpers", () => {
   });
 
   test("adaptive search estimate uses the 30 to 70 infantry 5 percent grid", () => {
-    expect(estimateAdaptiveCompositionCount()).toBe(1119);
-    expect(estimateAdaptiveBattleCount()).toBe(16770);
-    expect(estimateAdaptiveCompositionCount(25, 75)).toBe(1141);
-    expect(estimateAdaptiveBattleCount(25, 75)).toBe(17430);
+    expect(estimateAdaptiveCompositionCount()).toBe(1609);
+    expect(estimateAdaptiveBattleCount()).toBe(39380);
+    expect(estimateAdaptiveCompositionCount(25, 75)).toBe(1631);
+    expect(estimateAdaptiveBattleCount(25, 75)).toBe(39820);
   });
 
   test("composition count still supports full simplex searches when explicitly requested", () => {

@@ -55,6 +55,15 @@ async function openSimRoleSection(
   }
 }
 
+async function openStatProfileModal(page: Page, side: "attacker" | "defender") {
+  const dialog = page.getByTestId("stat-profile-modal");
+  await expect(async () => {
+    await page.getByLabel(`${side} player profile`).click();
+    await expect(dialog).toBeVisible({ timeout: 500 });
+  }).toPass({ timeout: 5000 });
+  return dialog;
+}
+
 function simBuffSection(page: Page, side: "attacker" | "defender") {
   return page.getByTestId(`side-section-${side}-buffs`);
 }
@@ -534,6 +543,11 @@ test.describe("Dashboard smoke tests", () => {
     await expect(page.getByRole("button", { name: "Upload report" })).toBeVisible();
     await page.getByTestId("bear-tab-results").click();
     await expect(page.getByRole("button", { name: "Optimise ratio", exact: true })).toBeVisible();
+    await page.getByTestId("bear-optimize-options-toggle").click();
+    await expect(page.getByLabel("Inf min %")).toHaveValue("0");
+    await expect(page.getByLabel("Inf min %")).toHaveAttribute("min", "0");
+    await expect(page.getByLabel("Inf max %")).toHaveValue("10");
+    await expect(page.getByLabel("Inf max %")).toHaveAttribute("max", "10");
     await expect(page.locator('nav a[href="/bear"]').first()).toBeVisible();
 
     expect(errors).toHaveLength(0);
@@ -655,10 +669,9 @@ test.describe("Dashboard smoke tests", () => {
     const response = await page.goto("/simulate");
     expect(response?.status()).toBe(200);
 
-    await page.getByLabel("attacker player profile").click();
-    const dialog = page.getByTestId("stat-profile-modal");
-    await expect(dialog).toBeVisible();
+    const dialog = await openStatProfileModal(page, "attacker");
     await dialog.getByLabel("attacker stat profile").selectOption("attacker-profile");
+    await dialog.getByRole("button", { name: "Load selected" }).click();
     await dialog.getByRole("button", { name: "Done" }).click();
     await expect(dialog).toBeHidden();
     await expect(page.locator("body")).toContainText("Attacker saved profile");
@@ -691,11 +704,9 @@ test.describe("Dashboard smoke tests", () => {
     const response = await page.goto("/simulate");
     expect(response?.status()).toBe(200);
 
-    await page.getByLabel("attacker player profile").click();
-    const dialog = page.getByTestId("stat-profile-modal");
-    await expect(dialog).toBeVisible();
+    const dialog = await openStatProfileModal(page, "attacker");
     await dialog.getByLabel("attacker new profile name").fill("Local attacker");
-    await dialog.getByRole("button", { name: "Create from current stats" }).click();
+    await dialog.getByRole("button", { name: "Save current stats" }).click();
     await expect(dialog).toContainText("Created Local attacker");
 
     const storedNames = await page.evaluate(() => {
@@ -707,8 +718,7 @@ test.describe("Dashboard smoke tests", () => {
     expect(storedNames).toContain("Local attacker");
 
     await page.reload();
-    await page.getByLabel("attacker player profile").click();
-    await expect(page.getByTestId("stat-profile-modal")).toBeVisible();
+    await openStatProfileModal(page, "attacker");
     await expect(
       page
         .getByTestId("stat-profile-modal")
@@ -716,6 +726,72 @@ test.describe("Dashboard smoke tests", () => {
     ).toContainText("Local attacker");
 
     expect(presetApiRequested).toBe(false);
+    expect(errors).toHaveLength(0);
+  });
+
+  test("/simulate — saving an existing stat profile updates it from current stats", async ({
+    page,
+  }) => {
+    const errors: string[] = [];
+    page.on("console", (msg) => {
+      if (msg.type() === "error") errors.push(msg.text());
+    });
+    page.on("pageerror", (err) => errors.push(err.message));
+
+    await page.addInitScript(() => {
+      window.localStorage.setItem(
+        "wos-simulator.player-stat-presets.v1",
+        JSON.stringify([
+          {
+            id: "attacker-profile",
+            name: "Attacker saved profile",
+            created_at: "2026-04-23T08:00:00.000Z",
+            updated_at: "2026-04-23T08:00:00.000Z",
+            stats: {
+              infantry: {
+                attack: 201,
+                defense: 202,
+                lethality: 203,
+                health: 204,
+              },
+              lancer: {
+                attack: 211,
+                defense: 212,
+                lethality: 213,
+                health: 214,
+              },
+              marksman: {
+                attack: 221,
+                defense: 222,
+                lethality: 223,
+                health: 224,
+              },
+            },
+          },
+        ]),
+      );
+    });
+
+    const response = await page.goto("/simulate");
+    expect(response?.status()).toBe(200);
+
+    const dialog = await openStatProfileModal(page, "attacker");
+
+    await dialog.getByLabel("attacker stat profile").selectOption("attacker-profile");
+    await dialog.getByRole("button", { name: "Save current stats" }).click();
+    await expect(dialog).toContainText("Updated Attacker saved profile");
+
+    const stored = await page.evaluate(() => {
+      const raw = window.localStorage.getItem(
+        "wos-simulator.player-stat-presets.v1",
+      );
+      return raw ? JSON.parse(raw) : [];
+    });
+    expect(stored).toHaveLength(1);
+    expect(stored[0].id).toBe("attacker-profile");
+    expect(stored[0].name).toBe("Attacker saved profile");
+    expect(stored[0].stats.infantry.attack).toBe(100);
+
     expect(errors).toHaveLength(0);
   });
 

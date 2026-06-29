@@ -1,8 +1,7 @@
 import { randomUUID } from "crypto";
-import { promises as fs } from "fs";
+import { mkdirSync, promises as fs } from "fs";
 import path from "path";
 
-import { withDirectoryLock } from "@/lib/file-lock";
 import { resolveSimulatorRoot } from "@/lib/simulator-root";
 import {
   buildSimulationShareUrl,
@@ -41,10 +40,6 @@ function runPath(id: string): string {
   return path.join(SIM_RUNS_DIR, `${id}.json`);
 }
 
-async function ensureStoreDir(): Promise<void> {
-  await fs.mkdir(SIM_RUNS_DIR, { recursive: true });
-}
-
 function withShareUrl(
   doc: SavedSimulationRunDocument,
 ): SavedSimulationRunResponse {
@@ -80,43 +75,43 @@ export async function saveSimulationRun(
   request: SavedSimulationRequest,
   result: SavedSimulationResult,
 ): Promise<SavedSimulationRunResponse> {
-  await ensureStoreDir();
+  const id = randomUUID();
+  const doc: SavedSimulationRunDocument = {
+    version: 1,
+    id,
+    kind,
+    created_at: new Date().toISOString(),
+    request,
+    result,
+  };
 
-  return withDirectoryLock(SIM_RUNS_DIR, async () => {
-    const id = randomUUID();
-    const doc: SavedSimulationRunDocument = {
-      version: 1,
-      id,
-      kind,
-      created_at: new Date().toISOString(),
-      request,
-      result,
-    };
-
-    const filePath = runPath(id);
-    const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
+  const filePath = runPath(id);
+  const tempPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
+  try {
     await fs.writeFile(tempPath, `${JSON.stringify(doc, null, 2)}\n`, "utf8");
-    await fs.rename(tempPath, filePath);
-    return withShareUrl(doc);
-  });
+  } catch (err) {
+    const nodeErr = err as NodeJS.ErrnoException;
+    if (nodeErr?.code !== "ENOENT") throw err;
+    mkdirSync(SIM_RUNS_DIR, { recursive: true });
+    await fs.writeFile(tempPath, `${JSON.stringify(doc, null, 2)}\n`, "utf8");
+  }
+  await fs.rename(tempPath, filePath);
+  return withShareUrl(doc);
 }
 
 export async function readSimulationRun(
   id: string,
 ): Promise<SavedSimulationRunResponse | null> {
-  await ensureStoreDir();
-  return withDirectoryLock(SIM_RUNS_DIR, async () => {
-    try {
-      const raw = await fs.readFile(runPath(id), "utf8");
-      return withShareUrl(assertSavedSimulationDoc(JSON.parse(raw)));
-    } catch (err) {
-      const nodeErr = err as NodeJS.ErrnoException;
-      if (nodeErr?.code === "ENOENT") {
-        return null;
-      }
-      throw err;
+  try {
+    const raw = await fs.readFile(runPath(id), "utf8");
+    return withShareUrl(assertSavedSimulationDoc(JSON.parse(raw)));
+  } catch (err) {
+    const nodeErr = err as NodeJS.ErrnoException;
+    if (nodeErr?.code === "ENOENT") {
+      return null;
     }
-  });
+    throw err;
+  }
 }
 
 export async function listSimulationRuns(
@@ -128,45 +123,50 @@ export async function listSimulationRuns(
 export async function listSimulationRunsPage(
   options: SimulationRunListOptions = {},
 ): Promise<SimulationRunListPage> {
-  await ensureStoreDir();
-  return withDirectoryLock(SIM_RUNS_DIR, async () => {
-    const limit = Math.max(1, Math.min(100, Math.floor(options.limit ?? 20)));
-    const offset = Math.max(0, Math.floor(options.offset ?? 0));
-    const kindSet =
-      options.kinds && options.kinds.length > 0
-        ? new Set(options.kinds)
-        : null;
-    const entries = await fs.readdir(SIM_RUNS_DIR, { withFileTypes: true });
-    const docs: SavedSimulationRunDocument[] = [];
+  const limit = Math.max(1, Math.min(100, Math.floor(options.limit ?? 20)));
+  const offset = Math.max(0, Math.floor(options.offset ?? 0));
+  const kindSet =
+    options.kinds && options.kinds.length > 0
+      ? new Set(options.kinds)
+      : null;
+  let entries;
+  try {
+    entries = await fs.readdir(SIM_RUNS_DIR, { withFileTypes: true });
+  } catch (err) {
+    const nodeErr = err as NodeJS.ErrnoException;
+    if (nodeErr?.code !== "ENOENT") throw err;
+    return { runs: [], has_more: false, next_offset: 0 };
+  }
+  const docs: SavedSimulationRunDocument[] = [];
 
-    for (const entry of entries) {
-      if (!entry.isFile() || !entry.name.endsWith(".json")) continue;
-      try {
-        const raw = await fs.readFile(
-          path.join(SIM_RUNS_DIR, entry.name),
-          "utf8",
-        );
-        const doc = assertSavedSimulationDoc(JSON.parse(raw));
-        if (kindSet && !kindSet.has(doc.kind)) continue;
-        docs.push(doc);
-      } catch {
-        // Ignore partial or stale scratch files so one bad save does not break
-        // the recent-run picker.
-      }
+  for (const entry of entries) {
+    if (!entry.isFile() || !entry.name.endsWith(".json")) continue;
+    try {
+      const raw = await fs.readFile(
+        path.join(SIM_RUNS_DIR, entry.name),
+        "utf8",
+      );
+      const doc = assertSavedSimulationDoc(JSON.parse(raw));
+      if (kindSet && !kindSet.has(doc.kind)) continue;
+      docs.push(doc);
+    } catch {
+      // Ignore partial or stale scratch files so one bad save does not break
+      // the recent-run picker.
     }
+  }
 
-    const sorted = docs.sort((a, b) => b.created_at.localeCompare(a.created_at));
-    const pageDocs = sorted.slice(offset, offset + limit);
-    return {
-      runs: pageDocs.map((doc) => ({
-        id: doc.id,
-        kind: doc.kind,
-        created_at: doc.created_at,
-        share_url: buildSimulationShareUrl(doc.id, doc.kind),
-        title: buildSimulationRunTitle(doc.request, doc.kind),
-      })),
-      has_more: offset + pageDocs.length < sorted.length,
-      next_offset: offset + pageDocs.length,
-    };
-  });
+  const sorted = docs.sort((a, b) => b.created_at.localeCompare(a.created_at));
+  const pageDocs = sorted.slice(offset, offset + limit);
+  const page = {
+    runs: pageDocs.map((doc) => ({
+      id: doc.id,
+      kind: doc.kind,
+      created_at: doc.created_at,
+      share_url: buildSimulationShareUrl(doc.id, doc.kind),
+      title: buildSimulationRunTitle(doc.request, doc.kind),
+    })),
+    has_more: offset + pageDocs.length < sorted.length,
+    next_offset: offset + pageDocs.length,
+  };
+  return page;
 }

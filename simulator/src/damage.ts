@@ -62,9 +62,6 @@ export type DamageScratch = NumericDamageBuckets;
 export interface DamageResult {
   kills: number;
   consumedEffectIds: string[];
-  consumedEffectUseKey?: string;
-  consumedEffectUseId?: string;
-  consumedEffectUseIds?: string[];
   appliedEffectIds?: string[];
   appliedEffects?: DamageEquationTrace["appliedEffects"];
   trace?: DamageEquationTrace;
@@ -187,15 +184,11 @@ export function calculateDamageJob(
       }
     : undefined;
 
-  const returnedConsumedEffectIds =
-    consumedEffectIds.size === 0 ? job.consumedEffectIds ?? EMPTY_CONSUMED_EFFECT_IDS : [...consumedEffectIds, ...(job.consumedEffectIds ?? [])];
+  const returnedConsumedEffectIds = consumedEffectIds.size === 0 ? EMPTY_CONSUMED_EFFECT_IDS : [...consumedEffectIds];
 
   return {
     kills,
     consumedEffectIds: returnedConsumedEffectIds,
-    consumedEffectUseKey: job.consumedEffectUseKey,
-    consumedEffectUseId: job.consumedEffectUseId,
-    consumedEffectUseIds: job.consumedEffectUseIds,
     appliedEffectIds: traceEnabled ? appliedEffects.map((effect) => effect.effectId) : undefined,
     appliedEffects: traceEnabled ? appliedEffects : undefined,
     trace

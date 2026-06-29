@@ -1,5 +1,6 @@
 import type { BearOptimizeRatioRequestPayload, BearOptimizeRatioResult, BearSimRequestPayload, BearSimResult, OptimizeRatioRequestPayload, OptimizeRatioResult, SimulateApiResult, SimulateRequestPayload, SimulateTrace } from "@/lib/simulate-run";
 import type { TournamentRequestPayload, TournamentResult } from "@/lib/tournament";
+import type { ProgressiveSurfaceStage, SurfaceSweepPayload, SurfaceSweepResult } from "@/lib/simulator/surface";
 import { createProgressThrottle } from "./progress-throttle";
 import type { SimulatorWorkerRequest, SimulatorWorkerResponse } from "./worker-protocol";
 
@@ -12,7 +13,9 @@ type WorkerJobRequest =
   | Omit<Extract<SimulatorWorkerRequest, { type: "bearTrace" }>, "id">
   | Omit<Extract<SimulatorWorkerRequest, { type: "bearOptimize" }>, "id">
   | Omit<Extract<SimulatorWorkerRequest, { type: "optimizeRatio" }>, "id">
-  | Omit<Extract<SimulatorWorkerRequest, { type: "tournament" }>, "id">;
+  | Omit<Extract<SimulatorWorkerRequest, { type: "tournament" }>, "id">
+  | Omit<Extract<SimulatorWorkerRequest, { type: "surfaceSweep" }>, "id">
+  | Omit<Extract<SimulatorWorkerRequest, { type: "progressiveSurfaceSweep" }>, "id">;
 
 export function runWorkerSimulation(
   payload: SimulateRequestPayload,
@@ -65,10 +68,33 @@ export function runWorkerTournament(
   return runWorkerJob<TournamentResult>({ type: "tournament", payload }, "tournamentResult", onProgress);
 }
 
+export function runWorkerSurfaceSweep(
+  payload: SurfaceSweepPayload,
+  onProgress: (done: number, total: number) => void
+): { promise: Promise<SurfaceSweepResult>; cancel: () => void } {
+  return runWorkerJob<SurfaceSweepResult>({ type: "surfaceSweep", payload }, "surfaceResult", onProgress);
+}
+
+export function runWorkerProgressiveSurfaceSweep(
+  payload: SurfaceSweepPayload,
+  onProgress: (done: number, total: number) => void,
+  onStage: (stage: ProgressiveSurfaceStage) => void,
+): { promise: Promise<SurfaceSweepResult>; cancel: () => void } {
+  return runWorkerJob<SurfaceSweepResult>(
+    { type: "progressiveSurfaceSweep", payload },
+    "surfaceResult",
+    onProgress,
+    (message) => {
+      if (message.type === "surfaceStage") onStage(message.data);
+    },
+  );
+}
+
 function runWorkerJob<T>(
   request: WorkerJobRequest,
   resultType: SimulatorWorkerResponse["type"],
-  onProgress: (done: number, total: number) => void
+  onProgress: (done: number, total: number) => void,
+  onMessage?: (message: SimulatorWorkerResponse) => void,
 ): { promise: Promise<T>; cancel: () => void } {
   const id = nextJobId++;
   const worker = new Worker(new URL("../../app/simulate/simulate.worker.ts", import.meta.url), { type: "module" });
@@ -77,6 +103,7 @@ function runWorkerJob<T>(
     worker.onmessage = (event: MessageEvent<SimulatorWorkerResponse>) => {
       const message = event.data;
       if (message.id !== id) return;
+      onMessage?.(message);
       if (message.type === "progress") progress.update(message.done, message.total);
       else if (message.type === resultType && "data" in message) {
         progress.flush();

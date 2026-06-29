@@ -4,6 +4,10 @@ import type {
   OptimizeSearchMode,
   OptimizeSide,
 } from "@/lib/optimize-ratio";
+import type {
+  SurfaceSweepPayload,
+  SurfaceSweepResult,
+} from "@/lib/simulator/surface";
 
 export type { OptimizeRatioResult } from "@/lib/optimize-ratio";
 
@@ -218,7 +222,8 @@ export type SavedSimulationKind =
   | "simulate"
   | "optimize_ratio"
   | "bear_simulate"
-  | "bear_optimize_ratio";
+  | "bear_optimize_ratio"
+  | "surface_sweep";
 
 export interface SimulationSaveMeta {
   saved_run_id: string;
@@ -231,18 +236,21 @@ export type SimulateApiResponse = SimulateApiResult & SimulationSaveMeta;
 export type OptimizeRatioApiResponse = OptimizeRatioResult & SimulationSaveMeta;
 export type BearSimApiResponse = BearSimResult & SimulationSaveMeta;
 export type BearOptimizeRatioApiResponse = BearOptimizeRatioResult & SimulationSaveMeta;
+export type SurfaceSweepApiResponse = SurfaceSweepResult & SimulationSaveMeta;
 
 export type SavedSimulationRequest =
   | SimulateRequestPayload
   | OptimizeRatioRequestPayload
   | BearSimRequestPayload
-  | BearOptimizeRatioRequestPayload;
+  | BearOptimizeRatioRequestPayload
+  | SurfaceSweepPayload;
 
 export type SavedSimulationResult =
   | SimulateApiResult
   | OptimizeRatioResult
   | BearSimResult
-  | BearOptimizeRatioResult;
+  | BearOptimizeRatioResult
+  | SurfaceSweepResult;
 
 export interface SavedSimulationRunDocument {
   version: 1;
@@ -268,7 +276,8 @@ export interface SavedSimulationRunListItem {
 const CATEGORIES: TroopCategory[] = ["infantry", "lancer", "marksman"];
 export const PVP_SAVED_RUN_KINDS = ["simulate", "optimize_ratio"] as const satisfies readonly SavedSimulationKind[];
 export const BEAR_SAVED_RUN_KINDS = ["bear_simulate", "bear_optimize_ratio"] as const satisfies readonly SavedSimulationKind[];
-export const ALL_SAVED_RUN_KINDS = [...PVP_SAVED_RUN_KINDS, ...BEAR_SAVED_RUN_KINDS] as const satisfies readonly SavedSimulationKind[];
+export const SURFACE_SAVED_RUN_KINDS = ["surface_sweep"] as const satisfies readonly SavedSimulationKind[];
+export const ALL_SAVED_RUN_KINDS = [...PVP_SAVED_RUN_KINDS, ...BEAR_SAVED_RUN_KINDS, ...SURFACE_SAVED_RUN_KINDS] as const satisfies readonly SavedSimulationKind[];
 
 export function isSavedSimulationKind(value: unknown): value is SavedSimulationKind {
   return typeof value === "string" && (ALL_SAVED_RUN_KINDS as readonly string[]).includes(value);
@@ -282,8 +291,16 @@ export function isPvpSavedSimulationKind(kind: SavedSimulationKind): boolean {
   return kind === "simulate" || kind === "optimize_ratio";
 }
 
+export function isSurfaceSavedSimulationKind(kind: SavedSimulationKind): boolean {
+  return kind === "surface_sweep";
+}
+
 export function buildSimulationShareUrl(id: string, kind: SavedSimulationKind = "simulate"): string {
-  const path = isBearSavedSimulationKind(kind) ? "/bear" : "/simulate";
+  const path = isBearSavedSimulationKind(kind)
+    ? "/bear"
+    : isSurfaceSavedSimulationKind(kind)
+      ? "/surface"
+      : "/simulate";
   return `${path}?run=${encodeURIComponent(id)}`;
 }
 
@@ -317,6 +334,9 @@ export function buildSimulationRunTitle(
 ): string {
   if (isBearSavedSimulationKind(kind) && "player" in request) {
     return `Bear: ${sideHeroes(request.player)} (${sideRatio(request.player)})`;
+  }
+  if (isSurfaceSavedSimulationKind(kind) && "pointsPerEdge" in request) {
+    return `Surface: ${sideHeroes(request.attacker)} vs ${sideHeroes(request.defender)} (${request.pointsPerEdge}-point)`;
   }
   const pvpRequest = request as SimulateRequestPayload | OptimizeRatioRequestPayload;
   return `${sideHeroes(pvpRequest.attacker)} (${sideRatio(

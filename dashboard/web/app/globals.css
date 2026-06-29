@@ -44,7 +44,7 @@ body {
   input,
   select,
   textarea {
-    font-size: 16px;
+    font-size: 14px;
   }
 }
 
@@ -160,19 +160,30 @@ body {
 }
 
 .sim-start-card {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 8px;
   padding: 8px;
   align-items: center;
+  width: 100%;
 }
 
-.sim-start-card > div {
-  display: contents;
+.sim-start-file-actions {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.sim-start-toggles {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
 }
 
 .sim-upload-primary {
-  flex: 1 1 100%;
+  width: 100%;
   min-height: 32px;
   border: 1px solid var(--sim-line);
   background: var(--sim-panel-2);
@@ -183,12 +194,18 @@ body {
 
 .sim-toggle {
   position: relative;
-  flex: 1 1 calc(50% - 4px);
+  min-width: 0;
   min-height: 32px;
   border: 1px solid var(--sim-line);
   background: transparent;
   color: var(--sim-text);
   border-radius: 7px;
+}
+
+.sim-toggle .block {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .sim-switch-input {
@@ -241,7 +258,7 @@ body {
 }
 
 .sim-tab {
-  min-height: 40px;
+  min-height: 38px;
   border: 1px solid var(--sim-line);
   background: var(--sim-panel);
   color: var(--sim-muted);
@@ -258,10 +275,19 @@ body {
   order: 20;
   display: grid;
   gap: 8px;
-  padding: 10px;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+.sim-action-card {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: center;
   border: 1px solid var(--sim-line);
   background: var(--sim-panel);
   border-radius: 8px;
+  padding: 10px 12px;
 }
 
 .sim-tab-shell {
@@ -290,6 +316,56 @@ body {
 
 .sim-role-swap-slot {
   display: none;
+}
+
+.surface-role-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+}
+
+.surface-role-grid .sim-role-slot {
+  display: block;
+}
+
+.surface-role-grid .sim-role-swap-slot {
+  display: flex;
+}
+
+.sim-runbar.surface-runbar {
+  grid-template-columns: max-content minmax(0, 1fr);
+}
+
+.sim-top-actions .sim-runbar.surface-runbar {
+  grid-template-columns: max-content minmax(0, 1fr);
+}
+
+.sim-runbar.surface-runbar .sim-run-button {
+  white-space: nowrap;
+}
+
+.surface-start-card {
+  max-width: 100%;
+}
+
+.surface-start-toggles {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.surface-action-dock {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.sim-top-actions.surface-action-dock {
+  box-shadow: none;
+}
+
+.surface-action-dock .surface-action-card {
+  grid-column: 1;
+  justify-self: center;
+  width: max-content;
+  max-width: 100%;
+  box-shadow: 0 -12px 28px rgba(16, 19, 29, 0.42);
 }
 
 .sim-role-panel {
@@ -621,8 +697,15 @@ body {
   box-shadow: 0 -16px 34px rgba(16, 19, 29, 0.64);
 }
 
+.sim-action-help-row {
+  display: flex;
+  justify-content: center;
+  min-width: 0;
+}
+
 .sim-top-actions .sim-runbar,
 .sim-top-actions .sim-tool-panel {
+  min-width: 0;
   margin-bottom: 0;
   border: 0;
   background: transparent;
@@ -633,7 +716,7 @@ body {
 .sim-top-actions .sim-runbar {
   position: static;
   grid-template-columns: 6rem auto;
-  justify-content: start;
+  justify-content: center;
   align-items: center;
   box-shadow: none;
 }
@@ -648,6 +731,12 @@ body {
   min-height: 44px;
 }
 
+.sim-top-actions button.sim-optimize-side-toggle,
+.sim-top-actions button.sim-options-toggle,
+.sim-top-actions button.sim-optimize-run-button {
+  min-height: 44px;
+}
+
 .sim-optimize-command-panel .sim-modifier-card {
   border: 0;
   background: transparent;
@@ -655,6 +744,7 @@ body {
 }
 
 .sim-optimize-command-panel {
+  min-width: 0;
   font-size: 12px;
 }
 
@@ -666,27 +756,70 @@ body {
 
 .sim-optimize-command-panel .sim-optimize-mode-grid {
   display: flex;
-  align-items: end;
+  min-width: 0;
+  align-items: center;
   gap: 8px;
   grid-template-columns: none;
 }
 
+.sim-optimize-command-panel .sim-segmented {
+  width: 8.5rem;
+  min-width: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.sim-optimize-command-panel .sim-segmented button {
+  min-width: 0;
+  padding: 0 7px;
+  font-size: 10px;
+}
+
 .sim-optimize-flow {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  min-width: 0;
+  grid-template-columns: auto auto auto auto;
   align-items: center;
+  justify-content: center;
   gap: 8px;
 }
 
 .sim-optimize-action-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
+  display: contents;
+  min-width: 0;
 }
 
-.sim-optimize-action-row > span {
+.sim-optimize-action-row > span:not(.sim-action-help-row) {
   display: none;
+}
+
+.sim-optimize-side-toggle,
+.sim-options-toggle,
+.sim-optimize-run-button {
+  justify-self: start;
+  min-height: 44px;
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.sim-optimize-side-toggle {
+  display: inline-flex;
+  min-width: 8.5rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid var(--sim-line);
+  background: transparent;
+  color: var(--sim-blue);
+  padding: 0 10px;
+}
+
+.sim-optimize-run-button {
+  border: 1px solid var(--sim-green);
+  background: var(--sim-green);
+  color: #11131c;
+  padding: 0 16px;
 }
 
 .sim-optimize-command-panel legend,
@@ -703,12 +836,12 @@ body {
 }
 
 .sim-optimize-command-panel #optimize-options-panel {
-  flex-basis: 100%;
+  grid-column: 1 / -1;
 }
 
 .sim-optimize-command-panel fieldset {
   margin: 0;
-  min-width: 12rem;
+  min-width: 0;
 }
 
 .sim-optimize-command-panel h3 {
@@ -726,41 +859,166 @@ body {
   font-weight: 800;
 }
 
+.sim-help-wrap {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+
+.sim-help-tooltip {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 8px);
+  z-index: 70;
+  display: none;
+  width: min(19rem, calc(100vw - 2rem));
+  max-width: calc(100vw - 2rem);
+  border: 1px solid var(--sim-line-strong);
+  background: var(--sim-field);
+  color: var(--sim-text);
+  border-radius: 7px;
+  padding: 8px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.35;
+  white-space: normal;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.38);
+  transform: translateX(-50%);
+}
+
+.sim-options-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid var(--sim-line);
+  background: transparent;
+  color: var(--sim-muted);
+  padding: 0 10px;
+}
+
+.sim-options-chevron {
+  width: 9px;
+  height: 9px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(-45deg);
+}
+
+.sim-options-toggle[aria-expanded="true"] .sim-options-chevron {
+  transform: rotate(45deg);
+}
+
+.sim-options-toggle:hover,
+.sim-options-toggle:focus-visible {
+  border-color: var(--sim-line-strong);
+  color: var(--sim-blue);
+}
+
+.sim-help-wrap:hover .sim-help-tooltip,
+.sim-help-wrap:focus-within .sim-help-tooltip {
+  display: block;
+}
+
+@media (max-width: 1023px) {
+  .sim-help-tooltip {
+    right: 0;
+    left: auto;
+    transform: none;
+  }
+}
+
 @media (min-width: 1024px) {
   .sim-start-card {
-    justify-content: start;
+    grid-template-columns: minmax(0, 1fr) max-content;
+  }
+
+  .sim-start-file-actions {
+    display: flex;
+    justify-self: start;
+  }
+
+  .sim-start-file-actions .sim-upload-primary,
+  .sim-start-file-actions .sim-edit-chip {
+    width: auto;
+    min-width: 8.75rem;
+  }
+
+  .sim-start-toggles {
+    justify-self: end;
+    grid-template-columns: repeat(2, minmax(10.5rem, max-content));
+  }
+
+  .surface-start-toggles {
+    grid-template-columns: repeat(2, minmax(10.5rem, max-content));
   }
 
   .sim-top-actions {
-    right: 24px;
-    left: calc(13rem + 24px);
+    right: max(24px, calc((100vw - 13rem - 1500px) / 2 + 24px));
+    left: calc(13rem + max(24px, calc((100vw - 13rem - 1500px) / 2 + 24px)));
     bottom: 14px;
-    grid-template-columns: max-content minmax(0, 1fr);
-    align-items: start;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    align-items: stretch;
+    gap: 10px 14px;
+  }
+
+  .sim-action-card-run {
+    grid-column: 1;
+    justify-self: center;
+    width: max-content;
+    max-width: 100%;
+  }
+
+  .sim-action-card-optimize {
+    grid-column: 2;
+    justify-self: center;
+    width: max-content;
+    max-width: 100%;
+  }
+
+  .surface-action-dock {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .surface-action-dock .surface-action-card {
+    grid-column: 1;
+    justify-self: center;
+    width: max-content;
+    max-width: 100%;
+  }
+
+  .sim-tab-shell {
+    display: flex;
+  }
+
+  .sim-workbench-tabs {
+    width: min(100%, 32rem);
+  }
+
+  .sim-workbench-tabs .sim-tab {
+    min-height: 34px;
+    padding-top: 4px;
+    padding-bottom: 4px;
   }
 
   .simulate-workspace {
     padding-bottom: 8rem;
   }
 
-  .sim-upload-primary {
-    flex: 0 0 auto;
-  }
-
-  .sim-toggle {
-    flex: 0 0 auto;
+  .sim-results-placeholder {
+    display: none;
   }
 }
 
 .bear-start-card {
-  max-width: 42rem;
+  max-width: 54rem;
 }
 
 .bear-army-panel {
   max-width: 54rem;
 }
 
-@media (min-width: 1536px) {
+@media (min-width: 1200px) {
   .sim-tabs-narrow {
     display: none;
   }
@@ -782,6 +1040,10 @@ body {
     grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
     gap: 18px;
     align-items: start;
+  }
+
+  .surface-role-grid.sim-role-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .bear-start-card {
@@ -807,6 +1069,17 @@ body {
   }
 }
 
+@media (min-width: 1200px) and (max-width: 1535px) {
+  .sim-stat-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .sim-stat-edit-row {
+    grid-template-columns: minmax(1.9rem, 0.36fr) repeat(4, minmax(0, 1fr));
+    gap: 5px;
+  }
+}
+
 @media (max-width: 640px) {
   .sim-unit-row {
     grid-template-columns: 4.75rem minmax(0, 1fr) 4.75rem;
@@ -826,5 +1099,76 @@ body {
     position: static;
     grid-template-columns: minmax(0, 1fr) auto;
     box-shadow: none;
+  }
+
+  .sim-top-actions {
+    bottom: 0;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+    padding: 10px 12px;
+  }
+
+  .sim-action-help-row {
+    margin-bottom: -2px;
+  }
+
+  .sim-top-actions .sim-runbar {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    align-items: end;
+    gap: 10px;
+    width: 100%;
+  }
+
+  .sim-top-actions .sim-runbar .sim-input {
+    min-height: 44px;
+  }
+
+  .sim-top-actions .sim-run-button {
+    width: 100%;
+  }
+
+  .sim-optimize-command-panel .sim-optimize-flow {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    gap: 8px;
+    width: 100%;
+  }
+
+  .sim-optimize-side-toggle,
+  .sim-options-toggle,
+  .sim-optimize-run-button {
+    width: 100%;
+    min-width: 0;
+    min-height: 44px;
+    padding: 0 10px;
+  }
+
+  .sim-options-toggle {
+    width: 100%;
+  }
+
+  .sim-help-tooltip {
+    width: min(15rem, calc(100vw - 2rem));
+  }
+
+  .sim-optimize-command-panel .sim-segmented {
+    width: 100%;
+  }
+
+  .sim-optimize-action-row {
+    display: contents;
+  }
+
+  .sim-options-toggle {
+    justify-self: stretch;
+  }
+
+  .sim-optimize-run-button {
+    grid-column: 1 / -1;
+    justify-self: stretch;
+  }
+
+  .sim-optimize-side-toggle {
+    justify-self: stretch;
   }
 }

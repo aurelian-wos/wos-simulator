@@ -647,10 +647,13 @@ test("same_effect_stacking max consumes overlapping attack-duration extra skill 
     { mode: "trace" }
   );
 
+  const roundTwoNormalOutcome = result.attacks.find((attack) => attack.kind === "normal" && attack.jobId.startsWith("r2:attacker:infantry"));
   const roundTwoSkillOutcome = result.attacks.find((attack) => attack.kind === "skill" && attack.jobId.startsWith("r2:attacker:infantry"));
 
+  assert.notEqual(roundTwoNormalOutcome, undefined);
+  assert.equal(roundTwoNormalOutcome!.consumedEffectIds.length, 2);
   assert.notEqual(roundTwoSkillOutcome, undefined);
-  assert.equal(roundTwoSkillOutcome!.consumedEffectIds.length, 2);
+  assert.equal(roundTwoSkillOutcome!.consumedEffectIds.length, 0);
 });
 
 test("requires_effect is ignored by native simulator effect activation", () => {

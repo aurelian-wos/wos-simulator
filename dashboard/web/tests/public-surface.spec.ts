@@ -18,7 +18,7 @@ test.describe("public simulate surface", () => {
     await expect(page.getByRole("link", { name: "Coverage" })).toHaveCount(0);
     await expect(page.getByRole("link", { name: "Heroes" })).toHaveCount(0);
     await expect(page.getByRole("link", { name: "Testcases" })).toHaveCount(0);
-    await expect(page.getByText("Accuracy Dashboard")).toHaveCount(0);
+    await expect(page.getByText("Simulator Dashboard")).toHaveCount(0);
   });
 
   test("/bear remains public", async ({ page }) => {

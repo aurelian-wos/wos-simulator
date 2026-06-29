@@ -2,29 +2,52 @@ import { loadSimulatorConfig } from "@simulator/config";
 import { simulateBattle } from "@simulator/simulator";
 import type { SimulatorConfig } from "@simulator/types";
 import type { OptimizeRatioRequestPayload } from "@/lib/simulate-run";
-import { MAX_OPTIMIZE_BATTLES, MAX_OPTIMIZE_COMPOSITIONS, type OptimizeRatioPoint, type OptimizeRatioResult, type OptimizeSide } from "@/lib/optimize-ratio";
+import {
+  ADAPTIVE_FINAL_REPLICATES,
+  ADAPTIVE_LOCAL_NEIGHBOURS_PER_SEED,
+  ADAPTIVE_MAX_FINALISTS,
+  ADAPTIVE_MAX_PHASE2_SEEDS,
+  ADAPTIVE_PHASE1_REPLICATES,
+  ADAPTIVE_PHASE2_REPLICATES,
+  DEFAULT_INFANTRY_MAX_PCT,
+  DEFAULT_INFANTRY_MIN_PCT,
+  DEFAULT_OPTIMIZE_REPLICATES,
+  DEFAULT_TOP_RESULTS,
+  MAX_OPTIMIZE_BATTLES,
+  MAX_OPTIMIZE_COMPOSITIONS,
+  type OptimizeRatioPoint,
+  type OptimizeRatioResult,
+  type OptimizeSide,
+} from "@/lib/optimize-ratio";
 import { toBattleInput } from "./adapters";
 
-const ADAPTIVE_PHASE1_REPLICATES = 20;
-const ADAPTIVE_PHASE2_REPLICATES = 20;
-const ADAPTIVE_FINAL_REPLICATES = 300;
-const ADAPTIVE_MAX_PHASE2_SEEDS = 20;
-const ADAPTIVE_LOCAL_NEIGHBOURS_PER_SEED = 49;
-const ADAPTIVE_MAX_FINALISTS = 40;
-const DEFAULT_REPLICATES = 20;
-const DEFAULT_TOP_RESULTS = 10;
-const DEFAULT_INFANTRY_MIN_PCT = 30;
-const DEFAULT_INFANTRY_MAX_PCT = 70;
-
-type Composition = [number, number, number];
+export type Composition = [number, number, number];
 type RankableOptimizeRow = Pick<OptimizeRatioPoint, "win_rate" | "avg_margin" | "avg_attacker_left" | "avg_defender_left">;
 type OptimizeBattleSimulator = typeof simulateBattle;
+
+export interface OptimizeBatchTask {
+  taskIndex: number;
+  composition: Composition;
+  replicates: number;
+  seedBase: string;
+  phase: NonNullable<OptimizeRatioPoint["search_phase"]>;
+}
+
+export interface OptimizeBatchResult {
+  taskIndex: number;
+  point: OptimizeRatioPoint;
+}
 
 interface RunOptimizeRatioOptions {
   config?: SimulatorConfig;
   seedBase?: string;
   onProgress?: (done: number, total: number) => void;
   simulateBattle?: OptimizeBattleSimulator;
+  runBatches?: (
+    request: OptimizeRatioRequestPayload,
+    tasks: OptimizeBatchTask[],
+    onProgress?: (done: number, total: number) => void,
+  ) => Promise<OptimizeBatchResult[]>;
 }
 
 export function* compositionGrid(total: number, step: number, infantryMinPct: number, infantryMaxPct: number): Iterable<Composition> {
@@ -77,10 +100,10 @@ export function rankOptimizeRows<T extends RankableOptimizeRow>(rows: readonly T
   });
 }
 
-export function runOptimizeRatio(
+export async function runOptimizeRatio(
   request: OptimizeRatioRequestPayload,
   options: RunOptimizeRatioOptions = {}
-): OptimizeRatioResult {
+): Promise<OptimizeRatioResult> {
   const config = options.config ?? loadSimulatorConfig();
   const battleSimulator = options.simulateBattle ?? simulateBattle;
   const optimizeSide = normalizeOptimizeSide(request.optimize_side);
@@ -97,11 +120,11 @@ export function runOptimizeRatio(
   const topN = Math.max(1, Math.min(25, Math.floor(request.top_n || DEFAULT_TOP_RESULTS)));
 
   return searchMode === "grid"
-    ? runGridOptimize(request, total, step, replicates, infantryMinPct, infantryMaxPct, topN, config, battleSimulator, options)
-    : runAdaptiveOptimize(request, total, step, infantryMinPct, infantryMaxPct, topN, config, battleSimulator, options);
+    ? await runGridOptimize(request, total, step, replicates, infantryMinPct, infantryMaxPct, topN, config, battleSimulator, options)
+    : await runAdaptiveOptimize(request, total, step, infantryMinPct, infantryMaxPct, topN, config, battleSimulator, options);
 }
 
-function runGridOptimize(
+async function runGridOptimize(
   request: OptimizeRatioRequestPayload,
   total: number,
   step: number,
@@ -111,8 +134,8 @@ function runGridOptimize(
   topN: number,
   config: SimulatorConfig,
   battleSimulator: OptimizeBattleSimulator,
-  options: { seedBase?: string; onProgress?: (done: number, total: number) => void }
-): OptimizeRatioResult {
+  options: RunOptimizeRatioOptions,
+): Promise<OptimizeRatioResult> {
   const compositions = [...compositionGrid(total, step, infantryMinPct, infantryMaxPct)];
   if (compositions.length === 0) throw new Error("No compositions fit inside the requested infantry range at this grid step.");
   const projectedBattles = compositions.length * replicates;
@@ -123,7 +146,7 @@ function runGridOptimize(
     throw new Error(`Search too expensive: ${projectedBattles} projected battles exceeds the limit of ${MAX_OPTIMIZE_BATTLES}. Increase the grid step or lower search replicates.`);
   }
 
-  const points = evaluateBatch(request, compositions, replicates, config, battleSimulator, options.seedBase ?? "optimize", "grid", 0, compositions.length, options.onProgress);
+  const points = await evaluateBatch(request, compositions, replicates, config, battleSimulator, options.seedBase ?? "optimize", "grid", 0, compositions.length, options);
   return finalizeOptimizeResult(request, {
     total,
     step,
@@ -139,7 +162,7 @@ function runGridOptimize(
   });
 }
 
-function runAdaptiveOptimize(
+async function runAdaptiveOptimize(
   request: OptimizeRatioRequestPayload,
   total: number,
   step: number,
@@ -148,19 +171,19 @@ function runAdaptiveOptimize(
   topN: number,
   config: SimulatorConfig,
   battleSimulator: OptimizeBattleSimulator,
-  options: { seedBase?: string; onProgress?: (done: number, total: number) => void }
-): OptimizeRatioResult {
+  options: RunOptimizeRatioOptions,
+): Promise<OptimizeRatioResult> {
   const phase1Compositions = [...percentageGrid(total, 5, infantryMinPct, infantryMaxPct)];
   if (phase1Compositions.length === 0) throw new Error("No valid 5% grid ratios fit inside the requested infantry range.");
 
   const estimatedTotal = estimatedAdaptiveCompositions(phase1Compositions.length);
   const seedBase = options.seedBase ?? "optimize";
-  const phase1 = evaluateBatch(request, phase1Compositions, ADAPTIVE_PHASE1_REPLICATES, config, battleSimulator, seedBase, "coarse", 0, estimatedTotal, options.onProgress);
+  const phase1 = await evaluateBatch(request, phase1Compositions, ADAPTIVE_PHASE1_REPLICATES, config, battleSimulator, seedBase, "coarse", 0, estimatedTotal, options);
   const optimizeSide = normalizeOptimizeSide(request.optimize_side);
   const topByWin = rankOptimizeRows(phase1, optimizeSide).slice(0, 10);
   const topByMargin = [...phase1].sort((a, b) => b.avg_margin - a.avg_margin).slice(0, 10);
   const phase2Compositions = adaptiveNeighbours(dedupeResults([...topByWin, ...topByMargin]), total, infantryMinPct, infantryMaxPct);
-  const phase2 = evaluateBatch(
+  const phase2 = await evaluateBatch(
     request,
     phase2Compositions,
     ADAPTIVE_PHASE2_REPLICATES,
@@ -170,7 +193,7 @@ function runAdaptiveOptimize(
     "local",
     phase1Compositions.length,
     estimatedTotal,
-    options.onProgress
+    options
   );
   const topByConservativeWin = [...phase2]
     .sort((a, b) => (b.conservative_win_rate ?? 0) - (a.conservative_win_rate ?? 0) || (b.conservative_margin ?? 0) - (a.conservative_margin ?? 0))
@@ -180,7 +203,7 @@ function runAdaptiveOptimize(
     .slice(0, ADAPTIVE_MAX_PHASE2_SEEDS);
   const finalists = dedupeResults([...topByConservativeWin, ...topByConservativeMargin]).slice(0, ADAPTIVE_MAX_FINALISTS).map(resultKey);
   const finalTotal = phase1Compositions.length + phase2Compositions.length + finalists.length;
-  const finalistPoints = evaluateBatch(
+  const finalistPoints = await evaluateBatch(
     request,
     finalists,
     ADAPTIVE_FINAL_REPLICATES,
@@ -190,7 +213,7 @@ function runAdaptiveOptimize(
     "finalist",
     phase1Compositions.length + phase2Compositions.length,
     finalTotal,
-    options.onProgress
+    options
   );
   const points = [...phase1, ...phase2, ...finalistPoints];
   const projectedBattles =
@@ -227,14 +250,49 @@ function evaluateBatch(
   phase: NonNullable<OptimizeRatioPoint["search_phase"]>,
   progressStart: number,
   progressTotal: number,
-  onProgress?: (done: number, total: number) => void
-): OptimizeRatioPoint[] {
-  return compositions.map((composition, index) => {
-    const point = evaluateComposition(request, composition, replicates, config, battleSimulator, `${seedBase}:${phase}`);
-    point.search_phase = phase;
-    point.phase_replicates = replicates;
-    onProgress?.(progressStart + index + 1, progressTotal);
-    return point;
+  options: Pick<RunOptimizeRatioOptions, "onProgress" | "runBatches">,
+): Promise<OptimizeRatioPoint[]> {
+  const tasks = compositions.map((composition, index) => ({
+    taskIndex: index,
+    composition,
+    replicates,
+    seedBase: `${seedBase}:${phase}`,
+    phase,
+  }));
+  const reportProgress = (done: number) => {
+    options.onProgress?.(progressStart + done, progressTotal);
+  };
+  const resultsPromise = options.runBatches
+    ? options.runBatches(request, tasks, (done) => reportProgress(done))
+    : Promise.resolve(runOptimizeBatchDirect(request, tasks, config, battleSimulator, (done) => reportProgress(done)));
+  return resultsPromise.then((results) =>
+    [...results]
+      .sort((a, b) => a.taskIndex - b.taskIndex)
+      .map((result) => result.point),
+  );
+}
+
+export function runOptimizeBatchDirect(
+  request: OptimizeRatioRequestPayload,
+  tasks: readonly OptimizeBatchTask[],
+  config: SimulatorConfig = loadSimulatorConfig(),
+  battleSimulator: OptimizeBattleSimulator = simulateBattle,
+  onProgress?: (done: number, total: number) => void,
+): OptimizeBatchResult[] {
+  const total = tasks.length;
+  return tasks.map((task, index) => {
+    const point = evaluateComposition(
+      request,
+      task.composition,
+      task.replicates,
+      config,
+      battleSimulator,
+      task.seedBase,
+    );
+    point.search_phase = task.phase;
+    point.phase_replicates = task.replicates;
+    onProgress?.(index + 1, total);
+    return { taskIndex: task.taskIndex, point };
   });
 }
 
@@ -400,7 +458,7 @@ function normaliseStep(total: number, rawStep: number): number {
 }
 
 function normaliseReplicates(rawValue: number): number {
-  const replicates = Math.floor(rawValue || DEFAULT_REPLICATES);
+  const replicates = Math.floor(rawValue || DEFAULT_OPTIMIZE_REPLICATES);
   return Math.max(1, Math.min(500, replicates));
 }
 

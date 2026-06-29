@@ -7,8 +7,6 @@ import SimulateOutcomeChart from "@/components/SimulateOutcomeChart";
 import type { OcrResult, UploadActiveModifiers } from "@/components/UploadReportModal";
 import type { TroopCategory } from "@/lib/heroes-catalogue";
 import {
-  DEFAULT_INFANTRY_MAX_PCT,
-  DEFAULT_INFANTRY_MIN_PCT,
   DEFAULT_OPTIMIZE_REPLICATES,
   DEFAULT_OPTIMIZE_SEARCH_MODE,
   DEFAULT_TOP_RESULTS,
@@ -78,6 +76,8 @@ import {
 
 const RALLY_MODE = true;
 const RECENT_RUNS_PAGE_SIZE = 20;
+const BEAR_OPTIMIZE_INFANTRY_MIN_PCT = 0;
+const BEAR_OPTIMIZE_INFANTRY_MAX_PCT = 10;
 const DEFAULT_PAGE_TITLE = "Bear Sim - WOS Simulator Dashboard";
 const SAVED_RUN_DATE_FORMATTER = new Intl.DateTimeFormat("en-GB", {
   dateStyle: "medium",
@@ -247,6 +247,13 @@ function clampValue(value: number | undefined, fallback: number): number {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
 }
 
+function clampBearOptimizeInfantryPct(value: number | undefined, fallback: number): number {
+  return Math.max(
+    BEAR_OPTIMIZE_INFANTRY_MIN_PCT,
+    Math.min(BEAR_OPTIMIZE_INFANTRY_MAX_PCT, clampValue(value, fallback)),
+  );
+}
+
 function formatSavedRunTimestamp(iso: string): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) {
@@ -266,8 +273,8 @@ function buildInitialBearSavedRunState(
     optimizeResult: null,
     optimizeReplicates: DEFAULT_OPTIMIZE_REPLICATES,
     optimizeStepInput: "",
-    optimizeInfantryMinPct: DEFAULT_INFANTRY_MIN_PCT,
-    optimizeInfantryMaxPct: DEFAULT_INFANTRY_MAX_PCT,
+    optimizeInfantryMinPct: BEAR_OPTIMIZE_INFANTRY_MIN_PCT,
+    optimizeInfantryMaxPct: BEAR_OPTIMIZE_INFANTRY_MAX_PCT,
     optimizeSearchMode: DEFAULT_OPTIMIZE_SEARCH_MODE,
     loadedPresetName: null,
     savedRunMeta: null,
@@ -334,8 +341,14 @@ function buildInitialBearSavedRunState(
     optimizeStepInput: Number.isFinite(optimizeRequest.grid_step)
       ? String(optimizeRequest.grid_step)
       : "",
-    optimizeInfantryMinPct: clampValue(optimizeRequest.infantry_min_pct, DEFAULT_INFANTRY_MIN_PCT),
-    optimizeInfantryMaxPct: clampValue(optimizeRequest.infantry_max_pct, DEFAULT_INFANTRY_MAX_PCT),
+    optimizeInfantryMinPct: clampBearOptimizeInfantryPct(
+      optimizeRequest.infantry_min_pct,
+      BEAR_OPTIMIZE_INFANTRY_MIN_PCT,
+    ),
+    optimizeInfantryMaxPct: clampBearOptimizeInfantryPct(
+      optimizeRequest.infantry_max_pct,
+      BEAR_OPTIMIZE_INFANTRY_MAX_PCT,
+    ),
     optimizeSearchMode: optimizeRequest.search_mode === "grid" ? "grid" : DEFAULT_OPTIMIZE_SEARCH_MODE,
     savedRunError: null,
   };
@@ -511,8 +524,18 @@ export default function BearSimClient({
       const optimizeRequest = saved.request as BearOptimizeRatioRequestPayload;
       setOptimizeReplicates(Math.max(1, Math.min(500, clampValue(optimizeRequest.search_replicates, DEFAULT_OPTIMIZE_REPLICATES))));
       setOptimizeStepInput(Number.isFinite(optimizeRequest.grid_step) ? String(optimizeRequest.grid_step) : "");
-      setOptimizeInfantryMinPct(clampValue(optimizeRequest.infantry_min_pct, DEFAULT_INFANTRY_MIN_PCT));
-      setOptimizeInfantryMaxPct(clampValue(optimizeRequest.infantry_max_pct, DEFAULT_INFANTRY_MAX_PCT));
+      setOptimizeInfantryMinPct(
+        clampBearOptimizeInfantryPct(
+          optimizeRequest.infantry_min_pct,
+          BEAR_OPTIMIZE_INFANTRY_MIN_PCT,
+        ),
+      );
+      setOptimizeInfantryMaxPct(
+        clampBearOptimizeInfantryPct(
+          optimizeRequest.infantry_max_pct,
+          BEAR_OPTIMIZE_INFANTRY_MAX_PCT,
+        ),
+      );
       setOptimizeSearchMode(optimizeRequest.search_mode === "grid" ? "grid" : DEFAULT_OPTIMIZE_SEARCH_MODE);
       setResult(null);
       setBattleTrace(null);
@@ -614,6 +637,8 @@ export default function BearSimClient({
     optimizeResult && selectedOptimizeKey
       ? optimizeResult.top_results.find((row) => optimizeRowKey(row) === selectedOptimizeKey) ?? optimizeResult.best
       : optimizeResult?.best ?? null;
+  const actionHelpText =
+    "Bear Sim scores the configured player army against the fixed bear target. Optimise searches troop ratios while keeping total troops, tiers, heroes, stats, and buffs fixed.";
 
   function openPresetModal() {
     const loaded = statPresets.find((preset) => preset.id === loadedPresetId);
@@ -851,21 +876,23 @@ export default function BearSimClient({
         </div>
 
         <section className="sim-start-card bear-start-card" data-testid="bear-start-card">
-          <button
-            type="button"
-            onClick={() => setUploadOpen(true)}
-            className="sim-upload-primary px-3 py-2"
-          >
-            <span className="block text-xs font-bold">Upload report</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setRecentRunsOpen(true)}
-            className="sim-edit-chip min-h-[32px] px-3 py-2 text-xs font-bold"
-            data-testid="bear-recent-runs-toggle"
-          >
-            Recent runs
-          </button>
+          <div className="sim-start-file-actions">
+            <button
+              type="button"
+              onClick={() => setUploadOpen(true)}
+              className="sim-upload-primary px-3 py-2"
+            >
+              <span className="block text-xs font-bold">Upload report</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setRecentRunsOpen(true)}
+              className="sim-edit-chip min-h-[32px] px-3 py-2 text-xs font-bold"
+              data-testid="bear-recent-runs-toggle"
+            >
+              Recent runs
+            </button>
+          </div>
         </section>
       </div>
 
@@ -953,11 +980,10 @@ export default function BearSimClient({
       </div>
 
       <div className="sim-top-actions" data-testid="bear-top-actions">
-        <div className="sim-tool-panel p-3">
-          <h3 className="mb-3 text-xs font-bold opacity-70">Run bear sim</h3>
-          <div className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-3">
-            <label className="flex flex-col gap-1">
-              <span className="text-[10px] font-black" style={{ color: "var(--sim-muted)" }}>Replicates</span>
+        <div className="sim-action-card sim-action-card-run">
+          <div className="sim-runbar mb-4 sm:mb-6" data-testid="bear-runbar">
+            <label className="flex min-w-0 flex-col gap-1">
+              <span className="text-[10px] font-black uppercase tracking-wider" style={{ color: "var(--sim-muted)" }}>Replicates</span>
               <input
                 type="number"
                 min={1}
@@ -972,70 +998,111 @@ export default function BearSimClient({
               type="button"
               onClick={runBear}
               disabled={loading}
-              className="sim-run-button px-4 py-2 text-sm font-bold"
-              style={{ opacity: loading ? 0.5 : 1 }}
+              className="sim-run-button px-5 py-2 text-sm font-black"
+              style={{
+                opacity: loading ? 0.55 : 1,
+                cursor: loading ? "wait" : "pointer",
+              }}
             >
               {loading ? "Simulating..." : "Bear Sim"}
             </button>
+            {error && <p className="col-span-2 text-xs" style={{ color: "#f38ba8" }}>{error}</p>}
+            <div className="col-span-2">
+              <ProgressBar active={loading} done={progress?.done ?? 0} total={progress?.total ?? replicates} />
+            </div>
           </div>
-          {error && <p className="mt-2 text-xs" style={{ color: "#f38ba8" }}>{error}</p>}
-          <ProgressBar active={loading} done={progress?.done ?? 0} total={progress?.total ?? replicates} />
         </div>
 
-        <div className="sim-tool-panel sim-optimize-command-panel p-3">
-          <h3 className="mb-3 text-xs font-bold opacity-70">Optimise ratio</h3>
-          <p className="mb-3 text-xs opacity-60">
-            Keeps total troops ({totalTroops.toLocaleString()}), tiers, heroes, stats, and buffs fixed; only the troop mix changes.
-          </p>
-          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-            <button
-              type="button"
-              onClick={runOptimize}
-              disabled={optimizeLoading || optimizeBudgetTooLarge || totalTroops <= 0 || !resolvedInfantryBounds.isValid}
-              className="sim-edit-chip min-h-[42px] px-4 py-2 text-sm font-bold"
-              style={{
-                opacity: optimizeLoading ? 0.65 : 1,
-              }}
-            >
-              {optimizeLoading ? "Optimising..." : "Optimise ratio"}
-            </button>
-            <button
-              type="button"
-              onClick={() => setOptimizePanelOpen((open) => !open)}
-              className="sim-edit-chip min-h-[42px] px-3 py-2 text-xs font-bold"
-            >
-              {optimizePanelOpen ? "Hide options" : "Show options"}
-            </button>
-            <span className="font-mono text-xs opacity-60">
-              {estimatedOptimizeCompositions.toLocaleString()} comps · {optimizeSearchMode === "adaptive" ? "30/10/100 reps" : `${optimizeReplicates} reps`} · {estimatedOptimizeBattles.toLocaleString()} battles
-            </span>
-          </div>
-          <ProgressBar active={optimizeLoading} done={optimizeProgress?.done ?? 0} total={optimizeProgress?.total ?? estimatedOptimizeCompositions} />
-          {optimizePanelOpen && (
-            <div className="sim-tool-panel mt-3 grid gap-3 p-3 md:grid-cols-2 2xl:grid-cols-4">
-              <SmallNumberInput label="Ratio reps" value={optimizeReplicates} disabled={optimizeSearchMode === "adaptive"} onChange={setOptimizeReplicates} min={1} max={500} />
-              <SmallTextInput label="Grid step" value={optimizeStepInput} disabled={optimizeSearchMode === "adaptive"} placeholder={String(recommendedOptimizeStep(totalTroops))} onChange={setOptimizeStepInput} />
-              <SmallNumberInput label="Inf min %" value={optimizeInfantryMinPct} onChange={setOptimizeInfantryMinPct} min={0} max={100} />
-              <SmallNumberInput label="Inf max %" value={optimizeInfantryMaxPct} onChange={setOptimizeInfantryMaxPct} min={0} max={100} />
-              <fieldset className="md:col-span-2 2xl:col-span-4">
-                <legend className="sim-field-label mb-1">Search mode</legend>
-                <div className="sim-segmented max-w-xs">
-                  {(["adaptive", "grid"] as OptimizeSearchMode[]).map((mode) => (
+        <div className="sim-action-card sim-action-card-optimize">
+          <div className="sim-tool-panel sim-optimize-command-panel p-3" data-testid="bear-optimize-panel">
+            <h3 className="mb-3 text-xs font-bold opacity-70">Optimise ratio</h3>
+            <p className="sim-optimize-description mb-3 text-xs opacity-60">
+              Keeps total troops ({totalTroops.toLocaleString()}), tiers, heroes, stats, and buffs fixed; only the troop mix changes.
+            </p>
+            <div className="sim-optimize-flow">
+              <div className="sim-optimize-action-row">
+                <button
+                  type="button"
+                  onClick={() => setOptimizePanelOpen((open) => !open)}
+                  aria-expanded={optimizePanelOpen}
+                  aria-controls="bear-optimize-options-panel"
+                  aria-label={optimizePanelOpen ? "Hide optimise options" : "Show optimise options"}
+                  className="sim-options-toggle"
+                  data-testid="bear-optimize-options-toggle"
+                >
+                  <span>Options</span>
+                  <span aria-hidden="true" className="sim-options-chevron" />
+                </button>
+                <span className="sim-action-help-row">
+                  <span className="sim-help-wrap">
                     <button
-                      key={mode}
                       type="button"
-                      onClick={() => setOptimizeSearchMode(mode)}
-                      className="capitalize"
-                      data-active={optimizeSearchMode === mode}
+                      className="sim-help-button"
+                      aria-label="Bear simulation actions help"
+                      aria-describedby="bear-action-help-tooltip"
                     >
-                      {mode}
+                      ?
                     </button>
-                  ))}
-                </div>
-              </fieldset>
+                    <span
+                      id="bear-action-help-tooltip"
+                      role="tooltip"
+                      className="sim-help-tooltip"
+                      data-testid="bear-optimize-help-tooltip"
+                    >
+                      {actionHelpText}
+                    </span>
+                  </span>
+                </span>
+                <button
+                  type="button"
+                  onClick={runOptimize}
+                  disabled={optimizeLoading || optimizeBudgetTooLarge || totalTroops <= 0 || !resolvedInfantryBounds.isValid}
+                  className="sim-optimize-run-button"
+                  style={{
+                    opacity:
+                      optimizeLoading || optimizeBudgetTooLarge || !resolvedInfantryBounds.isValid
+                        ? 0.65
+                        : 1,
+                    cursor:
+                      optimizeLoading || optimizeBudgetTooLarge || totalTroops <= 0 || !resolvedInfantryBounds.isValid
+                        ? "not-allowed"
+                        : "pointer",
+                  }}
+                >
+                  {optimizeLoading ? "Optimising..." : "Optimise ratio"}
+                </button>
+                <span className="font-mono text-xs opacity-60">
+                  {estimatedOptimizeCompositions.toLocaleString()} comps · {optimizeSearchMode === "adaptive" ? "30/10/100 reps" : `${optimizeReplicates} reps`} · {estimatedOptimizeBattles.toLocaleString()} battles
+                </span>
+              </div>
             </div>
-          )}
-          {optimizeError && <p className="mt-2 text-xs" style={{ color: "#f38ba8" }}>{optimizeError}</p>}
+            <ProgressBar active={optimizeLoading} done={optimizeProgress?.done ?? 0} total={optimizeProgress?.total ?? estimatedOptimizeCompositions} />
+            {optimizePanelOpen && (
+              <div id="bear-optimize-options-panel" className="sim-tool-panel mt-3 grid gap-3 p-3 md:grid-cols-2 2xl:grid-cols-4">
+                <SmallNumberInput label="Ratio reps" value={optimizeReplicates} disabled={optimizeSearchMode === "adaptive"} onChange={setOptimizeReplicates} min={1} max={500} />
+                <SmallTextInput label="Grid step" value={optimizeStepInput} disabled={optimizeSearchMode === "adaptive"} placeholder={String(recommendedOptimizeStep(totalTroops))} onChange={setOptimizeStepInput} />
+                <SmallNumberInput label="Inf min %" value={optimizeInfantryMinPct} onChange={setOptimizeInfantryMinPct} min={BEAR_OPTIMIZE_INFANTRY_MIN_PCT} max={BEAR_OPTIMIZE_INFANTRY_MAX_PCT} />
+                <SmallNumberInput label="Inf max %" value={optimizeInfantryMaxPct} onChange={setOptimizeInfantryMaxPct} min={BEAR_OPTIMIZE_INFANTRY_MIN_PCT} max={BEAR_OPTIMIZE_INFANTRY_MAX_PCT} />
+                <fieldset className="md:col-span-2 2xl:col-span-4">
+                  <legend className="sim-field-label mb-1">Search mode</legend>
+                  <div className="sim-segmented max-w-xs">
+                    {(["adaptive", "grid"] as OptimizeSearchMode[]).map((mode) => (
+                      <button
+                        key={mode}
+                        type="button"
+                        onClick={() => setOptimizeSearchMode(mode)}
+                        className="capitalize"
+                        data-active={optimizeSearchMode === mode}
+                      >
+                        {mode}
+                      </button>
+                    ))}
+                  </div>
+                </fieldset>
+              </div>
+            )}
+            {optimizeError && <p className="mt-2 text-xs" style={{ color: "#f38ba8" }}>{optimizeError}</p>}
+          </div>
         </div>
       </div>
 
@@ -1044,7 +1111,7 @@ export default function BearSimClient({
         data-testid="bear-panel-results"
       >
         {!result && !optimizeResult ? (
-          <div className="sim-tool-panel mb-4 p-3 text-xs" style={{ color: "var(--sim-muted)" }}>
+          <div className="sim-tool-panel sim-results-placeholder mb-4 p-3 text-xs" style={{ color: "var(--sim-muted)" }}>
             Results will appear here after running a bear sim or optimisation.
           </div>
         ) : null}

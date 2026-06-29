@@ -16,23 +16,55 @@ export interface RunSimulationOptions {
   seedBase?: string;
   onProgress?: (done: number, total: number) => void;
   config?: SimulatorConfig;
+  runBatches?: (
+    request: SimulateRequestPayload,
+    tasks: SimulateBatchTask[],
+    onProgress?: (done: number, total: number) => void,
+  ) => Promise<SimulateBatchResult[]>;
 }
 
-export function runSimulation(request: SimulateRequestPayload, options: RunSimulationOptions = {}): SimulateApiResult {
+export interface SimulateBatchTask {
+  index: number;
+  seed: string;
+}
+
+export interface SimulateBatchResult extends SimulateBatchTask {
+  result: BattleResult;
+}
+
+export async function runSimulation(request: SimulateRequestPayload, options: RunSimulationOptions = {}): Promise<SimulateApiResult> {
   const config = options.config ?? loadSimulatorConfig();
   const total = Math.max(1, Math.min(5000, Math.floor(request.replicates || 1)));
-  const results: BattleResult[] = [];
-  const outcomeRuns: SimulateOutcomeRun[] = [];
-  for (let index = 0; index < total; index += 1) {
-    const seed = `${options.seedBase ?? "dashboard"}:${index}`;
-    const result = simulateBattle(toBattleInput(request, seed), config);
-    results.push(result);
-    outcomeRuns.push({ outcome: signedOutcome(result), seed });
-    if ((index + 1) % Math.max(1, Math.floor(total / 20)) === 0 || index + 1 === total) {
-      options.onProgress?.(index + 1, total);
-    }
-  }
+  const tasks = Array.from({ length: total }, (_, index) => ({
+    index,
+    seed: `${options.seedBase ?? "dashboard"}:${index}`,
+  }));
+  const batchResults = options.runBatches
+    ? await options.runBatches(request, tasks, options.onProgress)
+    : runSimulationBatchDirect(request, tasks, config, options.onProgress);
+  const ordered = [...batchResults].sort((a, b) => a.index - b.index);
+  const results = ordered.map((row) => row.result);
+  const outcomeRuns: SimulateOutcomeRun[] = ordered.map((row) => ({
+    outcome: signedOutcome(row.result),
+    seed: row.seed,
+  }));
   return { ...aggregateBattleResults(results), outcome_runs: outcomeRuns };
+}
+
+export function runSimulationBatchDirect(
+  request: SimulateRequestPayload,
+  tasks: readonly SimulateBatchTask[],
+  config: SimulatorConfig = loadSimulatorConfig(),
+  onProgress?: (done: number, total: number) => void,
+): SimulateBatchResult[] {
+  const total = tasks.length;
+  const progressEvery = Math.max(1, Math.floor(Math.max(1, total) / 20));
+  return tasks.map((task, index) => {
+    const result = simulateBattle(toBattleInput(request, task.seed), config);
+    const done = index + 1;
+    if (done % progressEvery === 0 || done === total) onProgress?.(done, total);
+    return { ...task, result };
+  });
 }
 
 export function runSimulationTrace(

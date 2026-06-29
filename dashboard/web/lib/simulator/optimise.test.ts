@@ -30,9 +30,9 @@ test("rankOptimizeRows sorts by win rate then margin", () => {
   assert.equal(ranked[0].avg_margin, 20);
 });
 
-test("runOptimizeRatio evaluates candidate battles in fast simulator mode", () => {
+test("runOptimizeRatio evaluates candidate battles in fast simulator mode", async () => {
   const calls: SimulationOptions[] = [];
-  const result = runOptimizeRatio(sampleOptimizePayload(), {
+  const result = await runOptimizeRatio(sampleOptimizePayload(), {
     config: loadSimulatorConfig(),
     simulateBattle: (_input: BattleInput, _config: SimulatorConfig, options?: SimulationOptions) => {
       calls.push(options ?? {});

@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import type { BattleResult } from "@simulator/types";
-import { aggregateBattleResults, battleResultToTrace, signedOutcome } from "./simulate";
+import type { SimulateRequestPayload } from "@/lib/simulate-run";
+import { aggregateBattleResults, battleResultToTrace, runSimulation, signedOutcome } from "./simulate";
 
 function result(attacker: number, defender: number, activations = 0): BattleResult {
   return {
@@ -25,6 +26,37 @@ function result(attacker: number, defender: number, activations = 0): BattleResu
   };
 }
 
+function sampleSimulatePayload(replicates: number): SimulateRequestPayload {
+  return {
+    attacker: sampleSide({ infantry: 10, lancer: 0, marksman: 0 }),
+    defender: sampleSide({ infantry: 10, lancer: 0, marksman: 0 }),
+    replicates,
+    rally_mode: false,
+  };
+}
+
+function sampleSide(troops: Record<"infantry" | "lancer" | "marksman", number>): SimulateRequestPayload["attacker"] {
+  return {
+    troops,
+    troop_types: {
+      infantry: "infantry_t10",
+      lancer: "lancer_t10",
+      marksman: "marksman_t10",
+    },
+    heroes: {
+      infantry: { name: null, skills: [0, 0, 0, 0] },
+      lancer: { name: null, skills: [0, 0, 0, 0] },
+      marksman: { name: null, skills: [0, 0, 0, 0] },
+    },
+    joiners: [],
+    stats: {
+      inf: [0, 0, 0, 0],
+      lanc: [0, 0, 0, 0],
+      mark: [0, 0, 0, 0],
+    },
+  };
+}
+
 test("signedOutcome uses positive attacker survivors and negative defender survivors", () => {
   assert.equal(signedOutcome(result(12, 0)), 12);
   assert.equal(signedOutcome(result(0, 9)), -9);
@@ -39,6 +71,23 @@ test("aggregateBattleResults produces SimulateApiResult summary", () => {
   assert.equal(aggregate.summary.attacker_win_rate, 0.5);
   assert.equal(aggregate.per_side_skills.attacker[0].name, "S1");
   assert.equal(aggregate.per_side_skills.attacker[0].avg_activations, 1);
+});
+
+test("runSimulation preserves replicate order from batched workers", async () => {
+  const aggregate = await runSimulation(sampleSimulatePayload(2), {
+    seedBase: "batch-test",
+    runBatches: async (_request, tasks) =>
+      [...tasks].reverse().map((task) => ({
+        ...task,
+        result: task.index === 0 ? result(10, 0) : result(0, 5),
+      })),
+  });
+
+  assert.deepEqual(aggregate.outcomes, [10, -5]);
+  assert.deepEqual(aggregate.outcome_runs?.map((run) => run.seed), [
+    "batch-test:0",
+    "batch-test:1",
+  ]);
 });
 
 test("battleResultToTrace maps a full simulator trace into dashboard detail rows", () => {

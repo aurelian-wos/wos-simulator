@@ -24,6 +24,7 @@ const DASHBOARD_GROUPS: {
       { href: "/simulate", label: "Battle Sim" },
       { href: "/bear", label: "Bear Sim" },
       { href: "/tournament", label: "Tournament" },
+      { href: "/surface", label: "Ratio Explorer" },
     ],
   },
   {
@@ -58,7 +59,7 @@ export default function SiteNav({
       ? [{ title: "Simulation Running", links: SIMULATE_LINKS }]
       : DASHBOARD_GROUPS;
   const subtitle =
-    publicSurface === "simulate" ? "Battle Simulator" : "Accuracy Dashboard";
+    publicSurface === "simulate" ? "Battle Simulator" : "Simulator Dashboard";
 
   useEffect(() => {
     setOpen(false);
@@ -86,16 +87,13 @@ export default function SiteNav({
     <>
       {/* Mobile top bar */}
       <header
-        className="md:hidden fixed top-0 inset-x-0 z-40 flex items-center justify-between px-4 h-12"
+        className="md:hidden fixed top-0 inset-x-0 z-40 flex items-center gap-3 px-4 h-12"
         style={{
           backgroundColor: "var(--sidebar-bg)",
           color: "var(--sidebar-text)",
           borderBottom: "1px solid var(--border-color)",
         }}
       >
-        <span className="text-sm font-bold uppercase tracking-widest opacity-80">
-          WOS Sim
-        </span>
         <button
           type="button"
           onClick={() => setOpen((v) => !v)}
@@ -134,6 +132,9 @@ export default function SiteNav({
             )}
           </svg>
         </button>
+        <span className="text-sm font-bold uppercase tracking-widest opacity-80">
+          WOS Sim
+        </span>
       </header>
 
       {/* Mobile drawer */}
@@ -145,19 +146,12 @@ export default function SiteNav({
           aria-modal="true"
           aria-label="Site navigation"
         >
-          <button
-            type="button"
-            aria-label="Dismiss navigation"
-            className="flex-1 cursor-default"
-            onClick={() => setOpen(false)}
-            style={{ backgroundColor: "rgba(0,0,0,0.55)" }}
-          />
           <nav
             className="w-72 max-w-[85vw] flex flex-col py-4 px-4 gap-1 shadow-xl"
             style={{
               backgroundColor: "var(--sidebar-bg)",
               color: "var(--sidebar-text)",
-              borderLeft: "1px solid var(--border-color)",
+              borderRight: "1px solid var(--border-color)",
             }}
           >
             <div className="flex items-center justify-between mb-3 px-1">
@@ -223,6 +217,13 @@ export default function SiteNav({
               </div>
             ))}
           </nav>
+          <button
+            type="button"
+            aria-label="Dismiss navigation"
+            className="flex-1 cursor-default"
+            onClick={() => setOpen(false)}
+            style={{ backgroundColor: "rgba(0,0,0,0.55)" }}
+          />
         </div>
       )}
 
