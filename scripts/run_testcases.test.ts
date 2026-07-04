@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync, type SpawnSyncReturns } from "node:child_process";
-import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { test } from "node:test";
@@ -125,6 +125,63 @@ test("cli --workers runs testcase cases through worker pool", () => {
   assert.equal(testcase?.testcase_id, "simple_001");
   assert.equal(testcase?.sampleCount, 2);
   assert.deepEqual(readdirSync(outputDir), []);
+});
+
+test("cli --db-ingest writes the generated report into a dashboard sqlite database", () => {
+  const outputDir = tempDir("simulator-parity-db-output");
+  const dbPath = resolve(outputDir, "dashboard.sqlite");
+
+  const result = spawnSync(
+    "npx",
+    [
+      "--yes",
+      "tsx",
+      "scripts/run_testcases.ts",
+      "--matching",
+      "simple_001",
+      "--repeat",
+      "1",
+      "--output-dir",
+      outputDir,
+      "--db-ingest",
+      "--db-path",
+      dbPath,
+    ],
+    { cwd: repoRoot, encoding: "utf8" },
+  );
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(existsSync(dbPath), true);
+  const stderrReport = JSON.parse(result.stderr);
+  assert.equal(stderrReport.dbIngest.passing, 1);
+  assert.match(stderrReport.dbIngest.report_file, /^simulator_parity_.*\.json$/);
+});
+
+test("cli --db-ingest requires a persisted run snapshot", () => {
+  const outputDir = tempDir("simulator-parity-db-no-snapshot");
+
+  const result = spawnSync(
+    "npx",
+    [
+      "--yes",
+      "tsx",
+      "scripts/run_testcases.ts",
+      "--matching",
+      "simple_001",
+      "--repeat",
+      "1",
+      "--output-dir",
+      outputDir,
+      "--db-ingest",
+      "--no-run-snapshot",
+    ],
+    { cwd: repoRoot, encoding: "utf8" },
+  );
+
+  assert.equal(result.status, 1);
+  assert.deepEqual(JSON.parse(result.stderr), {
+    error: "--db-ingest requires a run snapshot; remove --no-run-snapshot",
+  });
 });
 
 test("cli rejects unknown arguments", () => {

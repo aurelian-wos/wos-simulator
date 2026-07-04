@@ -62,8 +62,8 @@ export default async function HeroDetailPage({ params }: PageProps) {
           >
             DB misconfiguration: missing tables:{" "}
             <strong>{missingTables.join(", ")}</strong>. Run{" "}
-            <code>python dashboard/seed_heroes.py</code> to seed the hero
-            catalogue.
+            <code>npx tsx scripts/run_testcases.ts --db-ingest</code> to apply
+            migrations and seed the hero catalogue.
           </div>
         ) : (
           <div

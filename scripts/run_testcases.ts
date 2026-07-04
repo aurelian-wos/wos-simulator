@@ -4,6 +4,7 @@ import { dirname, resolve } from "node:path";
 import { cpus } from "node:os";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+import { ingestReport } from "./dashboard_ingest";
 import { loadSimulatorConfig } from "../simulator/src/config";
 import {
   assignDetailArtifactPaths,
@@ -25,11 +26,15 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     const report = await runCliTestcases(options, config);
     const stdout = options.human ? formatHumanSummary(report) : JSON.stringify(buildSummaryForOutput(report), null, 2);
     if (options.noRunSnapshot) {
+      if (options.dbIngest) throw new Error("--db-ingest requires a run snapshot; remove --no-run-snapshot");
       console.log(stdout);
     } else {
       const snapshot = writeRunSnapshot(report, options.outputDir);
+      const dbIngest = options.dbIngest
+        ? ingestReport(snapshot.summaryPath, { dbPath: options.dbPath })
+        : undefined;
       console.log(stdout);
-      console.error(JSON.stringify(snapshot, null, 2));
+      console.error(JSON.stringify({ ...snapshot, ...(dbIngest ? { dbIngest } : {}) }, null, 2));
     }
     const failed = report.counts.errors > 0;
     process.exitCode = failed ? 1 : 0;
@@ -58,6 +63,8 @@ interface CliOptions {
   testcaseOptions: TestcaseRunOptions;
   outputDir: string;
   noRunSnapshot: boolean;
+  dbIngest: boolean;
+  dbPath?: string;
   human: boolean;
   workers: number;
 }
@@ -68,6 +75,7 @@ function parseArgs(args: string[]): CliOptions {
     testcaseOptions,
     outputDir: defaultOutputDir(),
     noRunSnapshot: false,
+    dbIngest: false,
     human: false,
     workers: Math.max(1, cpus().length/2)
   };
@@ -82,6 +90,8 @@ function parseArgs(args: string[]): CliOptions {
     else if (arg === "--workers") testcaseOptions.workers = readPositiveIntegerOption(args, ++index, arg);
     else if (arg === "--output-dir") options.outputDir = resolve(readOptionValue(args, ++index, arg));
     else if (arg === "--no-run-snapshot") options.noRunSnapshot = true;
+    else if (arg === "--db-ingest") options.dbIngest = true;
+    else if (arg === "--db-path") options.dbPath = resolve(readOptionValue(args, ++index, arg));
     else if (arg === "--human") options.human = true;
     else throw new Error(`Unknown argument: ${arg ?? ""}`);
   }

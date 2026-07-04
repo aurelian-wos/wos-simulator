@@ -30,8 +30,8 @@ export default function HeroesPage() {
         >
           DB misconfiguration: missing tables:{" "}
           <strong>{missingTables.join(", ")}</strong>. Run{" "}
-          <code>python dashboard/seed_heroes.py</code> to seed the hero
-          catalogue.
+          <code>npx tsx scripts/run_testcases.ts --db-ingest</code> to apply
+          migrations and seed the hero catalogue.
         </div>
       )}
 
@@ -42,7 +42,7 @@ export default function HeroesPage() {
         >
           {missingTables.length > 0
             ? "Heroes table is missing — see the error above."
-            : "No heroes found. Run python dashboard/seed_heroes.py to seed the hero catalogue."}
+            : "No heroes found. Run a DB-ingested testcase check to seed the hero catalogue."}
         </div>
       ) : (
         <div className="overflow-x-auto">

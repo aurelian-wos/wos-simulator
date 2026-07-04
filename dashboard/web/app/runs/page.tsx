@@ -2,7 +2,6 @@ import { getRunsWithDelta, getRunTrendWithBH, getTestcaseBiasTrend } from "@/lib
 import RunsHeadlineChart from "@/components/RunsHeadlineChart";
 import RunsAccordionTable from "@/components/RunsAccordionTable";
 import TestcaseDriftChart from "@/components/TestcaseDriftChart";
-import CheckNowControls from "@/components/CheckNowControls";
 
 export const dynamic = "force-dynamic";
 
@@ -20,8 +19,6 @@ export default function RunsPage() {
         Simulator Runs
       </h2>
 
-      <CheckNowControls />
-
       <RunsHeadlineChart data={trendData} />
 
       <TestcaseDriftChart rows={trendRows} />
@@ -31,8 +28,9 @@ export default function RunsPage() {
           className="rounded p-6 text-sm opacity-60"
           style={{ border: "1px solid var(--border-color)" }}
         >
-          No historical runs found. Use the button above to generate a current
-          simulator run report, or backfill the database for older run history.
+          No historical runs found. Run{" "}
+          <code>npx tsx scripts/run_testcases.ts --db-ingest</code> from the
+          repo root to generate a current simulator run report.
         </div>
       ) : (
         <RunsAccordionTable runs={runs} defaultOpen={true} />

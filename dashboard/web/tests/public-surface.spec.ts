@@ -30,7 +30,7 @@ test.describe("public simulate surface", () => {
     await expect(page.getByRole("link", { name: "Runs" })).toHaveCount(0);
   });
 
-  test("private QA routes and check-testcases API are blocked", async ({
+  test("private QA routes are blocked", async ({
     request,
   }) => {
     for (const path of [
@@ -40,7 +40,6 @@ test.describe("public simulate surface", () => {
       "/testcases",
       "/testcases/changelog",
       "/compare/a/b",
-      "/api/check-testcases",
     ]) {
       const response = await request.get(path);
       expect(response.status(), `${path} should be blocked`).toBe(404);

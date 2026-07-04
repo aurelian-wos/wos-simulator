@@ -4,9 +4,8 @@
 > [1589] HIT-Ryo. It has been **superseded by the TypeScript simulator in
 > [`simulator/`](../../simulator/)**, which is the current source of truth.
 >
-> v1 is kept here because it is still runnable for parity comparison and is
-> invoked by the dashboard's "Check now" calibration flow
-> (`dashboard/check_now.py` spawns `archived/v1/check_testcases.py`).
+> v1 is kept here because it is still manually runnable for historical parity
+> comparison with `archived/v1/check_testcases.py`.
 
 ## Running
 

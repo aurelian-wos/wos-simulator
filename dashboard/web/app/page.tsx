@@ -13,7 +13,6 @@ import {
   getTopRegressions,
 } from "@/lib/db";
 import CoverageTrendChart from "@/components/CoverageTrendChart";
-import CheckNowControls from "@/components/CheckNowControls";
 import { isPublicSimulateSurface } from "@/lib/public-surface";
 import { testcaseDetailHref } from "@/lib/testcase-file";
 
@@ -172,8 +171,9 @@ export default function HomePage() {
           className="rounded p-6 text-sm opacity-60"
           style={{ border: "1px solid var(--border-color)" }}
         >
-          No historical runs found. Use Check now to generate a current simulator
-          run report, or backfill the database for older run history.
+          No historical runs found. Run{" "}
+          <code>npx tsx scripts/run_testcases.ts --db-ingest</code> from the
+          repo root to generate a current simulator run report.
         </div>
       </div>
     );
@@ -247,17 +247,6 @@ export default function HomePage() {
           >
             Run simulation
           </Link>
-          <Link
-            href="#check-now"
-            className="inline-flex min-h-[40px] items-center justify-center rounded px-3 py-2 text-xs font-bold"
-            style={{
-              border: "1px solid var(--border-color)",
-              backgroundColor: "var(--sidebar-bg)",
-              color: "var(--main-text)",
-            }}
-          >
-            Check now
-          </Link>
         </div>
       </div>
 
@@ -294,10 +283,6 @@ export default function HomePage() {
           helper="latest run"
           tone={delta.skipped > 0 ? "warn" : "good"}
         />
-      </div>
-
-      <div id="check-now">
-        <CheckNowControls />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

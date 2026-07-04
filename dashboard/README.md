@@ -3,7 +3,8 @@
 The dashboard reads historical accuracy rows from `test_results/dashboard.sqlite`
 and current TypeScript simulator parity reports from `simulator/testcase_results/`.
 The SQLite schema remains documented here because older runs and trend pages use
-it, while new Check Now runs write simulator parity report JSON.
+it, while new CLI testcase runs can write simulator parity report JSON and
+optionally ingest summaries into SQLite.
 
 ---
 

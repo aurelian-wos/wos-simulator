@@ -26,7 +26,7 @@ dashboard and the parity/tournament tooling.
 cd simulator
 npm test                    # unit + testcase parity suite
 npm run typecheck
-npx tsx ../scripts/run_testcases.ts # run the testcase parity CLI
+npx tsx ../scripts/run_testcases.ts --db-ingest # run and add to dashboard history
 ```
 
 Simulator-backed operational scripts live at the repo root:
@@ -43,12 +43,11 @@ dashboard imports the engine through the `@simulator/*` path alias, which resolv
 
 ### `dashboard/`
 
-A Next.js app (`dashboard/web/`) plus a Python backend (`dashboard/*.py`) that
-serves the parity, coverage, heroes, and simulate pages. In-browser simulation
-runs the TypeScript engine in a web worker. The "Check now" flow runs the
-TypeScript testcase runner and writes parity reports under
-`simulator/testcase_results/`; OCR import remains Python-backed through the
-agent-skill parser.
+A Next.js app (`dashboard/web/`) plus Python helper scripts for legacy backfill
+and OCR import. The dashboard reads parity reports and the SQLite run history;
+current runs are generated from the CLI with
+`npx tsx scripts/run_testcases.ts --db-ingest`. In-browser simulation runs the
+TypeScript engine in a web worker.
 
 ```bash
 cd dashboard/web

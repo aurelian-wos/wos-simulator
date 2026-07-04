@@ -24,7 +24,6 @@ const DASHBOARD_GROUPS: {
       { href: "/simulate", label: "Battle Sim" },
       { href: "/bear", label: "Bear Sim" },
       { href: "/tournament", label: "Tournament" },
-      { href: "/surface", label: "Ratio Explorer" },
     ],
   },
   {
