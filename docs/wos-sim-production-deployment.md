@@ -10,9 +10,9 @@ surface is the simulator page only:
   report upload/OCR.
 - Private/local: regression dashboard routes, coverage/history views, and
   TypeScript testcase-runner controls.
-- Saved simulation run JSON files sync bidirectionally between the local dev
-  machine and the VPS.
-- Player stat presets do not need bidirectional sync in this phase.
+- Saved simulation run JSON files are stored on the production host outside the
+  image.
+- Player stat presets stay browser-local.
 
 The VPS deployment still runs production Next (`next build` / `next start`)
 behind the existing Traefik simulator TLS setup.
@@ -30,7 +30,6 @@ the host.
 - `dashboard/web/app/simulate/page.tsx`
 - `dashboard/web/app/api/simulate/**`
 - `dashboard/web/app/api/ocr-report/route.ts`
-- `dashboard/web/app/api/check-testcases/route.ts`
 - `dashboard/web/components/SiteNav.tsx`
 - `dashboard/web/lib/simulation-store.ts`
 - `dashboard/web/lib/stat-presets.ts`
@@ -74,7 +73,6 @@ Default/local mode must keep the full dashboard unchanged. In
   - `/heroes`
   - `/testcases`
   - `/compare/**`
-  - `/api/check-testcases`
 - Navigation in public mode must not advertise private QA dashboard routes.
 - `/healthz` remains available for Traefik/container health checks.
 
@@ -91,7 +89,7 @@ or preserve:
 - basic concurrency limiting for OCR requests,
 - clear failure responses for non-battle or unparsable reports.
 
-## Saved Run Sync
+## Saved Run Storage
 
 `SIM_RUNS_DIR` stores saved simulation runs as UUID-named JSON documents written
 with temp-file plus atomic rename semantics. In production,
@@ -101,47 +99,18 @@ with temp-file plus atomic rename semantics. In production,
 ${WOS_SIM_RUNS_DIR:-/srv/wos-sim/runtime/simulate-runs}
 ```
 
-Sync only completed JSON run documents bidirectionally between:
-
-```text
-VPS:   /srv/wos-sim/runtime/simulate-runs
-Local: the local dashboard SIM_RUNS_DIR
-```
-
-Use Syncthing or Unison, not ad hoc two-way `rsync`.
-
-This repo includes a Unison helper for manual or scheduled sync:
-
-```bash
-LOCAL_SIM_RUNS_DIR=/path/to/local/simulate-runs \
-WOS_SIM_REMOTE=deploy@example.com \
-WOS_SIM_REMOTE_RUNS_DIR=/path/to/remote/simulate-runs \
-./scripts/wos-sync-sim-runs.sh
-```
-
-Install Unison on both machines first. The helper exits without syncing if
-`unison` is not available, because a custom two-way `rsync` flow can lose data.
-Unison must use compatible versions on both sides. Set
-`WOS_SIM_UNISON_CMD` and `WOS_SIM_REMOTE_UNISON_CMD` if either host needs a
-versioned Unison binary instead of `unison`.
-
-Syncthing ignore patterns for both sides:
+If an operator backs up or syncs this directory outside the app, only completed
+JSON run documents should be treated as durable records. Ignore transient write
+files:
 
 ```text
 *.tmp
 *.json.*.tmp
 ```
 
-Unison path filter equivalent:
-
-```text
-ignore = Name *.tmp
-ignore = Name *.json.*.tmp
-```
-
 Player stat presets are private browser data stored by `/simulate` in
 `localStorage` under `wos-simulator.player-stat-presets.v1`; there is no server
-preset file, preset API, or production stat-preset volume to sync.
+preset file, preset API, or production stat-preset volume.
 
 ## Deployment Path
 
@@ -177,7 +146,7 @@ appear after file sync without an image rebuild.
 ## Non-Goals
 
 - Do not expose the accuracy dashboard publicly.
-- Do not expose `/api/check-testcases` publicly.
+- Do not add public testcase-runner APIs.
 - Do not run full testcase checks from public request handlers.
 - Do not add a server-side player stat preset store or sync path.
 - Do not fork the app into a separate codebase unless the single-codebase
@@ -191,7 +160,7 @@ appear after file sync without an image rebuild.
 - Default local mode keeps the full dashboard behavior unchanged.
 - Public navigation only presents simulate-appropriate links/actions.
 - OCR upload has size, timeout, and concurrency safeguards.
-- `SIM_RUNS_DIR` saved run JSON files have documented bidirectional sync setup.
+- `SIM_RUNS_DIR` saved run JSON files have documented production storage.
 - Player stat presets remain browser-local and are not represented in production
   Compose volumes or public APIs.
 - Production deployment runs behind Traefik/TLS at `wos-sim.ratme.org`.
@@ -220,7 +189,7 @@ PUBLIC_SURFACE=simulate npm run build
 PUBLIC_SURFACE=simulate npm run start -- --hostname 0.0.0.0 --port 3001
 curl -fsS http://127.0.0.1:3001/healthz
 curl -I http://127.0.0.1:3001/runs
-curl -I http://127.0.0.1:3001/api/check-testcases
+curl -I http://127.0.0.1:3001/testcases
 ```
 
 ## Visual QA
@@ -242,7 +211,7 @@ route and verify:
   required before public exposure.
 - Saved run files are low-conflict because IDs are UUIDs and completed JSON run
   documents should be immutable.
-- Player stat presets are browser-local and excluded from server sync.
+- Player stat presets are browser-local and excluded from server storage.
 - Current issue tracking and regression history belong in Paperclip/local QA,
   not on the public site.
 
