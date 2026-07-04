@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 
 import { Pool } from "./pools";
-import { deriveResultsLabel, loadAllRankedTeamsFromCsv, writeResultsCsv } from "./results";
+import { deriveResultsLabel, loadAllRankedTeamsFromCsv, writeCombinedResultsCsv, writeResultsCsv } from "./results";
 import type { Team } from "./types";
 
 function team(id: number): Team {
@@ -21,6 +21,7 @@ function team(id: number): Team {
 test("deriveResultsLabel strips ds prefix and timestamp suffix", () => {
   assert.equal(deriveResultsLabel("50-20-30"), "50-20-30");
   assert.equal(deriveResultsLabel("ds_mixed_20260510-160417"), "mixed");
+  assert.equal(deriveResultsLabel("swiss_mixed_20260510-160417"), "mixed");
   assert.equal(deriveResultsLabel("plain_dir"), "plain_dir");
 });
 
@@ -47,6 +48,28 @@ test("writeResultsCsv preserves schema and formatting", () => {
       "rank,win_rate,avg_margin,matches,formation,hero_1,hero_2,hero_3,joiner_1,joiner_2,joiner_3,joiner_4"
     );
     assert.match(text, /1,1\.0000,4\.50,2,50-20-30,Wu Ming,Mia,Bradley,Jessie,Seo-yoon,Lumak,Ling/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("writeCombinedResultsCsv writes combined standings csv", () => {
+  const root = mkdtempSync(join(tmpdir(), "standard-swiss-"));
+  try {
+    const teams = [team(1)];
+    const pool = new Pool(teams);
+    pool.getScore(1).wins = 2;
+    pool.getScore(1).matches = 2;
+    pool.getScore(1).margin = 12;
+    pool.finalizeRemaining();
+
+    writeCombinedResultsCsv(join(root, "swiss"), pool, 1);
+    const text = readFileSync(join(root, "swiss_combined.csv"), "utf8").trim();
+    assert.equal(
+      text.split("\n")[0],
+      "rank,win_rate,avg_margin,matches,formation,hero_1,hero_2,hero_3,joiner_1,joiner_2,joiner_3,joiner_4"
+    );
+    assert.match(text, /1,1\.0000,6\.00,2,50-20-30,Wu Ming,Mia,Bradley,Jessie,Seo-yoon,Lumak,Ling/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

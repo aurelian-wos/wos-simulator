@@ -10,13 +10,14 @@ const CSV_FIELDS = ["rank", "win_rate", "avg_margin", "matches", "formation", "h
 
 export function deriveResultsLabel(source: string): string {
   const name = basename(source);
-  if (!name.startsWith("ds_")) return name;
-  const candidate = name.slice(3);
+  const prefix = name.startsWith("ds_") ? "ds_" : name.startsWith("swiss_") ? "swiss_" : "";
+  if (!prefix) return name;
+  const candidate = name.slice(prefix.length);
   const split = candidate.lastIndexOf("_");
   if (split < 0) return candidate;
-  const prefix = candidate.slice(0, split);
+  const label = candidate.slice(0, split);
   const suffix = candidate.slice(split + 1);
-  return RESULTS_DIR_TIMESTAMP_RE.test(suffix) ? prefix : candidate;
+  return RESULTS_DIR_TIMESTAMP_RE.test(suffix) ? label : candidate;
 }
 
 export function loadAllRankedTeamsFromCsv(csvPath: string, total: number): Team[] {
@@ -43,9 +44,18 @@ export function copyQualifierCsvs(sourceDir: string, destDir: string): void {
   }
 }
 
+export function copyCombinedQualifierCsv(sourceDir: string, destDir: string): void {
+  mkdirSync(destDir, { recursive: true });
+  copyFileSync(join(sourceDir, "swiss_combined.csv"), join(destDir, "swiss_combined.csv"));
+}
+
 export function writeResultsCsv(pathPrefix: string, attackerPool: Pool, defenderPool: Pool, topN: number, offenseTeams?: Team[], defenseTeams?: Team[]): void {
   writeOneCsv(`${pathPrefix}_off.csv`, filterScores(attackerPool, offenseTeams).slice(0, topN));
   writeOneCsv(`${pathPrefix}_def.csv`, filterScores(defenderPool, defenseTeams).slice(0, topN));
+}
+
+export function writeCombinedResultsCsv(pathPrefix: string, pool: Pool, topN: number, teams?: Team[]): void {
+  writeOneCsv(`${pathPrefix}_combined.csv`, filterScores(pool, teams).slice(0, topN));
 }
 
 function filterScores(pool: Pool, allowedTeams?: Team[]): Score[] {
