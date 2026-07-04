@@ -14,14 +14,6 @@ test("dev startup syncs the repo-root uv environment before Next starts", () => 
     join(webRoot, "scripts", "dev-startup.sh"),
     "utf8",
   );
-  const cacheLockScript = readFileSync(
-    join(webRoot, "scripts", "next-cache-lock.sh"),
-    "utf8",
-  );
-  const dockerEntrypoint = readFileSync(
-    join(webRoot, "docker-entrypoint.sh"),
-    "utf8",
-  );
   const nextConfig = readFileSync(join(webRoot, "next.config.ts"), "utf8");
   const devCompose = readFileSync(join(webRoot, "..", "..", "docker-compose.yml"), "utf8");
   const prodCompose = readFileSync(
@@ -31,24 +23,25 @@ test("dev startup syncs the repo-root uv environment before Next starts", () => 
   const devDockerfile = readFileSync(join(webRoot, "Dockerfile"), "utf8");
 
   assert.match(packageJson.scripts?.dev ?? "", /dev-startup\.sh/);
-  assert.match(packageJson.scripts?.["dev:docker"] ?? "", /next-cache-lock\.sh/);
+  assert.match(packageJson.scripts?.["dev:docker"] ?? "", /next dev --webpack/);
+  assert.match(packageJson.scripts?.build ?? "", /next build --webpack/);
+  assert.match(packageJson.scripts?.smoke ?? "", /next build --webpack && playwright test/);
   assert.match(startupScript, /uv sync/);
-  assert.match(startupScript, /next-cache-lock\.sh/);
-  assert.match(cacheLockScript, /flock -n 9/);
-  assert.match(cacheLockScript, /\/repo\/node_modules\/\.bin\/next/);
-  assert.match(dockerEntrypoint, /cd \/repo\/dashboard\/web/);
-  assert.match(dockerEntrypoint, /\/repo\/dashboard\/web\/\.next/);
-  assert.doesNotMatch(dockerEntrypoint, /npm ci/);
+  assert.match(startupScript, /exec next "\$@"/);
   assert.match(devCompose, /- \.\/dashboard:\/repo\/dashboard:ro/);
-  assert.match(devCompose, /- wos_next_cache:\/repo\/dashboard\/web\/\.next/);
   assert.match(devCompose, /- \/repo\/dashboard\/web\/node_modules/);
+  assert.match(devCompose, /- \/repo\/dashboard\/web\/\.next/);
+  assert.doesNotMatch(devCompose, /wos_next_cache/);
+  assert.doesNotMatch(devCompose, /docker-entrypoint\.sh/);
   assert.doesNotMatch(devCompose, /wos_node_modules/);
   assert.match(devCompose, /target: dev/);
   assert.match(prodCompose, /dockerfile: dashboard\/web\/Dockerfile/);
   assert.match(prodCompose, /target: prod/);
   assert.doesNotMatch(prodCompose, /Dockerfile\.prod/);
   assert.match(devDockerfile, /WORKDIR \/repo/);
+  assert.match(devDockerfile, /WORKDIR \/repo\/dashboard\/web/);
   assert.match(devDockerfile, /NODE_PATH=\/repo\/node_modules/);
+  assert.doesNotMatch(devDockerfile, /docker-entrypoint\.sh/);
   assert.match(devDockerfile, /FROM deps AS dev/);
   assert.match(devDockerfile, /FROM deps AS prod-build/);
   assert.match(devDockerfile, /FROM prod-build AS prod/);

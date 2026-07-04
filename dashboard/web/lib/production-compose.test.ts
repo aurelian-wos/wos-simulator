@@ -12,9 +12,6 @@ test("production compose only mounts public runtime paths", () => {
   assert.match(compose, /- \.\/test_results:\/data\/test_results:rw/);
   assert.match(compose, /- \.\/skill:\/repo\/skill:ro/);
 
-  assert.doesNotMatch(compose, /STAT_PRESETS_FILE/);
-  assert.doesNotMatch(compose, /stat-presets/);
-  assert.doesNotMatch(compose, /\/data\/stat-presets/);
   assert.doesNotMatch(compose, /- \.\/dashboard:\/repo\/dashboard:ro/);
   assert.doesNotMatch(compose, /- \.\/test_results:\/repo\/test_results:rw/);
   assert.doesNotMatch(compose, /archived\/v1/);

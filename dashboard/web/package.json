@@ -5,12 +5,12 @@
   "scripts": {
     "dev": "scripts/dev-startup.sh dev --webpack",
     "dev-user": "NEXT_DIST_DIR=.next-user scripts/dev-startup.sh dev --webpack",
-    "dev:docker": "scripts/next-cache-lock.sh dev --webpack",
-    "build": "scripts/next-cache-lock.sh build --webpack",
-    "start": "scripts/next-cache-lock.sh start",
+    "dev:docker": "next dev --webpack",
+    "build": "next build --webpack",
+    "start": "next start",
     "test": "npx --yes tsx --test \"lib/**/*.test.ts\"",
     "lint": "eslint .",
-    "smoke": "scripts/next-cache-lock.sh build --webpack && playwright test"
+    "smoke": "next build --webpack && playwright test"
   },
   "dependencies": {
     "@types/diff": "^7.0.2",

@@ -31,7 +31,7 @@ npm run dev
 
 The app runs at http://localhost:3000 and redirects to `/runs` by default.
 The host dev command runs `uv sync` from the repo root before starting Next.js,
-so the shared Python `.venv` is available for OCR/import and check-now helpers.
+so the shared Python `.venv` is available for OCR/import helpers.
 
 The Simulate and Optimise Ratio buttons do not call server compute routes. They
 run TypeScript calculations in a browser worker, then POST completed results
@@ -53,31 +53,26 @@ filesystems.
 
 The Docker dev app bind-mounts repo subtrees under `/repo` while keeping
 container-built dependencies in the image at `/repo/node_modules`. Rebuild the
-image after `package.json` or `package-lock.json` changes. Only the Next dev
-cache at `/repo/dashboard/web/.next` is a named volume. Saved simulation runs
-are host bind mounts, configured by `SIM_RUNS_DIR` in the ignored repo-root
-`.env`. Point that path at a trusted shared mount when Docker dev and host dev
-should use the same saved-run store. If the shared mount is FUSE-backed, Docker
-must be allowed to read it from the daemon side; for sshfs that usually means
-mounting with `allow_other` on a host where `/etc/fuse.conf` enables
-`user_allow_other`.
+image after `package.json` or `package-lock.json` changes. The generated Next
+dev cache at `/repo/dashboard/web/.next` is tmpfs-backed and disappears when the
+container is recreated. Saved simulation runs are host bind mounts, configured by
+`SIM_RUNS_DIR` in the ignored repo-root `.env`. Point that path at a trusted
+shared mount when Docker dev and host dev should use the same saved-run store.
+If the shared mount is FUSE-backed, Docker must be allowed to read it from the
+daemon side; for sshfs that usually means mounting with `allow_other` on a host
+where `/etc/fuse.conf` enables `user_allow_other`.
 
 Do not run a second `docker compose run app ...` container while the live app
-is up, because two Next dev servers sharing the same `.next` volume can corrupt
-the dev build cache. Use
-`docker compose exec app ...` for checks inside the running container, or stop
-the app before starting a second app container. The entrypoint holds a
-non-blocking lock on the `.next` volume and exits with a clear error if another
-app container is already using it.
+is up. Use `docker compose exec app ...` for checks inside the running
+container, or stop the app before starting a second app container.
 
 If the optional Docker dev app starts returning `500 Internal Server Error`
-after source, compose, or Next middleware changes, clear only the `.next` cache
-volume and recreate the app container:
+after source, compose, or Next middleware changes, recreate the app container to
+clear the tmpfs-backed `.next` cache:
 
 ```bash
 docker compose stop app
 docker compose rm -f app
-docker volume rm wos-simulator_wos_next_cache
 docker compose up -d app
 ```
 
@@ -87,7 +82,7 @@ store.
 When the Docker dev app is already running, verify dashboard source/UI changes
 directly at `http://localhost:3000`. The bind mount plus polling watcher should
 pick up edits automatically. Rebuild or recreate the container only for
-Dockerfile, compose, package/dependency, or entrypoint changes.
+Dockerfile, compose, or package/dependency changes.
 
 Do not run local dashboard dev/build/test servers as `root`. Root-run host
 processes can create root-owned `.next`, cache, or result files that the WSL
@@ -131,17 +126,17 @@ server preset store or preset API.
 
 ## How accuracy data gets populated
 
-Current Check Now runs use the TypeScript simulator testcase runner and write
-parity reports under `simulator/testcase_results/`:
+Current accuracy runs use the TypeScript simulator testcase runner and write
+parity reports under `simulator/testcase_results/`. Add `--db-ingest` when the
+CLI run should also appear in the dashboard run history:
 
 ```bash
 cd <repo-root>
-npx tsx scripts/run_testcases.ts --output-dir simulator/testcase_results
+npx tsx scripts/run_testcases.ts --output-dir simulator/testcase_results --db-ingest
 ```
 
-The SQLite DB remains the source for historical run/trend pages and can be
-backfilled with `python dashboard/backfill.py` when historical snapshots need to
-be imported.
+The SQLite DB remains the source for historical run/trend pages. Legacy
+historical snapshots can still be backfilled with `python dashboard/backfill.py`.
 
 ## Schema
 

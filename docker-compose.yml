@@ -4,8 +4,8 @@
 #   - app:         Next.js dev server with live reload. The host's
 #                  repo subtrees are bind-mounted under /repo so source edits
 #                  are picked up without any image rebuild. Node dependencies
-#                  come from the image at /repo/node_modules; only the Next
-#                  build cache is a writable volume.
+#                  come from the image at /repo/node_modules; the generated
+#                  Next dev cache lives in container tmpfs.
 #
 # See docker-compose.env.example for optional local settings.
 
@@ -17,13 +17,11 @@ services:
       target: dev
     image: wos-simulator-dashboard:dev
     restart: unless-stopped
-    entrypoint: ["/bin/sh", "/repo/dashboard/web/docker-entrypoint.sh"]
     command: ["npm", "run", "dev:docker", "--", "--hostname", "0.0.0.0", "--port", "3000"]
     environment:
       NODE_ENV: development
       DB_PATH: /repo/test_results/dashboard.sqlite
       SIM_RUNS_DIR: /data/simulations
-      STAT_PRESETS_FILE: /data/stat-presets/player-stat-presets.json
       # Watcher polling for WSL2/SMB/NFS-backed mounts where native inotify can
       # miss host-side edits.
       NEXT_WATCH_POLL_INTERVAL_MS: ${NEXT_WATCH_POLL_INTERVAL_MS:-1000}
@@ -33,29 +31,25 @@ services:
       # Hide host dashboard/web/node_modules from the ./dashboard bind mount.
       # Node then walks up to the image-managed /repo/node_modules tree.
       - /repo/dashboard/web/node_modules
+      # Keep Next's generated dev cache writable without a persistent Docker volume.
+      - /repo/dashboard/web/.next:uid=1000,gid=1000,mode=755
     volumes:
       # Keep the same relative repo layout as host and production containers.
       - ./dashboard:/repo/dashboard:ro
+      # Next dev refreshes this generated type file on startup.
+      - ./dashboard/web/next-env.d.ts:/repo/dashboard/web/next-env.d.ts:rw
       - ./scripts:/repo/scripts:ro
       - ./skill:/repo/skill:ro
       - ./simulator:/repo/simulator:ro
       - ./testcases:/repo/testcases:ro
       - ./test_results:/repo/test_results:rw
       - ./shared/fighters_data:/repo/shared/fighters_data
-      # Next dev needs a writable cache under the app directory.
-      - wos_next_cache:/repo/dashboard/web/.next
-      # Check Now writes fresh parity reports under simulator/testcase_results.
+      # CLI testcase runs write fresh parity reports under simulator/testcase_results.
       - ./simulator/testcase_results:/repo/simulator/testcase_results:rw
-      # Host-backed simulation stores. Point these at an sshfs/shared mount in
+      # Host-backed simulation store. Point this at an sshfs/shared mount in
       # the ignored root .env when you want Docker dev and host dev to share
-      # the same saved runs and stat presets.
+      # the same saved runs.
       - ${SIM_RUNS_DIR:-./tmp/simulate-runs}:/data/simulations
-      - ${STAT_PRESETS_DIR:-./tmp/stat-presets}:/data/stat-presets
-    expose:
-      - "3000"
     # Optional local access without going through the tunnel.
     ports:
       - "${APP_PORT:-3000}:3000"
-
-volumes:
-  wos_next_cache:

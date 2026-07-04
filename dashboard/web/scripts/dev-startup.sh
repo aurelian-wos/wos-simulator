@@ -19,4 +19,4 @@ fi
 )
 
 cd "$web_root"
-exec "$script_dir/next-cache-lock.sh" "$@"
+exec next "$@"

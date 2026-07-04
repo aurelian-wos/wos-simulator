@@ -66,7 +66,6 @@ RUN mkdir -p \
       /repo/simulator/testcase_results \
       /repo/test_results \
       /data/simulations \
-      /data/stat-presets \
       /test_results \
  && chown -R node:node \
       /repo/dashboard/web/.next \
@@ -79,8 +78,6 @@ ENV NODE_ENV=development
 
 USER node
 
-ENTRYPOINT ["/bin/sh", "/repo/dashboard/web/docker-entrypoint.sh"]
-EXPOSE 3000
 CMD ["npm", "run", "dev:docker", "--", "--hostname", "0.0.0.0", "--port", "3000"]
 
 FROM deps AS prod-build
@@ -103,5 +100,4 @@ RUN mkdir -p /data/simulations /data/test_results /test_results \
 
 USER node
 
-EXPOSE 3000
 CMD ["npm", "run", "start", "--", "--hostname", "0.0.0.0", "--port", "3000"]

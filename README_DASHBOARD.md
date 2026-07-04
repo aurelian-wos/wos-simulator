@@ -17,9 +17,9 @@ Use this guide for three common setups:
 - The `/simulate` page runs battle simulation and ratio optimisation in a
   browser Web Worker using the TypeScript simulator.
 - Saved `/simulate` share links live outside git. Host mode defaults to
-  `tmp/simulate-runs/`; Docker mounts a named volume at `/data/simulations`.
-- Saved `/simulate` share links, recent runs, stat presets, and OCR upload
-  remain server-backed.
+  `tmp/simulate-runs/`; Docker mounts `SIM_RUNS_DIR` at `/data/simulations`.
+- Saved `/simulate` share links and recent runs remain server-backed. Player
+  stat presets are browser-local.
 - The `/api/ocr-report` route spawns `skill/scripts/report_stats_parser.py`.
 
 That means:
@@ -45,7 +45,7 @@ or keep it updated by running your usual testcase command, for example:
 
 ```bash
 cd /home/paul/projects_wsl/wos/battle_sim/lib/wos-simulator
-npx tsx scripts/run_testcases.ts --output-dir simulator/testcase_results
+npx tsx scripts/run_testcases.ts --output-dir simulator/testcase_results --db-ingest
 ```
 
 ## Run Without Docker
@@ -219,10 +219,10 @@ docker compose rm -sf app
 - The container bind-mounts `dashboard/web`, so source edits on the host are
   picked up live.
 - The container also mounts `dashboard/`, `simulator/`, `skill/`, and
-  `shared/fighters_data/` so Check Now can run the TypeScript testcase runner
-  and OCR routes can call the skill parser.
-- Saved `/simulate` runs are written to the named Docker volume
-  `wos_simulate_runs`, not to the git-tracked repo tree.
+  `shared/fighters_data/` so OCR routes can call the skill parser and CLI
+  testcase runs can write parity reports.
+- Saved `/simulate` runs are written to the host-backed `SIM_RUNS_DIR` path,
+  not to the git-tracked repo tree.
 - The Docker image installs Python, `tabulate`, `Pillow`, `pytesseract`, and
   `tesseract-ocr`, so the dashboard's helper routes work inside the container
   without using the host Python environment.
