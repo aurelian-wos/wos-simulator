@@ -379,12 +379,25 @@ function toPassiveEffects(side: SimulateSidePayload): PassiveEffects | undefined
     enemy_attack: 0,
     enemy_defense: 0,
   };
+  const ownPet = side.pet_modifiers ?? {
+    attack: 0,
+    defense: 0,
+    lethality: 0,
+    health: 0,
+    enemy_defense: 0,
+    enemy_lethality: 0,
+    enemy_health: 0,
+  };
   const passive: PassiveEffects = {};
 
   addPassiveStat(passive, "attack", "up", own.attack);
   addPassiveStat(passive, "defense", "up", own.defense);
   addPassiveStat(passive, "lethality", "up", own.lethality);
   addPassiveStat(passive, "health", "up", own.health);
+  addPassiveStat(passive, "attack", "up", ownPet.attack);
+  addPassiveStat(passive, "defense", "up", ownPet.defense);
+  addPassiveStat(passive, "lethality", "up", ownPet.lethality);
+  addPassiveStat(passive, "health", "up", ownPet.health);
 
   return Object.keys(passive).length > 0 ? passive : undefined;
 }
@@ -392,7 +405,7 @@ function toPassiveEffects(side: SimulateSidePayload): PassiveEffects | undefined
 function addPassiveStat(passive: PassiveEffects, stat: keyof StatBlock, direction: "up" | "down", rawValue: unknown): void {
   const value = Number(rawValue ?? 0);
   if (!Number.isFinite(value) || value <= 0) return;
-  passive[stat] = { ...passive[stat], [direction]: value };
+  passive[stat] = { ...passive[stat], [direction]: (passive[stat]?.[direction] ?? 0) + value };
 }
 
 function aggregateSkills(results: BearBattleResult[]): SimulateSkillSummary[] {

@@ -31,6 +31,15 @@ const request: BearSimRequestPayload = {
       health: 0,
       enemy_attack: -20,
       enemy_defense: -10
+    },
+    pet_modifiers: {
+      attack: 3,
+      defense: 4,
+      lethality: 6,
+      health: 7,
+      enemy_defense: -8,
+      enemy_lethality: -9,
+      enemy_health: -10
     }
   },
   replicates: 2
@@ -99,8 +108,10 @@ test("toBearBattlePlayerInput maps one dashboard side to simulator fighter input
   assert.deepEqual(fighter.heroes, { Greg: { skill_1: 5 } });
   assert.deepEqual(fighter.joiner_heroes, [{ name: "Jessie", levels: { skill_1: 5 } }]);
   assert.deepEqual(fighter.passive, {
-    attack: { up: 10 },
-    lethality: { up: 5 }
+    attack: { up: 13 },
+    defense: { up: 4 },
+    lethality: { up: 11 },
+    health: { up: 7 }
   });
 });
 

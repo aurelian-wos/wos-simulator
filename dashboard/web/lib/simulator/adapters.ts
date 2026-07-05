@@ -74,14 +74,23 @@ function tupleToStats(tuple: [number, number, number, number]): StatBlock {
 function toPassiveEffects(side: SimulateSidePayload, opponent: SimulateSidePayload): PassiveEffects | undefined {
   const own = side.stat_modifiers ?? { attack: 0, defense: 0, lethality: 0, health: 0, enemy_attack: 0, enemy_defense: 0 };
   const opp = opponent.stat_modifiers ?? { attack: 0, defense: 0, lethality: 0, health: 0, enemy_attack: 0, enemy_defense: 0 };
+  const ownPet = side.pet_modifiers ?? { attack: 0, defense: 0, lethality: 0, health: 0, enemy_defense: 0, enemy_lethality: 0, enemy_health: 0 };
+  const oppPet = opponent.pet_modifiers ?? { attack: 0, defense: 0, lethality: 0, health: 0, enemy_defense: 0, enemy_lethality: 0, enemy_health: 0 };
   const passive: PassiveEffects = {};
 
   addPassiveStat(passive, "attack", "up", own.attack);
   addPassiveStat(passive, "defense", "up", own.defense);
   addPassiveStat(passive, "lethality", "up", own.lethality);
   addPassiveStat(passive, "health", "up", own.health);
+  addPassiveStat(passive, "attack", "up", ownPet.attack);
+  addPassiveStat(passive, "defense", "up", ownPet.defense);
+  addPassiveStat(passive, "lethality", "up", ownPet.lethality);
+  addPassiveStat(passive, "health", "up", ownPet.health);
   addPassiveStat(passive, "attack", "down", Math.abs(Math.min(0, opp.enemy_attack ?? 0)));
   addPassiveStat(passive, "defense", "down", Math.abs(Math.min(0, opp.enemy_defense ?? 0)));
+  addPassiveStat(passive, "defense", "down", Math.abs(Math.min(0, oppPet.enemy_defense ?? 0)));
+  addPassiveStat(passive, "lethality", "down", Math.abs(Math.min(0, oppPet.enemy_lethality ?? 0)));
+  addPassiveStat(passive, "health", "down", Math.abs(Math.min(0, oppPet.enemy_health ?? 0)));
 
   return Object.keys(passive).length > 0 ? passive : undefined;
 }
@@ -89,5 +98,5 @@ function toPassiveEffects(side: SimulateSidePayload, opponent: SimulateSidePaylo
 function addPassiveStat(passive: PassiveEffects, stat: keyof StatBlock, direction: "up" | "down", rawValue: unknown): void {
   const value = Number(rawValue ?? 0);
   if (!Number.isFinite(value) || value <= 0) return;
-  passive[stat] = { ...passive[stat], [direction]: value };
+  passive[stat] = { ...passive[stat], [direction]: (passive[stat]?.[direction] ?? 0) + value };
 }
