@@ -12,6 +12,8 @@ test("parseCliArgs parses multiple ratios and finals options", () => {
     "10",
     "--finals-reps",
     "3",
+    "--batch-size",
+    "32",
     "--finals-max-same-shell",
     "4",
     "--repeat-joiners"
@@ -19,6 +21,7 @@ test("parseCliArgs parses multiple ratios and finals options", () => {
   assert.deepEqual(options.ratios, ["50,20,30", "60,40,0"]);
   assert.equal(options.finalsTopM, 10);
   assert.equal(options.finalsReps, 3);
+  assert.equal(options.batchSize, 32);
   assert.equal(options.finalsMaxSameShell, 4);
   assert.equal(options.repeatJoiners, true);
 });
@@ -39,6 +42,7 @@ test("parseCliArgs defaults player stats to max", () => {
   const options = parseCliArgs([]);
 
   assert.equal(options.playerStats, "max");
+  assert.equal(options.batchSize, 64);
 });
 
 test("parseCliArgs parses player stats profile", () => {
@@ -49,4 +53,14 @@ test("parseCliArgs parses player stats profile", () => {
 
 test("parseCliArgs rejects negative loss freeze threshold", () => {
   assert.throws(() => parseCliArgs(["--freeze-losses-gte", "-1"]), /--freeze-losses-gte must be >= 0/);
+});
+
+test("parseCliArgs rejects invalid batch size", () => {
+  assert.throws(() => parseCliArgs(["--batch-size", "0"]), /--batch-size must be >= 1/);
+});
+
+test("parseCliArgs accepts underscore batch size alias", () => {
+  const options = parseCliArgs(["--batch_size=16"]);
+
+  assert.equal(options.batchSize, 16);
 });

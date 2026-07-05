@@ -24,7 +24,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     const options = parseArgs(argv);
     const config = loadSimulatorConfig();
     const report = await runCliTestcases(options, config);
-    const stdout = options.human ? formatHumanSummary(report) : JSON.stringify(buildSummaryForOutput(report), null, 2);
+    const stdout = formatStdout(report, options);
     if (options.noRunSnapshot) {
       if (options.dbIngest) throw new Error("--db-ingest requires a run snapshot; remove --no-run-snapshot");
       console.log(stdout);
@@ -66,6 +66,7 @@ interface CliOptions {
   dbIngest: boolean;
   dbPath?: string;
   human: boolean;
+  printFailing: boolean;
   workers: number;
 }
 
@@ -77,6 +78,7 @@ function parseArgs(args: string[]): CliOptions {
     noRunSnapshot: false,
     dbIngest: false,
     human: false,
+    printFailing: false,
     workers: Math.max(1, cpus().length/2)
   };
   for (let index = 0; index < args.length; index += 1) {
@@ -93,6 +95,7 @@ function parseArgs(args: string[]): CliOptions {
     else if (arg === "--db-ingest") options.dbIngest = true;
     else if (arg === "--db-path") options.dbPath = resolve(readOptionValue(args, ++index, arg));
     else if (arg === "--human") options.human = true;
+    else if (arg === "--print-failing") options.printFailing = true;
     else throw new Error(`Unknown argument: ${arg ?? ""}`);
   }
   return options;
@@ -113,6 +116,19 @@ function readPositiveIntegerOption(args: string[], index: number, option: string
     throw new Error(`Invalid value for ${option}: ${value}`);
   }
   return parsed;
+}
+
+export function formatStdout(report: TestcaseRunReport, options: Pick<CliOptions, "human" | "printFailing">): string {
+  if (options.human) {
+    const summary = formatHumanSummary(report);
+    if (!options.printFailing) return summary;
+    const traces = formatFailingStandardTracesHuman(report);
+    return traces ? `${summary.trimEnd()}\n\n${traces}` : summary;
+  }
+
+  const summary = buildSummaryForOutput(report);
+  if (!options.printFailing) return JSON.stringify(summary, null, 2);
+  return JSON.stringify({ ...summary, failingStandardTraces: failingStandardTraces(report) }, null, 2);
 }
 
 export function formatHumanSummary(report: TestcaseRunReport): string {
@@ -185,6 +201,49 @@ export function formatHumanSummary(report: TestcaseRunReport): string {
     for (const error of report.errors) lines.push(`${error.file}#${error.idx} ${error.testcase_id}: ${error.reason}`);
   }
 
+  return `${lines.join("\n")}\n`;
+}
+
+interface FailingStandardTrace {
+  file: string;
+  testcase_id: string;
+  idx: number;
+  detailArtifact?: string;
+  result?: TestcaseCaseReport["result"];
+  missingReason?: string;
+}
+
+function failingStandardTraces(report: TestcaseRunReport): FailingStandardTrace[] {
+  const detailsByKey = new Map(report.details.map((detail) => [caseKey(detail.file, detail.index), detail]));
+  return Object.entries(report.testcases)
+    .sort(([leftKey], [rightKey]) => leftKey.localeCompare(rightKey))
+    .map(([key, entry]) => {
+      const detail = detailsByKey.get(key) ?? detailsByKey.get(caseKey(entry.file, entry.idx));
+      return { entry, detail };
+    })
+    .filter(({ entry, detail }) => testcaseStatus(entry, detail) === "FAIL")
+    .map(({ entry, detail }) => ({
+      file: entry.file,
+      testcase_id: entry.testcase_id,
+      idx: entry.idx,
+      ...(entry.detailArtifact ? { detailArtifact: entry.detailArtifact } : {}),
+      ...(detail?.result ? { result: detail.result } : { missingReason: "No standard trace was produced for this failing testcase" })
+    }));
+}
+
+function formatFailingStandardTracesHuman(report: TestcaseRunReport): string {
+  const traces = failingStandardTraces(report);
+  if (traces.length === 0) return "";
+
+  const lines = ["Failing testcase standard traces"];
+  for (const trace of traces) {
+    lines.push("", `${trace.testcase_id} (${trace.file}#${trace.idx})`);
+    if (trace.result) {
+      lines.push(JSON.stringify(trace.result, null, 2));
+    } else {
+      lines.push(trace.missingReason ?? "No standard trace was produced for this failing testcase");
+    }
+  }
   return `${lines.join("\n")}\n`;
 }
 

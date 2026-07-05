@@ -36,7 +36,7 @@ test("createBattleTaskRunner reuses one worker pool across batches", async () =>
   ];
   let created = 0;
   let closed = 0;
-  const runner = createBattleTaskRunner(2, (size) => {
+  const runner = createBattleTaskRunner(2, 2, (size) => {
     created += 1;
     assert.equal(size, 2);
     return {
@@ -47,6 +47,14 @@ test("createBattleTaskRunner reuses one worker pool across batches", async () =>
           avgAttackerLeft: 1,
           avgDefenderLeft: 0
         };
+      },
+      async runBatch(batch: BattleTask[]): Promise<BattleSummary[]> {
+        return batch.map((task) => ({
+          attackerId: task.attacker.id,
+          defenderId: task.defender.id,
+          avgAttackerLeft: 1,
+          avgDefenderLeft: 0
+        }));
       },
       async close(): Promise<void> {
         closed += 1;
@@ -62,4 +70,41 @@ test("createBattleTaskRunner reuses one worker pool across batches", async () =>
   assert.equal(closed, 1);
   assert.deepEqual(first.map((result) => result.attackerId), [1]);
   assert.deepEqual(second.map((result) => result.attackerId), [3]);
+});
+
+test("createBattleTaskRunner sends worker tasks in configured batches", async () => {
+  const tasks: BattleTask[] = [
+    { attacker: team(1), defender: team(2), seed: 1, reps: 1 },
+    { attacker: team(3), defender: team(4), seed: 2, reps: 1 },
+    { attacker: team(5), defender: team(6), seed: 3, reps: 3 },
+    { attacker: team(7), defender: team(8), seed: 4, reps: 1 },
+    { attacker: team(9), defender: team(10), seed: 5, reps: 1 }
+  ];
+  const batchSeeds: number[][] = [];
+  const runner = createBattleTaskRunner(2, 2, () => ({
+    async run(task: BattleTask): Promise<BattleSummary> {
+      return {
+        attackerId: task.attacker.id,
+        defenderId: task.defender.id,
+        avgAttackerLeft: 1,
+        avgDefenderLeft: 0
+      };
+    },
+    async runBatch(batch: BattleTask[]): Promise<BattleSummary[]> {
+      batchSeeds.push(batch.map((task) => task.seed));
+      return batch.map((task) => ({
+        attackerId: task.attacker.id,
+        defenderId: task.defender.id,
+        avgAttackerLeft: 1,
+        avgDefenderLeft: 0
+      }));
+    },
+    async close(): Promise<void> {}
+  }));
+
+  const results = await runner.run(tasks);
+  await runner.close();
+
+  assert.deepEqual(batchSeeds.sort((left, right) => left[0]! - right[0]!), [[1, 2], [3], [4, 5]]);
+  assert.equal(results.length, 5);
 });

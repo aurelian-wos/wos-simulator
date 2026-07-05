@@ -7,16 +7,18 @@ import type { BattleTask } from "./types";
 
 interface WorkerRequest {
   id: number;
-  task: BattleTask;
+  task?: BattleTask;
+  tasks?: BattleTask[];
 }
 
 const config = loadSimulatorConfig();
 
 function handleRequest(request: WorkerRequest): void {
   try {
-    const result = runSingleBattleDirect(request.task, config);
-    if (parentPort) parentPort.postMessage({ id: request.id, result });
-    else process.stdout.write(`${JSON.stringify({ id: request.id, result })}\n`);
+    const tasks = request.tasks ?? (request.task ? [request.task] : []);
+    const results = tasks.map((task) => runSingleBattleDirect(task, config));
+    if (parentPort) parentPort.postMessage({ id: request.id, results });
+    else process.stdout.write(`${JSON.stringify({ id: request.id, results })}\n`);
   } catch (error) {
     const message = { id: request.id, error: error instanceof Error ? error.message : String(error) };
     if (parentPort) parentPort.postMessage(message);

@@ -23,6 +23,8 @@ import type { DamageResult } from "./damage";
 export interface BattleRecorder {
   /** When true the loop asks calculateDamageJob to capture (expensive) per-bucket trace detail. */
   readonly capturesTrace: boolean;
+  /** When true the loop records lightweight "effect applied" events on each AttackOutcome. */
+  readonly capturesAppliedEffects: boolean;
   recordCancelled(intent: AttackIntent, effectId: string, reason: "dodge" | "no_attack", appliedEffects: AppliedEffect[]): void;
   recordDamageJob(job: DamageJob, result: DamageResult, extraAppliedEffects?: AppliedEffect[]): void;
   recordRound(round: number, roundStartTroops: DamageJob["roundStartTroops"], intents: AttackIntent[], jobs: DamageJob[]): void;
@@ -35,6 +37,7 @@ const NO_APPLIED_EFFECTS: AppliedEffect[] = [];
 
 export const NULL_RECORDER: BattleRecorder = {
   capturesTrace: false,
+  capturesAppliedEffects: false,
   recordCancelled() {},
   recordDamageJob() {},
   recordRound() {},
@@ -55,6 +58,7 @@ class RecordingRecorder implements BattleRecorder {
   readonly attacks: AttackOutcome[] = [];
   readonly trace: BattleTrace | undefined;
   readonly capturesTrace: boolean;
+  readonly capturesAppliedEffects = true;
 
   constructor(
     private readonly skillReports: Record<SideId, Map<string, SkillReportEntry>>,
@@ -67,6 +71,7 @@ class RecordingRecorder implements BattleRecorder {
   recordCancelled(intent: AttackIntent, effectId: string, reason: "dodge" | "no_attack", appliedEffects: AppliedEffect[]): void {
     this.attacks.push({
       jobId: `${intent.id}:cancelled`,
+      round: intent.round,
       kind: "normal",
       attackerSide: intent.attackerSide,
       attackerUnit: intent.attackerUnit,
@@ -91,6 +96,7 @@ class RecordingRecorder implements BattleRecorder {
     const cause = job.kind === "skill" ? "extra_skill_attack" : "normal_attack";
     this.attacks.push({
       jobId: job.id,
+      round: job.round,
       kind: job.kind,
       sourceEffectId: job.sourceEffectId,
       sourceSkillReportKey: job.sourceSkillReportKey,

@@ -83,6 +83,7 @@ test("runDualSwissTournament freezes equal pool counts by accumulated loss thres
       seedRounds: 0,
       reps: 1,
       jobs: 1,
+      batchSize: 64,
       seed: 10,
       freezeRate: 0,
       startFreezeRound: 1,

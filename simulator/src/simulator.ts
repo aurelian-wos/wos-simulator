@@ -322,19 +322,24 @@ function runLoop(
     expireInactive(runtime, round);
     triggerRoundStartSkills(round, runtime, roundStartTroops);
 
-    // Trace-only: battle_order applied events keyed by the intent they ordered.
-    const orderEvents = recorder.capturesTrace ? new Map<string, AppliedOrderEffect>() : undefined;
+    // Applied-effect events keyed by the intent they ordered.
+    const orderEvents = recorder.capturesAppliedEffects ? new Map<string, AppliedOrderEffect>() : undefined;
     const intents = resolveAttackIntents(round, runtime, roundStartTroops, orderEvents);
     const allJobs: DamageJob[] = []; // for recorder
     const results: DamageJobResult[] = [];
     const cancelled: CancelledAttack[] = [];
 
-    // Phase 1: fire all attack_declared triggers — all ActiveEffects are
-    // resolved before any damage is calculated, per the battle-core spec.
+    // Phase 1: fire all attack_declared triggers for every intended attack before
+    // evaluating any controls or damage, per the battle-core spec.
     const pendingNormalJobs: DamageJob[] = [];
+    const declaredNormalJobs: Array<{ intent: AttackIntent; job: DamageJob }> = [];
     for (const intent of intents) {
       triggerSkills("attack_declared", round, runtime.skills.attackDeclared, runtime, intent);
       const job = normalJob(intent, roundStartTroops);
+      declaredNormalJobs.push({ intent, job });
+    }
+
+    for (const { intent, job } of declaredNormalJobs) {
       const controls = applicableControls(job, round, runtime);
       if (controls.no_attack || controls.dodge) {
         const control = controls.no_attack ?? controls.dodge!;
@@ -344,7 +349,7 @@ function runLoop(
           intent,
           effectId: control.effect.id,
           reason: control.reason,
-          appliedEffects: recorder.capturesTrace
+          appliedEffects: recorder.capturesAppliedEffects
             ? appendedEvent(orderEvents?.get(intent.id), appliedControlEvent(control))
             : NO_APPLIED_EFFECTS
         });
@@ -361,6 +366,7 @@ function runLoop(
       allJobs.push(job);
       const normalResult = calculateDamageJob(job, fighters, runtime.activeEffects, {
         trace: recorder.capturesTrace,
+        recordAppliedEffects: recorder.capturesAppliedEffects,
         effectIndex: runtime.effectIndex,
         staticDamageProfile: runtime.staticDamageProfile,
         scratch: recorder.capturesTrace ? undefined : runtime.damageScratch,
@@ -372,7 +378,7 @@ function runLoop(
       }
       chargeUsedEffects(runtime);
 
-      const extraSkill = extraSkillJobs(job, round, runtime, roundStartTroops, recorder.capturesTrace);
+      const extraSkill = extraSkillJobs(job, round, runtime, roundStartTroops, recorder.capturesAppliedEffects);
       for (const usedEffect of extraSkill.usedEffects) usedEffect.uses += 1;
       results.push({
         job,
@@ -384,6 +390,7 @@ function runLoop(
         allJobs.push(extraJob);
         const extraResult = calculateDamageJob(extraJob, fighters, runtime.activeEffects, {
           trace: recorder.capturesTrace,
+          recordAppliedEffects: recorder.capturesAppliedEffects,
           effectIndex: runtime.effectIndex,
           staticDamageProfile: runtime.staticDamageProfile,
           scratch: recorder.capturesTrace ? undefined : runtime.damageScratch,

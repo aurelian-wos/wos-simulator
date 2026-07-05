@@ -11,10 +11,13 @@ export interface Classification {
 }
 
 export function classifyEffectForJob(effect: ActiveEffect, job: DamageJob): Classification | undefined {
-  if (!basicEffectApplies(effect, job)) return { kind: "report_only", reason: "not_applicable_to_job" };
-
   const type = effect.intent.type;
-  if (type === "dodge" || type === "no_attack") return { kind: "control", control: type };
+  if (type === "dodge" || type === "no_attack") {
+    if (!controlEffectApplies(effect, job, type)) return { kind: "report_only", reason: "not_applicable_to_job" };
+    return { kind: "control", control: type };
+  }
+
+  if (!basicEffectApplies(effect, job)) return { kind: "report_only", reason: "not_applicable_to_job" };
   if (type === "extra_skill_attack") return { kind: "extra_skill_attack" };
   if (type === "attack_order") return { kind: "battle_order" };
 
@@ -39,6 +42,16 @@ export function basicEffectApplies(effect: ActiveEffect, job: DamageJob): boolea
   const opposingUnit = unitForSide(effect.appliesVs.side, job);
   if (!opposingUnit || !unitMaskHas(effect.appliesVs.units, opposingUnit)) return false;
   return true;
+}
+
+function controlEffectApplies(effect: ActiveEffect, job: DamageJob, control: "dodge" | "no_attack"): boolean {
+  const appliesToSide = control === "no_attack" ? job.attackerSide : job.defenderSide;
+  const appliesToUnit = control === "no_attack" ? job.attackerUnit : job.defenderUnit;
+  if (effect.appliesTo.side !== appliesToSide || !unitMaskHas(effect.appliesTo.units, appliesToUnit)) return false;
+
+  const appliesVsSide = control === "no_attack" ? job.defenderSide : job.attackerSide;
+  const appliesVsUnit = control === "no_attack" ? job.defenderUnit : job.attackerUnit;
+  return effect.appliesVs.side === appliesVsSide && unitMaskHas(effect.appliesVs.units, appliesVsUnit);
 }
 
 function unsupportedReason(effect: ActiveEffect, job: DamageJob): string {

@@ -21,6 +21,7 @@ export interface CliOptions {
   reps: number;
   topN: number;
   jobs: number;
+  batchSize: number;
   seed: number;
   freezeRate: number;
   freezeLossesGte?: number;
@@ -43,6 +44,8 @@ const VALUE_FLAGS = new Set([
   "--reps",
   "--top-n",
   "--jobs",
+  "--batch-size",
+  "--batch_size",
   "--seed",
   "--freeze-rate",
   "--freeze-losses-gte",
@@ -64,6 +67,7 @@ export function parseCliArgs(argv: string[]): CliOptions {
     reps: 1,
     topN: 500,
     jobs: cpus().length/2 || 4,
+    batchSize: 64,
     seed: 1234,
     freezeRate: 0.2,
     startFreezeRound: 8,
@@ -111,6 +115,10 @@ export function parseCliArgs(argv: string[]): CliOptions {
         break;
       case "--jobs":
         options.jobs = parseInteger(readValue(), arg);
+        break;
+      case "--batch-size":
+      case "--batch_size":
+        options.batchSize = parseInteger(readValue(), arg);
         break;
       case "--seed":
         options.seed = parseInteger(readValue(), arg);
@@ -166,7 +174,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
   let outDir: string;
   let taskRunner: ReturnType<typeof createBattleTaskRunner> | undefined;
   const runTasksWithPersistentPool: BattleTaskRunner = async (tasks, _jobs, onProgress) => {
-    taskRunner ??= createBattleTaskRunner(args.jobs);
+    taskRunner ??= createBattleTaskRunner(args.jobs, args.batchSize);
     return await taskRunner.run(tasks, onProgress);
   };
 
@@ -198,6 +206,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
       console.log(`Running dual-ranking Swiss tournament: ${args.rounds} rounds (${args.seedRounds} random + ${Math.max(0, args.rounds - args.seedRounds)} Swiss)`);
       console.log(`  - Reps per battle: ${args.reps}`);
       console.log(`  - Parallel workers: ${args.jobs}`);
+      console.log(`  - Worker batch size: ${args.batchSize}`);
       console.log(`  - Player stats: ${args.playerStats}`);
       console.log(`  - Output top ${args.topN} per category`);
 
@@ -210,6 +219,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
           seedRounds: args.seedRounds,
           reps: args.reps,
           jobs: args.jobs,
+          batchSize: args.batchSize,
           seed: args.seed,
           timeLimitMins: args.timeLimit,
           freezeRate: args.freezeRate,
@@ -250,7 +260,8 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
         args.seed,
         runTasksWithPersistentPool,
         printProgress,
-        playerStats
+        playerStats,
+        args.batchSize
       );
       writeResultsCsv(join(outDir, "finals"), finalAttackPool, finalDefensePool, args.finalsTopM, topAttackers, topDefenders);
       console.log(`Finals results saved to ${outDir}`);
@@ -293,6 +304,7 @@ function validateOptions(options: CliOptions): void {
     }
   }
   if (options.jobs < 1) throw new Error("--jobs must be at least 1");
+  if (options.batchSize < 1) throw new Error("--batch-size must be >= 1");
   if (options.freezeRate < 0 || options.freezeRate > 1) throw new Error("--freeze-rate must be between 0 and 1");
   if (options.freezeLossesGte !== undefined && options.freezeLossesGte < 0) throw new Error("--freeze-losses-gte must be >= 0");
   if (options.seedRounds < 0) throw new Error("--seed-rounds must be >= 0");

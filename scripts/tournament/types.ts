@@ -41,6 +41,7 @@ export interface TournamentOptions {
   seedRounds: number;
   reps: number;
   jobs: number;
+  batchSize: number;
   seed: number;
   timeLimitMins?: number;
   freezeRate: number;

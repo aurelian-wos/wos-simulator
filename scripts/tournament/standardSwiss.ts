@@ -4,7 +4,7 @@ import { seededShuffle } from "./rng";
 import type { PlayerStats } from "./playerStats";
 import type { BattleSummary, BattleTask, Team, TournamentOptions } from "./types";
 
-export type BattleTaskRunner = (tasks: BattleTask[], jobs: number, onProgress?: (completed: number, total: number) => void) => Promise<BattleSummary[]>;
+export type BattleTaskRunner = (tasks: BattleTask[], jobs: number, onProgress?: (completed: number, total: number) => void, batchSize?: number) => Promise<BattleSummary[]>;
 export type TeamPairing = [Team, Team];
 
 export function pairingKey(left: Team, right: Team): string {
@@ -77,7 +77,7 @@ export async function runStandardSwissTournament(
     const pairings = createStandardSwissPairings(orderedTeams, isSeedRound ? new Set() : previousPairings);
     const tasks = createStandardSwissTasks(pairings, round, options.reps, options.seed, options.playerStats);
     const label = `Round ${round} (${isSeedRound ? "random" : "Swiss"})`;
-    const results = await runner(tasks, options.jobs, (completed, total) => onProgress?.(label, completed, total));
+    const results = await runner(tasks, options.jobs, (completed, total) => onProgress?.(label, completed, total), options.batchSize);
     aggregateCombinedBattleResults(pool, results);
     for (const [left, right] of pairings) previousPairings.add(pairingKey(left, right));
     if (freezeEnabled && round >= options.startFreezeRound) {
@@ -105,7 +105,8 @@ export async function runCombinedFinalsRoundRobin(
   seed: number,
   runner: BattleTaskRunner = runBattleTasks,
   onProgress?: (label: string, completed: number, total: number) => void,
-  playerStats?: PlayerStats
+  playerStats?: PlayerStats,
+  batchSize = 64
 ): Promise<Pool> {
   const pool = new Pool(teams);
   const tasks: BattleTask[] = [];
@@ -118,7 +119,7 @@ export async function runCombinedFinalsRoundRobin(
       tasks.push({ attacker: right, defender: left, seed: baseSeed + 1000, reps, playerStats });
     }
   }
-  const results = await runner(tasks, jobs, (completed, total) => onProgress?.("Finals round-robin", completed, total));
+  const results = await runner(tasks, jobs, (completed, total) => onProgress?.("Finals round-robin", completed, total), batchSize);
   aggregateCombinedBattleResults(pool, results);
   pool.finalizeRemaining();
   return pool;

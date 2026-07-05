@@ -7,7 +7,8 @@
       "description": "His infantry pauses the attack once every 4 times reducing damage taken by Lancers and Marksmen by X% and Infantry by X% for 2 turns",
       "trigger": {
         "type": "attack",
-        "every": 4,
+        "first": 4,
+        "every": 5,
         "source": "infantry"
       },
       "effects": {

@@ -32,10 +32,12 @@
       }
     },
     "AirDominance": {
-      "description": "Grants all troops' attack X% extra damage after every 4 attacks and causes the target to receive X% extra damage for its next attack received",
+      "description": "Grants all troops' attack X% extra damage after every 5 attacks and causes the target to receive X% extra damage for its next attack received",
       "trigger": {
-        "type": "attack",
-        "every": 4
+        "type": "turn",
+        "first": 5,
+        "every": 6,
+        "source": "self.all"
       },
       "effects": {
         "AirDominance/1": {
@@ -49,7 +51,7 @@
           ],
           "units": {
             "applies_to": "trigger.source",
-            "applies_vs": "trigger.target"
+            "applies_vs":"trigger.target"
           },
           "duration": {
             "attacks": {
@@ -59,7 +61,7 @@
           "trigger_damage_jobs": [
             {
               "source": "use.source",
-              "target": "effect.applies_vs"
+              "target": "use.target"
             }
           ]
         },
@@ -73,12 +75,16 @@
             15
           ],
           "units": {
-            "applies_to": "target"
+            "applies_to": "trigger.target"
           },
+          "same_effect_stacking": "max",
           "duration": {
-            "attacks": {
+            "turns": {
               "count": 1,
               "delay": 1
+            },
+            "attacks": {
+              "count": 1
             }
           }
         }

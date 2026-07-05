@@ -62,6 +62,45 @@ test("simulateBattle returns structured result for a no-hero battle", () => {
   assert.ok(result.skillReport.attacker.some((entry) => entry.sourceKind === "troop_skill"));
 });
 
+test("standard battle outcomes include round and applied effects without full traces", () => {
+  const result = simulateBattle(
+    {
+      maxRounds: 1,
+      attacker: {
+        troops: { infantry_t1: 1000 },
+        heroes: { Booster: { skill_1: 1 } }
+      },
+      defender: {
+        troops: { infantry_t1: 1000 },
+        heroes: {}
+      }
+    },
+    minimalConfig({
+      Booster: {
+        name: "Booster",
+        troop_type: "infantry",
+        skills: {
+          BattleBoost: {
+            trigger: { type: "battle_start" },
+            effects: {
+              boost: {
+                type: "active.hero.attack.up",
+                value: 25,
+                units: { applies_to: "self.infantry", applies_vs: "any" }
+              }
+            }
+          }
+        }
+      }
+    })
+  );
+
+  const attack = result.attacks.find((entry) => entry.attackerSide === "attacker" && entry.attackerUnit === "infantry");
+  assert.equal(attack?.round, 1);
+  assert.equal(attack?.appliedEffects.some((effect) => effect.effectId === "boost"), true);
+  assert.equal(attack?.trace, undefined);
+});
+
 test("simulateBearBattle runs exactly 10 rounds and leaves the bear army unchanged", () => {
   const player: FighterInput = {
     name: "Player",
@@ -662,6 +701,128 @@ test("cancelled attacks report the winning control as an applied effect", () => 
   ]);
 });
 
+test("no_attack applies_to cancels that unit attacking, not attacks targeting that unit", () => {
+  const result = simulateBattle(
+    {
+      maxRounds: 1,
+      attacker: {
+        troops: { infantry_t1: 1000, lancer_t1: 1000 },
+        heroes: { StopInfantry: { skill_1: 1 } }
+      },
+      defender: {
+        troops: { infantry_t1: 1000, lancer_t1: 1000 },
+        heroes: {}
+      }
+    },
+    minimalConfig({
+      StopInfantry: {
+        name: "StopInfantry",
+        skills: {
+          Pause: {
+            trigger: { type: "attack", source: "infantry" },
+            effects: {
+              stop: {
+                type: "no_attack",
+                units: { applies_to: "trigger", applies_vs: "target" },
+                duration: { turns: { count: 1 } }
+              }
+            }
+          }
+        }
+      }
+    })
+  );
+
+  assert.deepEqual(
+    result.attacks.filter((attack) => attack.cancelReason === "no_attack").map((attack) => attack.jobId),
+    ["r1:attacker:infantry:0:cancelled"]
+  );
+  assert.equal(
+    result.attacks.some((attack) => attack.attackerSide === "defender" && attack.defenderSide === "attacker" && attack.defenderUnit === "infantry" && attack.cancelReason === "no_attack"),
+    false
+  );
+});
+
+test("dodge applies_to cancels attacks targeting that unit, not that unit attacking", () => {
+  const result = simulateBattle(
+    {
+      maxRounds: 1,
+      attacker: {
+        troops: { infantry_t1: 1000 },
+        heroes: {}
+      },
+      defender: {
+        troops: { infantry_t1: 1000, lancer_t1: 1000 },
+        heroes: { Dodger: { skill_1: 1 } }
+      }
+    },
+    minimalConfig({
+      Dodger: {
+        name: "Dodger",
+        skills: {
+          StepAside: {
+            trigger: { type: "attack", source: "enemy.infantry", target: "self.infantry" },
+            effects: {
+              evade: {
+                type: "dodge",
+                units: { applies_to: "target", applies_vs: "trigger" },
+                duration: { attacks: { count: 1 } }
+              }
+            }
+          }
+        }
+      }
+    })
+  );
+
+  assert.deepEqual(
+    result.attacks.filter((attack) => attack.cancelReason === "dodge").map((attack) => attack.jobId),
+    ["r1:attacker:infantry:0:cancelled"]
+  );
+  assert.equal(
+    result.attacks.some((attack) => attack.attackerSide === "defender" && attack.attackerUnit === "infantry" && attack.cancelReason === "dodge"),
+    false
+  );
+});
+
+test("attack-declared controls from later intents affect earlier same-round attacks", () => {
+  const result = simulateBattle(
+    {
+      maxRounds: 1,
+      attacker: {
+        troops: { infantry_t1: 1000 },
+        heroes: {}
+      },
+      defender: {
+        troops: { infantry_t1: 1000 },
+        heroes: { ReactiveDodge: { skill_1: 1 } }
+      }
+    },
+    minimalConfig({
+      ReactiveDodge: {
+        name: "ReactiveDodge",
+        skills: {
+          StepAside: {
+            trigger: { type: "attack", source: "infantry" },
+            effects: {
+              evade: {
+                type: "dodge",
+                units: { applies_to: "self.infantry", applies_vs: "any" },
+                duration: { turns: { count: 1 } }
+              }
+            }
+          }
+        }
+      }
+    })
+  );
+
+  assert.deepEqual(
+    result.attacks.filter((attack) => attack.cancelReason === "dodge").map((attack) => attack.jobId),
+    ["r1:attacker:infantry:0:cancelled"]
+  );
+});
+
 test("attack-duration effects charged on a cancelled attack unless useEffectsOnNoAttack is disabled", () => {
   // Round 1: the attacker's infantry attack is cancelled while an attack-1-duration buff is
   // active. By default the cancelled attack charges the buff, so round 2 lands without it;
@@ -750,6 +911,44 @@ test("cancelled normal attacks advance attack counters for later frequency check
   assert.deepEqual(
     result.attacks.filter((attack) => attack.cancelReason === "no_attack").map((attack) => attack.jobId),
     ["r2:attacker:infantry:0:cancelled", "r4:attacker:infantry:0:cancelled"]
+  );
+});
+
+test("attack frequency triggers can start at a different first threshold", () => {
+  const result = simulateBattle(
+    {
+      maxRounds: 14,
+      attacker: {
+        troops: { infantry_t1: 10000 },
+        heroes: { FirstThenEvery: { skill_1: 1 } }
+      },
+      defender: {
+        troops: { infantry_t1: 10000 },
+        heroes: {}
+      }
+    },
+    minimalConfig({
+      FirstThenEvery: {
+        name: "FirstThenEvery",
+        skills: {
+          Pause: {
+            trigger: { type: "attack", first: 4, every: 5, source: "infantry" },
+            effects: {
+              cancel: {
+                type: "no_attack",
+                units: { applies_to: "trigger", applies_vs: "target" },
+                duration: { attacks: { count: 1 } }
+              }
+            }
+          }
+        }
+      }
+    })
+  );
+
+  assert.deepEqual(
+    result.attacks.filter((attack) => attack.cancelReason === "no_attack").map((attack) => attack.jobId),
+    ["r4:attacker:infantry:0:cancelled", "r9:attacker:infantry:0:cancelled", "r14:attacker:infantry:0:cancelled"]
   );
 });
 

@@ -37,8 +37,8 @@ export function skillMatchesTrigger(
   if (triggerType === "battle_start" && trigger.type !== "battle_start") return false;
   if (triggerType === "round_start" && trigger.type !== "turn") return false;
   if (triggerType === "attack_declared" && trigger.type !== "attack") return false;
-  if (trigger.every && triggerType === "round_start" && !crossedFrequency(round - 1, round, trigger.every)) return false;
-  if (trigger.every && triggerType === "attack_declared" && intent && !crossedFrequency(intent.previousAttackCount, intent.projectedAttackCount, trigger.every)) return false;
+  if (trigger.every && triggerType === "round_start" && !crossedFrequency(round - 1, round, trigger.every, trigger.first)) return false;
+  if (trigger.every && triggerType === "attack_declared" && intent && !crossedFrequency(intent.previousAttackCount, intent.projectedAttackCount, trigger.every, trigger.first)) return false;
   if (!intent) return true;
   const selectors = compiledTriggerSelectors(skill);
   return (
@@ -76,8 +76,10 @@ export function createSeededRng(seed: string | number = "simulator-default"): Rn
   };
 }
 
-export function crossedFrequency(previous: number, current: number, frequency: number): boolean {
-  return Math.floor(previous / frequency) < Math.floor(current / frequency);
+export function crossedFrequency(previous: number, current: number, frequency: number, first = frequency): boolean {
+  if (current < first) return false;
+  if (previous < first) return true;
+  return Math.floor((previous - first) / frequency) < Math.floor((current - first) / frequency);
 }
 
 export function activateEffect(skill: ResolvedSkill, intent: EffectIntentDefinition, round: number, attackIntent?: AttackIntent): ActiveEffect {

@@ -6,7 +6,8 @@ import { resolve } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { formatHumanSummary } from "./run_testcases";
+import { formatHumanSummary, formatStdout } from "./run_testcases";
+import type { TestcaseRunReport } from "../simulator/src/testcases";
 
 const repoRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
 
@@ -92,6 +93,81 @@ test("cli --no-run-snapshot writes compact stdout only and creates no artifacts"
   assert.equal(testcase?.testcase_id, "simple_001");
   assert.equal(testcase?.detailArtifact, undefined);
   assert.deepEqual(readdirSync(outputDir), []);
+});
+
+test("cli stdout --print-failing includes standard traces for failing testcases", () => {
+  const report: TestcaseRunReport = {
+    reportKind: "simulator-parity-summary",
+    schemaVersion: 1,
+    createdAt: "2026-01-02T03:04:05.000Z",
+    options: { repeat: 1 },
+    counts: {
+      filesFound: 1,
+      testcasesFound: 1,
+      executed: 1,
+      warnings: 0,
+      errors: 0,
+      comparedToGame: 1,
+      comparedToBaseline: 0,
+    },
+    warnings: [],
+    errors: [],
+    testcases: {
+      "testcases/failing.json#0": {
+        file: "testcases/failing.json",
+        testcase_id: "failing_case",
+        idx: 0,
+        deterministic: true,
+        sampleCount: 1,
+        game: {
+          n_candidate: 1,
+          mu_candidate: 99,
+          sigma_candidate: 0,
+          n_reference: 1,
+          mu_reference: 100,
+          sigma_reference: 0,
+          bias_raw: -1,
+          bias_pct: -1,
+          sem: 0,
+          stat_type: "deterministic",
+          stat: null,
+          p: null,
+          q: null,
+          passes: false,
+        },
+        baseline: null,
+      },
+    },
+    details: [
+      {
+        file: "testcases/failing.json",
+        testcaseId: "failing_case",
+        index: 0,
+        diagnostics: [],
+        deterministic: true,
+        sampleCount: 1,
+        result: {
+          rounds: 1,
+          attacks: [{ round: 1, attacker: "attacker", defender: "defender", damage: 123 }],
+        } as TestcaseRunReport["details"][number]["result"],
+        visibility: {
+          attacker: { heroes: [], troopSkillIds: [], troops: {}, skillEffectActivations: 0 },
+          defender: { heroes: [], troopSkillIds: [], troops: {}, skillEffectActivations: 0 },
+        },
+      },
+    ],
+  };
+
+  const output = JSON.parse(formatStdout(report, { human: false, printFailing: true }));
+  assert.equal(output.reportKind, "simulator-parity-summary");
+  assert.equal(output.failingStandardTraces.length, 1);
+  assert.equal(output.failingStandardTraces[0].testcase_id, "failing_case");
+  assert.equal(output.failingStandardTraces[0].result.attacks[0].damage, 123);
+
+  const human = formatStdout(report, { human: true, printFailing: true });
+  assert.match(human, /Failing testcase standard traces/);
+  assert.match(human, /failing_case \(testcases\/failing\.json#0\)/);
+  assert.match(human, /"damage": 123/);
 });
 
 test("cli --workers runs testcase cases through worker pool", () => {

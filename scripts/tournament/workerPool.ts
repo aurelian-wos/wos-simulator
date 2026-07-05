@@ -7,12 +7,13 @@ import type { BattleSummary, BattleTask } from "./types";
 interface WorkerResponse {
   id: number;
   result?: BattleSummary;
+  results?: BattleSummary[];
   error?: string;
 }
 
-interface PendingTask {
-  task: BattleTask;
-  resolve: (result: BattleSummary) => void;
+interface PendingBatch {
+  tasks: BattleTask[];
+  resolve: (result: BattleSummary[]) => void;
   reject: (error: Error) => void;
 }
 
@@ -22,14 +23,14 @@ interface WorkerState {
   closed: boolean;
   stderr: string;
   inFlight?: {
-    resolve: (result: BattleSummary) => void;
+    resolve: (result: BattleSummary[]) => void;
     reject: (error: Error) => void;
   };
 }
 
 export class TournamentWorkerPool {
   private readonly workers: WorkerState[];
-  private readonly queue: PendingTask[] = [];
+  private readonly queue: PendingBatch[] = [];
   private nextId = 1;
 
   constructor(size: number) {
@@ -38,8 +39,16 @@ export class TournamentWorkerPool {
   }
 
   run(task: BattleTask): Promise<BattleSummary> {
+    return this.runBatch([task]).then((results) => {
+      const result = results[0];
+      if (!result) throw new Error("Tournament worker returned no result");
+      return result;
+    });
+  }
+
+  runBatch(tasks: BattleTask[]): Promise<BattleSummary[]> {
     return new Promise((resolve, reject) => {
-      this.queue.push({ task, resolve, reject });
+      this.queue.push({ tasks, resolve, reject });
       this.pump();
     });
   }
@@ -93,7 +102,8 @@ export class TournamentWorkerPool {
     try {
       const response = JSON.parse(line) as WorkerResponse;
       if (response.error) inFlight.reject(new Error(response.error));
-      else if (response.result) inFlight.resolve(response.result);
+      else if (response.results) inFlight.resolve(response.results);
+      else if (response.result) inFlight.resolve([response.result]);
       else inFlight.reject(new Error(`Malformed tournament worker response for job ${response.id}`));
     } catch (error) {
       inFlight.reject(error instanceof Error ? error : new Error(String(error)));
@@ -110,7 +120,7 @@ export class TournamentWorkerPool {
       this.nextId += 1;
       state.idle = false;
       state.inFlight = { resolve: pending.resolve, reject: pending.reject };
-      state.process.stdin.write(`${JSON.stringify({ id, task: pending.task })}\n`);
+      state.process.stdin.write(`${JSON.stringify({ id, tasks: pending.tasks })}\n`);
     }
   }
 }

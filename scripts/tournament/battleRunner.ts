@@ -12,6 +12,7 @@ export interface BattleTaskRunnerHandle {
 
 export interface SingleBattleTaskRunner {
   run(task: BattleTask): Promise<BattleSummary>;
+  runBatch(tasks: BattleTask[]): Promise<BattleSummary[]>;
   close(): Promise<void>;
 }
 
@@ -39,9 +40,11 @@ export function totalRemaining(remaining: BattleResult["remaining"]["attacker"])
 
 export function createBattleTaskRunner(
   jobs: number,
+  batchSize = 64,
   createWorkerPool: (size: number) => SingleBattleTaskRunner = (size) => new TournamentWorkerPool(size)
 ): BattleTaskRunnerHandle {
   const workerCount = Math.max(1, Math.floor(jobs));
+  const taskBatchSize = Math.max(1, Math.floor(batchSize));
   if (workerCount <= 1) {
     const config = loadSimulatorConfig();
     return {
@@ -63,10 +66,10 @@ export function createBattleTaskRunner(
       const results: BattleSummary[] = [];
       let completed = 0;
       await Promise.all(
-        tasks.map(async (task) => {
-          const result = await pool.run(task);
-          results.push(result);
-          completed += 1;
+        batchBattleTasks(tasks, taskBatchSize).map(async (batch) => {
+          const batchResults = await pool.runBatch(batch);
+          results.push(...batchResults);
+          completed += batchResults.length;
           onProgress?.(completed, tasks.length);
         })
       );
@@ -78,11 +81,29 @@ export function createBattleTaskRunner(
   };
 }
 
-export async function runBattleTasks(tasks: BattleTask[], jobs: number, onProgress?: (completed: number, total: number) => void): Promise<BattleSummary[]> {
-  const runner = createBattleTaskRunner(jobs);
+export async function runBattleTasks(tasks: BattleTask[], jobs: number, onProgress?: (completed: number, total: number) => void, batchSize = 64): Promise<BattleSummary[]> {
+  const runner = createBattleTaskRunner(jobs, batchSize);
   try {
     return await runner.run(tasks, onProgress);
   } finally {
     await runner.close();
   }
+}
+
+function batchBattleTasks(tasks: BattleTask[], targetBattles: number): BattleTask[][] {
+  const out: BattleTask[][] = [];
+  let current: BattleTask[] = [];
+  let currentBattles = 0;
+  for (const task of tasks) {
+    const taskBattles = Math.max(1, task.reps);
+    if (current.length > 0 && currentBattles + taskBattles > targetBattles) {
+      out.push(current);
+      current = [];
+      currentBattles = 0;
+    }
+    current.push(task);
+    currentBattles += taskBattles;
+  }
+  if (current.length > 0) out.push(current);
+  return out;
 }

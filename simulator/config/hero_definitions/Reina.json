@@ -45,7 +45,8 @@
         "SwiftJive/1": {
           "type": "dodge",
           "units": {
-            "applies_to": "trigger"
+            "applies_to": "target",
+            "applies_vs": "trigger.source"
           },
           "duration": {
             "attacks": {

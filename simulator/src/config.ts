@@ -215,6 +215,12 @@ function validateTriggerDefinition(trigger: SkillFile["skills"][string]["trigger
   if (legacyUnits !== undefined) {
     throw new Error(`legacy trigger units filters are not supported at ${file}:${skillId}.trigger.units; use trigger.source and trigger.target`);
   }
+  if (trigger.first !== undefined && (!Number.isFinite(Number(trigger.first)) || Number(trigger.first) < 1)) {
+    throw new Error(`trigger.first must be a positive number at ${file}:${skillId}.trigger.first`);
+  }
+  if (trigger.first !== undefined && trigger.every === undefined) {
+    throw new Error(`trigger.first requires trigger.every at ${file}:${skillId}.trigger`);
+  }
 }
 
 function isTriggerRelativeUnitSelector(selector: unknown): selector is string {

@@ -33,6 +33,7 @@ test("small tournament with stubbed battles finalizes offense and defense pools"
       seedRounds: 1,
       reps: 1,
       jobs: 1,
+      batchSize: 64,
       seed: 5,
       freezeRate: 0,
       startFreezeRound: 8,

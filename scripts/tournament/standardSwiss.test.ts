@@ -80,6 +80,7 @@ test("runStandardSwissTournament finalizes a single combined pool", async () => 
       seedRounds: 0,
       reps: 1,
       jobs: 1,
+      batchSize: 64,
       seed: 10,
       freezeRate: 0,
       startFreezeRound: 8,

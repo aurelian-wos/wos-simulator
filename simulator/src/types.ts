@@ -100,6 +100,7 @@ export interface EffectIntentDefinition {
 export interface TriggerDefinition {
   type: string;
   probability?: unknown;
+  first?: number;
   every?: number;
   source?: unknown;
   target?: unknown;
@@ -368,6 +369,7 @@ export type AppliedEffect = AppliedModifierEffect | AppliedControlEffect | Appli
 
 export interface AttackOutcome {
   jobId: string;
+  round: number;
   kind: DamageKind;
   sourceEffectId?: string;
   sourceSkillReportKey?: string;
