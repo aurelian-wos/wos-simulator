@@ -616,7 +616,6 @@ test.describe("Dashboard smoke tests", () => {
     const response = await page.goto("/simulate");
     expect(response?.status()).toBe(200);
 
-    await page.getByTestId("optimize-options-toggle").click();
     await page.getByRole("spinbutton", { name: /replicates/i }).fill("1");
     await page.getByRole("button", { name: /^Simulate$/i }).click();
     await expect(page.getByTestId("simulate-outcome-chart")).toBeVisible();
@@ -707,7 +706,6 @@ test.describe("Dashboard smoke tests", () => {
     await expect(dialog).toBeHidden();
     await expect(page.locator("body")).toContainText("Attacker saved profile");
 
-    await page.getByTestId("optimize-options-toggle").click();
     await page.getByRole("spinbutton", { name: /replicates/i }).fill("1");
     await page.getByRole("button", { name: /^Simulate$/i }).click();
     await expect(page.getByTestId("simulate-outcome-chart")).toBeVisible();

@@ -54,20 +54,22 @@ import {
 } from "@/lib/simulator/worker-client";
 import {
   BattleTraceDetails,
-  compactNumber,
-  defaultSide,
-  heroAdjustedStats,
-  mergeSideFromOcr,
   ProgressBar,
   RecentRunsModal,
   ResultCard,
   SidePanel,
-  sideWithPresetStats,
-  sideFromPayload,
   SkillUseTable,
+} from "@/components/simulate/SharedSimComponents";
+import {
+  compactNumber,
+  defaultSide,
+  heroAdjustedStats,
+  mergeSideFromOcr,
+  sideFromPayload,
+  sideWithPresetStats,
   toApiPayload,
   type SideState,
-} from "@/app/simulate/SimulateClient";
+} from "@/lib/simulate/form-state";
 
 const RALLY_MODE = true;
 const RECENT_RUNS_PAGE_SIZE = 20;

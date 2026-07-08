@@ -31,7 +31,6 @@ test("/simulate uses browser worker for simulation and saves afterward", async (
     await route.continue();
   });
   await page.goto("/simulate");
-  await page.getByTestId("optimize-options-toggle").click();
   await page.getByRole("spinbutton", { name: /replicates/i }).fill("1");
   await page.getByRole("button", { name: /^Simulate$/i }).click();
   const chart = page.getByTestId("simulate-outcome-chart");
@@ -61,6 +60,9 @@ test("/simulate uses browser worker for optimise ratio and saves afterward", asy
   });
   await page.route("**/api/simulate/runs", async (route) => {
     if (route.request().method() === "POST") {
+      const payload = route.request().postDataJSON();
+      expect(payload.kind).toBe("optimize_ratio");
+      expect(payload.request).not.toHaveProperty("replicates");
       await route.fulfill({
         contentType: "application/json",
         body: JSON.stringify({

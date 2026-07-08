@@ -211,25 +211,19 @@ test.describe("WOS-202 mobile nav + simulate layout", () => {
     await expect(preview).toContainText("+15.0%");
 
     await expect(page.getByTestId("simulate-runbar")).toBeVisible();
-    await expect(page.getByTestId("optimize-options-toggle")).toBeVisible();
+    await expect(page.getByTestId("optimize-options-toggle")).toHaveCount(0);
     await expect(
       page.locator('[data-testid="optimize-options-panel"]'),
     ).toHaveCount(0);
 
     const runbar = page.getByTestId("simulate-runbar");
     const simulateBtn = runbar.getByRole("button", { name: /^Simulate$/i });
-    const optionsButton = page.getByTestId("optimize-options-toggle");
-    const optionsBox = await optionsButton.boundingBox();
     const simulateBox = await simulateBtn.boundingBox();
-    expect(optionsBox).not.toBeNull();
     expect(simulateBox).not.toBeNull();
-    expect(
-      Math.abs((optionsBox?.y ?? 0) - (simulateBox?.y ?? 0)),
-    ).toBeLessThanOrEqual(16);
 
     // Simulate button touch-target is at least 44px tall (Apple HIG minimum).
     expect((simulateBox?.height ?? 0) + 0.5).toBeGreaterThanOrEqual(44);
-    await expect(page.getByTestId("optimize-panel")).toContainText("1,000 reps");
+    await expect(page.getByTestId("optimize-panel")).not.toContainText("1,000 reps");
 
     const overflow = await page.evaluate(() => {
       const doc = document.documentElement;
@@ -577,8 +571,6 @@ test.describe("WOS-202 mobile nav + simulate layout", () => {
       (optimizeBox?.y ?? 0) + (optimizeBox?.height ?? 0) + 1,
     );
 
-    const optionsToggle = page.getByTestId("optimize-options-toggle");
-    await optionsToggle.click();
     const replicateBox = await page.getByLabel("Replicates").boundingBox();
     expect(replicateBox).not.toBeNull();
     expect(replicateBox?.width ?? 9999).toBeLessThanOrEqual(190);
@@ -586,8 +578,8 @@ test.describe("WOS-202 mobile nav + simulate layout", () => {
       .getByTestId("simulate-runbar")
       .getByRole("button", { name: /^Simulate$/i })
       .evaluate((el) => getComputedStyle(el).backgroundColor);
-    await optionsToggle.click();
     await page.getByRole("tab", { name: "Optimise ratio" }).click();
+    const optionsToggle = page.getByTestId("optimize-options-toggle");
     const optimizeColor = await page
       .getByTestId("simulate-runbar")
       .getByRole("button", { name: /^Optimise ratio$/i })
@@ -614,19 +606,13 @@ test.describe("WOS-202 mobile nav + simulate layout", () => {
         .getByTestId("simulate-runbar")
         .getByRole("button", { name: /^Simulate$/i })
         .boundingBox();
-      const optionsButtonBox = await page
-        .getByTestId("optimize-options-toggle")
-        .boundingBox();
 
       expect(dockBox).not.toBeNull();
       expect(tablistBox).not.toBeNull();
       expect(runButtonBox).not.toBeNull();
-      expect(optionsButtonBox).not.toBeNull();
       expect(tablistBox?.width ?? 9999).toBeLessThanOrEqual(dockBox?.width ?? 0);
-      expect((optionsButtonBox?.x ?? 0) + (optionsButtonBox?.width ?? 0)).toBeLessThanOrEqual(
-        (dockBox?.x ?? 0) + (dockBox?.width ?? 0) + 1,
-      );
       expect((runButtonBox?.height ?? 0) + 0.5).toBeGreaterThanOrEqual(34);
+      await expect(page.getByTestId("optimize-options-toggle")).toHaveCount(0);
       await expectNoVisibleElementOverflow(page);
     }
 
@@ -699,23 +685,18 @@ test.describe("WOS-202 mobile nav + simulate layout", () => {
       .getByTestId("simulate-runbar")
       .getByRole("button", { name: /^Simulate$/i })
       .boundingBox();
-    const optionsBox = await page.getByTestId("optimize-options-toggle").boundingBox();
-    const statusBox = await page.locator(".sim-mode-status").boundingBox();
+    await expect(page.locator(".sim-mode-status")).toHaveCount(0);
 
     for (const box of [
       dockBox,
       modeTabsBox,
       simulateBox,
-      optionsBox,
-      statusBox,
     ]) {
       expect(box).not.toBeNull();
     }
 
-    expect(modeTabsBox?.y ?? 9999).toBeLessThan(optionsBox?.y ?? 0);
-    expect(Math.abs((simulateBox?.y ?? 0) - (optionsBox?.y ?? 9999))).toBeLessThanOrEqual(2);
-    expect(statusBox?.y ?? 0).toBeGreaterThan(simulateBox?.y ?? 9999);
-    expect((optionsBox?.x ?? 0) + (optionsBox?.width ?? 0)).toBeLessThanOrEqual(
+    expect(modeTabsBox?.y ?? 9999).toBeLessThan(simulateBox?.y ?? 0);
+    expect((simulateBox?.x ?? 0) + (simulateBox?.width ?? 0)).toBeLessThanOrEqual(
       (dockBox?.x ?? 0) + (dockBox?.width ?? 0) - 10,
     );
     await expectNoVisibleElementOverflow(page);

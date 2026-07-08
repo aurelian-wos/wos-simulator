@@ -208,7 +208,9 @@ export interface BearOptimizeRatioRequestPayload extends BearSimRequestPayload {
   search_mode?: OptimizeSearchMode;
 }
 
-export interface OptimizeRatioRequestPayload extends SimulateRequestPayload {
+export interface OptimizeRatioRequestPayload
+  extends Omit<SimulateRequestPayload, "replicates"> {
+  replicates?: number;
   grid_step: number;
   search_replicates: number;
   adaptive_phase1_replicates?: number;

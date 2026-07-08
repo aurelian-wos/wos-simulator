@@ -72,11 +72,13 @@ test.describe("WOS-195 Simulate page visual QA", () => {
     await page.waitForLoadState("networkidle");
 
     // Replicates input
-    const replicatesInput = page.locator('input[type="number"]').filter({ hasText: '' }).first();
+    const replicatesInput = page.getByRole("spinbutton", { name: /replicates/i });
     await expect(replicatesInput).toBeVisible();
 
     // Simulate button
-    const simulateBtn = page.getByRole("button", { name: /simulate/i });
+    const simulateBtn = page
+      .getByTestId("simulate-runbar")
+      .getByRole("button", { name: /^Simulate$/i });
     await expect(simulateBtn).toBeVisible();
   });
 
@@ -100,19 +102,11 @@ test.describe("WOS-195 Simulate page visual QA", () => {
     await page.goto("/simulate");
     await page.waitForLoadState("networkidle");
 
-    // Set low replicates for speed
-    const numInputs = page.locator('input[type="number"]');
-    const count = await numInputs.count();
-    // Find replicates - usually near the simulate button, try to find it
-    for (let i = 0; i < count; i++) {
-      const val = await numInputs.nth(i).inputValue();
-      if (val === "100" || val === "50") {
-        await numInputs.nth(i).fill("10");
-        break;
-      }
-    }
+    await page.getByRole("spinbutton", { name: /replicates/i }).fill("10");
 
-    const simulateBtn = page.getByRole("button", { name: /simulate/i });
+    const simulateBtn = page
+      .getByTestId("simulate-runbar")
+      .getByRole("button", { name: /^Simulate$/i });
     await simulateBtn.click();
 
     // Wait for results (up to 30s for sim to complete)

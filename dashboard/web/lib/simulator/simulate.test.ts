@@ -95,6 +95,7 @@ test("battleResultToTrace maps a full simulator trace into dashboard detail rows
   sample.skillReport.attacker[0].skillKills = 4;
   sample.attacks = [{
     jobId: "job-1",
+    round: 1,
     kind: "skill",
     sourceEffectId: "S1:e1",
     attackerSide: "attacker",
@@ -141,6 +142,7 @@ test("battleResultToTrace groups applied effects by source side, not attacking s
   const sample = result(9, 0, 1);
   sample.attacks = [{
     jobId: "job-1",
+    round: 1,
     kind: "normal",
     attackerSide: "attacker",
     attackerUnit: "marksman",
@@ -221,6 +223,7 @@ test("skill kill summaries show only chance troop skills grouped under matching 
   sample.attacks = [
     {
       jobId: "normal-1",
+      round: 1,
       kind: "normal",
       attackerSide: "attacker",
       attackerUnit: "marksman",
@@ -232,6 +235,7 @@ test("skill kill summaries show only chance troop skills grouped under matching 
     },
     {
       jobId: "skill-1",
+      round: 1,
       kind: "skill",
       sourceEffectId: "S1:e1",
       attackerSide: "attacker",

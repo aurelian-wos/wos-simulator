@@ -1,7 +1,7 @@
 import { loadSimulatorConfig } from "@simulator/config";
 import { simulateBattle } from "@simulator/simulator";
 import type { SimulatorConfig } from "@simulator/types";
-import type { OptimizeRatioRequestPayload } from "@/lib/simulate-run";
+import type { OptimizeRatioRequestPayload, SimulateRequestPayload } from "@/lib/simulate-run";
 import {
   ADAPTIVE_LOCAL_NEIGHBOURS_PER_SEED,
   ADAPTIVE_MAX_FINALISTS,
@@ -313,7 +313,11 @@ function evaluateComposition(
   let totalAttackerLeft = 0;
   let totalDefenderLeft = 0;
   for (let index = 0; index < phaseReplicates; index += 1) {
-    const result = battleSimulator(toBattleInput(candidate, `${seedBase}:${composition.join("-")}:${index}`), config, { mode: "fast" });
+    const battleRequest: SimulateRequestPayload = {
+      ...candidate,
+      replicates: phaseReplicates,
+    };
+    const result = battleSimulator(toBattleInput(battleRequest, `${seedBase}:${composition.join("-")}:${index}`), config, { mode: "fast" });
     const attackerLeft = totalSide(result.remaining.attacker);
     const defenderLeft = totalSide(result.remaining.defender);
     const margin = optimizeSide === "attacker" ? attackerLeft - defenderLeft : defenderLeft - attackerLeft;

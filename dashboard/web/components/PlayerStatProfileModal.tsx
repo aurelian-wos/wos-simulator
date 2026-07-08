@@ -173,6 +173,7 @@ export default function PlayerStatProfileModal({
         <label className="mb-3 flex flex-col gap-1">
           <span className="sim-field-label">Profile</span>
           <select
+            name="statPreset.selectedProfile"
             value={selectedId}
             onChange={(event) => choosePreset(event.target.value)}
             className="sim-input min-h-[40px] px-2 py-2 font-mono text-xs"
@@ -191,6 +192,7 @@ export default function PlayerStatProfileModal({
           <span className="sim-field-label">Profile name</span>
           <input
             type="text"
+            name="statPreset.profileName"
             value={draftName}
             onChange={(event) => setDraftName(event.target.value)}
             placeholder={defaultName}
