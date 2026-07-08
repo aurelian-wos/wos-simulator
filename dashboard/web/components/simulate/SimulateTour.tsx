@@ -351,7 +351,7 @@ function buildSimulateTourSteps(wideLayout: boolean): SimulateTourStep[] {
     {
       id: "explore-results",
       title: "Reading the ratio surface",
-      text: "The interactive triangles let you explore outcomes across the 2x2-dimensional space of troop ratios: two free dimensions per side, because the third troop share is total minus the other two. Color shows the observed result surface over those four input dimensions: red is attacker-favored, blue is defender-favored, and white is close.",
+      text: "Each dot represents a particular troop ratio and its Color shows the average outcome of that ratio against all enemy formations. Red is attacker-favored, blue is defender-favored, and white is close. Hovering or selecting a dot will change the opposite triangle to show the results against only that selected ratio instead of against all ratios.",
       target: "[data-tour='surface-panels']",
       fallbackTarget: "[data-tour='surface-results']",
       placement: wideLayout ? "top" : "bottom",
