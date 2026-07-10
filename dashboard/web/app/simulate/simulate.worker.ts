@@ -6,14 +6,16 @@ import { loadSimulatorConfig } from "@simulator/config";
 import type { SimulatorWorkerRequest, SimulatorWorkerResponse } from "@/lib/simulator/worker-protocol";
 import { runBattleTasksDirect, runTournament, type BattleSummary, type BattleTask, type TournamentRunOptions } from "@/lib/tournament";
 import type { SimulatorConfig } from "@simulator/types";
+import { BatchWorkerPool, batchTasksByWeight, type BatchWorker } from "@simulator/workerPool";
 import type { OptimizeRatioRequestPayload, SimulateRequestPayload } from "@/lib/simulate-run";
 
 let activeJobId: number | null = null;
 let activeSimulateWorkers: Worker[] = [];
 let activeOptimizeWorkers: Worker[] = [];
-let activeTournamentWorkers: Worker[] = [];
+let activeTournamentPool: BatchWorkerPool<BattleTask, BattleSummary, number> | null = null;
 let activeSurfaceWorkers: Worker[] = [];
 const BATTLE_WORKER_COUNT = 8;
+const TOURNAMENT_BATCH_WEIGHT = 64;
 
 self.onmessage = (event: MessageEvent<SimulatorWorkerRequest>) => {
   void handleMessage(event.data);
@@ -26,8 +28,8 @@ async function handleMessage(request: SimulatorWorkerRequest): Promise<void> {
     activeSimulateWorkers = [];
     for (const worker of activeOptimizeWorkers) worker.terminate();
     activeOptimizeWorkers = [];
-    for (const worker of activeTournamentWorkers) worker.terminate();
-    activeTournamentWorkers = [];
+    await activeTournamentPool?.close();
+    activeTournamentPool = null;
     for (const worker of activeSurfaceWorkers) worker.terminate();
     activeSurfaceWorkers = [];
     return;
@@ -81,14 +83,19 @@ async function handleMessage(request: SimulatorWorkerRequest): Promise<void> {
       });
       postIfActive(request.id, { id: request.id, type: "surfaceResult", data });
     } else {
-      const data = await runTournament(request.payload, {
-        seedBase: `tournament:${request.id}`,
-        onProgress: (done, total) => postIfActive(request.id, { id: request.id, type: "progress", done, total }),
-        runBattleTasks: request.payload.jobs > 1
-          ? createTournamentWorkerPoolRunner(request.id, request.payload.jobs)
-          : undefined,
-      });
-      postIfActive(request.id, { id: request.id, type: "tournamentResult", data });
+      const tournamentRunner = request.payload.jobs > 1
+        ? createTournamentWorkerPoolRunner(request.payload.jobs)
+        : null;
+      try {
+        const data = await runTournament(request.payload, {
+          seedBase: `tournament:${request.id}`,
+          onProgress: (done, total) => postIfActive(request.id, { id: request.id, type: "progress", done, total }),
+          runBattleTasks: tournamentRunner?.runBattleTasks,
+        });
+        postIfActive(request.id, { id: request.id, type: "tournamentResult", data });
+      } finally {
+        await tournamentRunner?.close();
+      }
     }
   } catch (error) {
     postIfActive(request.id, { id: request.id, type: "error", message: error instanceof Error ? error.message : String(error) });
@@ -210,46 +217,82 @@ function runOptimizeBatchChunk(
   });
 }
 
-function createTournamentWorkerPoolRunner(
-  parentJobId: number,
-  jobs: number,
-): NonNullable<TournamentRunOptions["runBattleTasks"]> {
-  return async (tasks: BattleTask[], _config: SimulatorConfig, onBattleDone: (battleReps: number) => void): Promise<BattleSummary[]> => {
-    if (tasks.length === 0) return [];
-    const workerCount = Math.max(1, Math.min(Math.floor(jobs), tasks.length));
-    if (workerCount <= 1) return runBattleTasksDirect(tasks, _config, onBattleDone);
-    const chunks = chunkTasks(tasks, workerCount);
-    const workers = chunks.map(() => new Worker(new URL("./tournament-battle.worker.ts", import.meta.url), { type: "module" }));
-    activeTournamentWorkers = workers;
-    try {
-      const resultSets = await Promise.all(chunks.map((chunk, index) => runTournamentWorkerChunk(workers[index], parentJobId, index, chunk, onBattleDone)));
-      return resultSets.flat();
-    } finally {
-      for (const worker of workers) worker.terminate();
-      activeTournamentWorkers = activeTournamentWorkers.filter((worker) => !workers.includes(worker));
+function createTournamentWorkerPoolRunner(jobs: number): {
+  runBattleTasks: NonNullable<TournamentRunOptions["runBattleTasks"]>;
+  close(): Promise<void>;
+} {
+  const workerCount = Math.max(1, Math.floor(jobs));
+  const pool = new BatchWorkerPool<BattleTask, BattleSummary, number>(
+    workerCount,
+    () => new BrowserTournamentWorker()
+  );
+  activeTournamentPool = pool;
+  return {
+    async runBattleTasks(tasks: BattleTask[], _config: SimulatorConfig, onBattleDone: (battleReps: number) => void): Promise<BattleSummary[]> {
+      if (tasks.length === 0) return [];
+      const activeWorkerCount = Math.max(1, Math.min(Math.floor(jobs), tasks.length));
+      if (activeWorkerCount <= 1) return runBattleTasksDirect(tasks, _config, onBattleDone);
+      const results: BattleSummary[] = new Array(tasks.length);
+      let offset = 0;
+      const batches = batchTasksByWeight(tasks, TOURNAMENT_BATCH_WEIGHT, (task) => task.reps).map((batch) => {
+        const start = offset;
+        offset += batch.length;
+        return { batch, start };
+      });
+      await Promise.all(
+        batches.map(async ({ batch, start }) => {
+          const batchResults = await pool.runBatch(batch, onBattleDone);
+          results.splice(start, batchResults.length, ...batchResults);
+        })
+      );
+      return results;
+    },
+    async close(): Promise<void> {
+      await pool.close();
+      if (activeTournamentPool === pool) activeTournamentPool = null;
     }
   };
 }
 
-function runTournamentWorkerChunk(
-  worker: Worker,
-  parentJobId: number,
-  chunkIndex: number,
-  tasks: BattleTask[],
-  onBattleDone: (battleReps: number) => void,
-): Promise<BattleSummary[]> {
-  const id = parentJobId * 1000 + chunkIndex + 1;
-  return new Promise((resolve, reject) => {
-    worker.onmessage = (event: MessageEvent<{ id: number; type: "progress" | "result" | "error"; battleReps?: number; data?: BattleSummary[]; message?: string }>) => {
-      const message = event.data;
-      if (message.id !== id) return;
-      if (message.type === "progress") onBattleDone(message.battleReps ?? 0);
-      else if (message.type === "result") resolve(message.data ?? []);
-      else reject(new Error(message.message ?? "Tournament battle worker failed"));
-    };
-    worker.onerror = (event) => reject(new Error(event.message));
-    worker.postMessage({ id, type: "run", tasks });
-  });
+class BrowserTournamentWorker implements BatchWorker<BattleTask, BattleSummary, number> {
+  private readonly worker = new Worker(new URL("./tournament-battle.worker.ts", import.meta.url), { type: "module" });
+  private rejectInFlight?: (error: Error) => void;
+
+  runBatch(id: number, tasks: BattleTask[], onProgress?: (battleReps: number) => void): Promise<BattleSummary[]> {
+    if (this.rejectInFlight) return Promise.reject(new Error("Tournament worker already has an in-flight batch"));
+    return new Promise((resolve, reject) => {
+      const cleanup = () => {
+        this.rejectInFlight = undefined;
+        this.worker.onmessage = null;
+        this.worker.onerror = null;
+      };
+      this.rejectInFlight = reject;
+      this.worker.onmessage = (event: MessageEvent<{ id: number; type: "progress" | "result" | "error"; battleReps?: number; data?: BattleSummary[]; message?: string }>) => {
+        const message = event.data;
+        if (message.id !== id) return;
+        if (message.type === "progress") {
+          onProgress?.(message.battleReps ?? 0);
+          return;
+        }
+        cleanup();
+        if (message.type === "result") resolve(message.data ?? []);
+        else reject(new Error(message.message ?? "Tournament battle worker failed"));
+      };
+      this.worker.onerror = (event) => {
+        cleanup();
+        reject(new Error(event.message));
+      };
+      this.worker.postMessage({ id, type: "run", tasks });
+    });
+  }
+
+  close(): void {
+    if (this.rejectInFlight) {
+      this.rejectInFlight(new Error("Tournament worker closed before completing in-flight batch"));
+      this.rejectInFlight = undefined;
+    }
+    this.worker.terminate();
+  }
 }
 
 function chunkTasks<T>(tasks: T[], workerCount: number): T[][] {

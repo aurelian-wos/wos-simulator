@@ -202,6 +202,7 @@ export default function ParityReportTable({
           <tbody>
             {filtered.map((row) => {
               const simulator = candidate(row);
+              const caseLabel = row.testcaseId || row.file;
               return (
                 <tr
                   key={`${row.file}:${row.testcaseId}:${row.idx}`}
@@ -211,17 +212,21 @@ export default function ParityReportTable({
                     className={`${compactTd} max-w-44 truncate`}
                     title={row.file}
                   >
-                    <Link
-                      href={
-                        runId
-                          ? runDetailHref(runId, row)
-                          : detailHref(reportId, row)
-                      }
-                      className="underline hover:opacity-80"
-                      style={{ color: "var(--sidebar-active)" }}
-                    >
-                      {row.testcaseId}
-                    </Link>
+                    {row.detailAvailable ? (
+                      <Link
+                        href={
+                          runId
+                            ? runDetailHref(runId, row)
+                            : detailHref(reportId, row)
+                        }
+                        className="underline hover:opacity-80"
+                        style={{ color: "var(--sidebar-active)" }}
+                      >
+                        {caseLabel}
+                      </Link>
+                    ) : (
+                      <span>{caseLabel}</span>
+                    )}
                   </td>
                   <td className={compactTd}>{row.idx}</td>
                   <td

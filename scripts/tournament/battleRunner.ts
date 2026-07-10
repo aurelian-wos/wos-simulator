@@ -1,6 +1,7 @@
 import { loadSimulatorConfig } from "../../simulator/src/config";
 import { simulateBattle, signedRemainingScore } from "../../simulator/src/simulator";
 import type { BattleResult, SimulatorConfig } from "../../simulator/src/types";
+import { batchTasksByWeight } from "../../simulator/src/workerPool";
 import { teamToBattleInput } from "./teamInput";
 import { TournamentWorkerPool } from "./workerPool";
 import type { BattleSummary, BattleTask } from "./types";
@@ -63,12 +64,18 @@ export function createBattleTaskRunner(
   const pool = createWorkerPool(workerCount);
   return {
     async run(tasks, onProgress) {
-      const results: BattleSummary[] = [];
+      const results: BattleSummary[] = new Array(tasks.length);
       let completed = 0;
+      let offset = 0;
+      const batches = batchTasksByWeight(tasks, taskBatchSize, (task) => task.reps).map((batch) => {
+        const start = offset;
+        offset += batch.length;
+        return { batch, start };
+      });
       await Promise.all(
-        batchBattleTasks(tasks, taskBatchSize).map(async (batch) => {
+        batches.map(async ({ batch, start }) => {
           const batchResults = await pool.runBatch(batch);
-          results.push(...batchResults);
+          results.splice(start, batchResults.length, ...batchResults);
           completed += batchResults.length;
           onProgress?.(completed, tasks.length);
         })
@@ -88,22 +95,4 @@ export async function runBattleTasks(tasks: BattleTask[], jobs: number, onProgre
   } finally {
     await runner.close();
   }
-}
-
-function batchBattleTasks(tasks: BattleTask[], targetBattles: number): BattleTask[][] {
-  const out: BattleTask[][] = [];
-  let current: BattleTask[] = [];
-  let currentBattles = 0;
-  for (const task of tasks) {
-    const taskBattles = Math.max(1, task.reps);
-    if (current.length > 0 && currentBattles + taskBattles > targetBattles) {
-      out.push(current);
-      current = [];
-      currentBattles = 0;
-    }
-    current.push(task);
-    currentBattles += taskBattles;
-  }
-  if (current.length > 0) out.push(current);
-  return out;
 }

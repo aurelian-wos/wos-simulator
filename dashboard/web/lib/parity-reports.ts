@@ -52,6 +52,7 @@ export interface ParityComparisonRow {
   testcaseId: string;
   idx: number;
   detailArtifact?: string;
+  detailAvailable?: boolean;
   deterministic?: boolean;
   sampleCount?: number;
   game: ParityMetric | null;
@@ -209,7 +210,11 @@ export function getParityReport(
     : reports[0];
   if (!descriptor) return undefined;
   const data = JSON.parse(fs.readFileSync(descriptor.path, "utf8")) as ParityReportJson;
-  const rows = rowsFromReport(data);
+  const reportDir = path.dirname(descriptor.path);
+  const rows = rowsFromReport(data).map((row) => ({
+    ...row,
+    detailAvailable: detailArtifactExists(reportDir, row.detailArtifact),
+  }));
   return {
     ...descriptor,
     data,
@@ -403,6 +408,22 @@ function loadDetailArtifact(
     return data;
   } catch {
     return undefined;
+  }
+}
+
+function detailArtifactExists(
+  reportDir: string,
+  detailArtifact: string | undefined,
+): boolean {
+  if (!detailArtifact) return false;
+  const reportRoot = path.resolve(reportDir);
+  const artifactPath = path.resolve(reportRoot, detailArtifact);
+  if (!isSubpath(reportRoot, artifactPath)) return false;
+
+  try {
+    return fs.statSync(artifactPath).isFile();
+  } catch {
+    return false;
   }
 }
 
