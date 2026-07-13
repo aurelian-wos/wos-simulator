@@ -30,7 +30,8 @@
           },
           "duration": {
             "turns": {
-              "count": 1
+              "count": 1,
+              "delay": 1
             }
           },
           "same_effect_stacking": "max"

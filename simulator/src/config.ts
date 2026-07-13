@@ -275,11 +275,11 @@ function validateNativeEffectDuration(effect: EffectIntentDefinition, file: stri
   const path = `${file}:${skillId}.${effectId}.duration`;
   const duration = effect.duration as Record<string, unknown>;
   for (const key of Object.keys(duration)) {
-    if (key !== "turns" && key !== "rounds" && key !== "attacks") {
+    if (key !== "turns" && key !== "attacks") {
       throw new Error(`native effect duration key ${key} is not supported at ${path}; use turns and/or attacks`);
     }
   }
-  for (const key of ["turns", "rounds", "attacks"] as const) {
+  for (const key of ["turns", "attacks"] as const) {
     const value = duration[key];
     if (value === undefined) continue;
     validateNativeEffectDurationAxis(value, `${path}.${key}`);

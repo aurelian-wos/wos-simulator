@@ -13,8 +13,7 @@
           40,
           40,
           40
-        ],
-        "source": "self.any"
+        ]
       },
       "effects": {
         "Onslaught/1": {
@@ -26,10 +25,6 @@
             40,
             50
           ],
-          "units": {
-            "applies_to": "trigger",
-            "applies_vs": "trigger.target"
-          },
           "duration": {
             "turns": {
               "count": 1

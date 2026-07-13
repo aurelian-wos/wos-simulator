@@ -113,9 +113,11 @@
             ]
           },
           "duration": {
-            "attacks": {
-              "count": 1,
+            "turns": {
               "delay": 1
+            },
+            "attacks": {
+              "count": 1
             }
           },
           "trigger_damage_jobs": [

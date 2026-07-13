@@ -9,6 +9,15 @@ import { loadSimulatorConfig } from "./config";
 import { loadSimulatorConfigFromDir } from "./config-node";
 import type { SkillFile } from "./types";
 
+test("Gwen Blastmaster uses a turn delay and a one-attack duration", () => {
+  const effect = loadSimulatorConfig().heroDefinitions.Gwen.skills.Blastmaster.effects["Blastmaster/1"];
+
+  assert.deepEqual(effect.duration, {
+    turns: { delay: 1 },
+    attacks: { count: 1 }
+  });
+});
+
 test("loadSimulatorConfig warns for non-per-unit turn triggers with trigger-relative effect selectors", () => {
   const root = writeConfigWithTroopEffect({
     type: "active.hero.lethality.up",
