@@ -1,7 +1,8 @@
 import type { DamageResult } from "./damage";
-import { ATOMIC_BUCKETS, BUCKET_DEFINITIONS, type AtomicBucket, type StaticDamageBucket } from "./damageBuckets";
+import { ATOMIC_BUCKETS, BUCKET_DEFINITIONS, pctBucketFactor, rawBucketFactor, type AtomicBucket, type StaticDamageBucket, type StaticPlayerBucket, type StaticRawBucket } from "./damageBuckets";
 import { sourceLabel } from "./effects";
-import type { StaticDamageProfileEntry } from "./staticDamageProfile";
+import { selectPassiveContributions, unitBaseStats, unitPlayerBonuses, type PassiveContribution } from "./staticDamageProfile";
+import { UNIT_TYPES } from "./types";
 import type {
   ActiveEffect,
   AppliedEffect,
@@ -35,8 +36,6 @@ interface DamageFactorTerm {
 export interface DamageRecordingResult {
   job: DamageJob;
   factors: Float64Array;
-  staticOffense: StaticDamageProfileEntry;
-  staticDefense: StaticDamageProfileEntry;
   armyTerm: number;
   rawDamage: number;
   kills: number;
@@ -46,8 +45,33 @@ export interface DamageRecordingResult {
 export interface DamageJobRecorder {
   recordModifier(effect: ActiveEffect, valuePct: number): void;
   recordRejected(effect: ActiveEffect, reason: RejectedEffectReason): void;
-  recordStaticProfile(entry: StaticDamageProfileEntry): void;
   finish(result: DamageRecordingResult): DamageResult;
+}
+
+// Recorder-side description of how the static damage factors were assembled: the same selection
+// the numeric profile uses (via selectPassiveContributions) expanded into per-bucket terms with
+// contributors. The battle runtime never sees these shapes; fast mode never builds them.
+interface StaticProfileTerm {
+  raw?: number;
+  totalPct?: number;
+  factor: number;
+  contributors: DamageBucketTrace["contributors"];
+}
+
+interface StaticProfileEntry {
+  buckets: Partial<Record<StaticDamageBucket, StaticProfileTerm>>;
+}
+
+interface StaticProfileDescription {
+  dealer: Record<SideId, Record<UnitType, StaticProfileEntry>>;
+  taker: Record<SideId, Record<UnitType, StaticProfileEntry>>;
+}
+
+// Per-(side, unit) applied-effect fragments prebuilt from the static profile description; the
+// per-job recorders splice them into each damage event instead of re-walking the description.
+interface StaticAppliedIndex {
+  dealer: Record<SideId, Record<UnitType, DamageEquationTrace["appliedEffects"]>>;
+  taker: Record<SideId, Record<UnitType, DamageEquationTrace["appliedEffects"]>>;
 }
 
 /**
@@ -55,6 +79,12 @@ export interface DamageJobRecorder {
  * before the round loop, and every simulation path emits the same observations to it.
  */
 export interface BattleRecorder {
+  /**
+   * Receives the battle's fighters and setup effects before any damage job runs. Recorders that
+   * report static contributions build their description of the static profile here; the null
+   * recorder does nothing, so fast mode pays nothing.
+   */
+  recordStaticProfile(fighters: Record<SideId, ResolvedFighter>, setupEffects: ActiveEffect[]): void;
   startDamageJob(): DamageJobRecorder;
   recordSkillTriggerAttempt(skill: ResolvedSkill): void;
   recordSkillTriggered(skill: ResolvedSkill): void;
@@ -80,7 +110,6 @@ const REPORT_KEY_CACHE = new WeakMap<ResolvedSkill, string>();
 const NULL_DAMAGE_JOB_RECORDER: DamageJobRecorder = {
   recordModifier() {},
   recordRejected() {},
-  recordStaticProfile() {},
   finish({ kills }) {
     return { kills };
   }
@@ -95,6 +124,7 @@ export class NullRecorder implements BattleRecorder {
     return NULL_DAMAGE_JOB_RECORDER;
   }
 
+  recordStaticProfile() {}
   recordBattleOrder() {}
   recordSkillTriggerAttempt() {}
   recordSkillTriggered() {}
@@ -122,6 +152,7 @@ export function createRecorder(
 
 export class BasicInfoRecorder implements BattleRecorder {
   readonly attacks: AttackOutcome[] = [];
+  protected staticApplied?: StaticAppliedIndex;
   protected readonly orderEvents = new Map<string, AppliedEffect>();
   protected readonly extraAttackEvents = new Map<string, AppliedEffect[]>();
   protected readonly skillReports: Record<SideId, Map<string, SkillReportEntry>> = {
@@ -161,8 +192,19 @@ export class BasicInfoRecorder implements BattleRecorder {
     };
   }
 
+  recordStaticProfile(fighters: Record<SideId, ResolvedFighter>, setupEffects: ActiveEffect[]): void {
+    this.applyStaticDescription(buildStaticProfileDescription(fighters, setupEffects));
+  }
+
+  protected applyStaticDescription(description: StaticProfileDescription): void {
+    this.staticApplied = {
+      dealer: staticAppliedFragments(description.dealer),
+      taker: staticAppliedFragments(description.taker)
+    };
+  }
+
   startDamageJob(): DamageJobRecorder {
-    return new BasicDamageJobRecorder();
+    return new BasicDamageJobRecorder(this.staticApplied);
   }
 
   recordSkillTriggerAttempt(_skill: ResolvedSkill): void {}
@@ -222,10 +264,10 @@ export class BasicInfoRecorder implements BattleRecorder {
       jobId: `${intent.id}:cancelled`,
       round: intent.round,
       kind: "normal",
-      attackerSide: intent.attackerSide,
-      attackerUnit: intent.attackerUnit,
-      defenderSide: intent.defenderSide,
-      defenderUnit: intent.defenderUnit,
+      dealerSide: intent.dealerSide,
+      dealerUnit: intent.dealerUnit,
+      takerSide: intent.takerSide,
+      takerUnit: intent.takerUnit,
       kills: 0,
       counterDeltas: counterDeltas(intent, "normal_attack"),
       appliedEffects: order
@@ -240,7 +282,7 @@ export class BasicInfoRecorder implements BattleRecorder {
     const sourceSkillReportKey = this.skillDamageKeys.get(job.id);
     this.skillDamageKeys.delete(job.id);
     if (job.kind === "skill" && sourceSkillReportKey && result.kills > 0) {
-      const report = this.skillReports[job.attackerSide].get(sourceSkillReportKey);
+      const report = this.skillReports[job.dealerSide].get(sourceSkillReportKey);
       if (report) report.skillKills += result.kills;
     }
     const cause = job.kind === "skill" ? "extra_skill_attack" : "normal_attack";
@@ -254,10 +296,10 @@ export class BasicInfoRecorder implements BattleRecorder {
       kind: job.kind,
       sourceEffectId: job.sourceEffectId,
       sourceSkillReportKey,
-      attackerSide: job.attackerSide,
-      attackerUnit: job.attackerUnit,
-      defenderSide: job.defenderSide,
-      defenderUnit: job.defenderUnit,
+      dealerSide: job.dealerSide,
+      dealerUnit: job.dealerUnit,
+      takerSide: job.takerSide,
+      takerUnit: job.takerUnit,
       kills: result.kills,
       counterDeltas: counterDeltas(job, cause),
       appliedEffects: mergeAppliedEffects(result.appliedEffects, order, extras),
@@ -282,14 +324,20 @@ export class BasicInfoRecorder implements BattleRecorder {
 export class FullTraceRecorder extends BasicInfoRecorder {
   private readonly rounds: BattleTrace["rounds"] = [];
   private readonly roundJobs: DamageJob[] = [];
+  private staticDescription?: StaticProfileDescription;
 
   constructor(
     fighters: ResolvedFighter[],
     private readonly makeResolved: () => BattleTrace["resolved"]
   ) { super(fighters); }
 
+  protected override applyStaticDescription(description: StaticProfileDescription): void {
+    super.applyStaticDescription(description);
+    this.staticDescription = description;
+  }
+
   override startDamageJob(): DamageJobRecorder {
-    return new FullDamageJobRecorder();
+    return new FullDamageJobRecorder(this.staticApplied, this.staticDescription);
   }
 
   override recordSkillTriggerAttempt(skill: ResolvedSkill): void {
@@ -318,6 +366,8 @@ export class FullTraceRecorder extends BasicInfoRecorder {
 class BasicDamageJobRecorder implements DamageJobRecorder {
   protected readonly appliedEffects: DamageEquationTrace["appliedEffects"] = [];
 
+  constructor(private readonly staticApplied?: StaticAppliedIndex) {}
+
   recordModifier(effect: ActiveEffect, valuePct: number): void {
     if (valuePct === 0) return;
     const applied = {
@@ -336,27 +386,19 @@ class BasicDamageJobRecorder implements DamageJobRecorder {
 
   recordRejected(_effect: ActiveEffect, _reason: RejectedEffectReason): void {}
 
-  recordStaticProfile(entry: StaticDamageProfileEntry): void {
-    for (const [bucket, term] of Object.entries(entry.buckets) as Array<[StaticDamageBucket, StaticDamageProfileEntry["buckets"][StaticDamageBucket]]>) {
-      if (!bucket.startsWith("passive.") || !term) continue;
-      for (const contributor of term.contributors) {
-        this.appliedEffects.push({
-          kind: "modifier",
-          activeEffectId: contributor.effectId,
-          effectId: contributor.effectId,
-          bucket,
-          valuePct: contributor.valuePct,
-          source: contributor.source,
-          sourceSide: contributor.sourceSide,
-          stackingKey: contributor.stackingKey,
-          sameEffectStacking: contributor.sameEffectStacking
-        });
-      }
-    }
+  finish({ job, kills }: DamageRecordingResult): DamageResult {
+    return { kills, appliedEffects: this.appliedEffectsFor(job) };
   }
 
-  finish({ kills }: DamageRecordingResult): DamageResult {
-    return { kills, appliedEffects: this.appliedEffects };
+  // Dynamic modifiers first, then the prebuilt static passive fragments for the job's
+  // participants — the same order the per-job walk used to produce.
+  protected appliedEffectsFor(job: DamageJob): DamageEquationTrace["appliedEffects"] {
+    const statics = this.staticApplied;
+    if (!statics) return this.appliedEffects;
+    const dealer = statics.dealer[job.dealerSide][job.dealerUnit];
+    const taker = statics.taker[job.takerSide][job.takerUnit];
+    if (dealer.length === 0 && taker.length === 0) return this.appliedEffects;
+    return [...this.appliedEffects, ...dealer, ...taker];
   }
 }
 
@@ -366,6 +408,11 @@ class FullDamageJobRecorder extends BasicDamageJobRecorder {
     () => []
   );
   private readonly rejectedEffects: DamageEquationTrace["rejectedEffects"] = [];
+
+  constructor(
+    staticApplied?: StaticAppliedIndex,
+    private readonly staticDescription?: StaticProfileDescription
+  ) { super(staticApplied); }
 
   override recordModifier(effect: ActiveEffect, valuePct: number): void {
     this.contributors[effect.bucketIndex]?.push({
@@ -386,18 +433,21 @@ class FullDamageJobRecorder extends BasicDamageJobRecorder {
 
   override finish(result: DamageRecordingResult): DamageResult {
     const basic = super.finish(result);
-    const staticEntries = [result.staticOffense, result.staticDefense];
+    const job = result.job;
+    const staticEntries = this.staticDescription
+      ? [this.staticDescription.dealer[job.dealerSide][job.dealerUnit], this.staticDescription.taker[job.takerSide][job.takerUnit]]
+      : [];
     return {
       ...basic,
       trace: {
         roundStartTroops: {
-          attacker: { ...result.job.roundStartTroops.attacker },
-          defender: { ...result.job.roundStartTroops.defender }
+          attacker: { ...job.roundStartTroops.attacker },
+          defender: { ...job.roundStartTroops.defender }
         },
         armyTerm: result.armyTerm,
         atomicBuckets: toTraceBuckets(result.factors, this.contributors, staticEntries),
-        aggregationGroups: buildAggregationGroups(result.job, result.factors, this.contributors, staticEntries),
-        appliedEffects: this.appliedEffects,
+        aggregationGroups: buildAggregationGroups(job, result.factors, this.contributors, staticEntries),
+        appliedEffects: basic.appliedEffects ?? [],
         rejectedEffects: this.rejectedEffects,
         rawDamage: result.rawDamage,
         finalKills: result.kills
@@ -422,11 +472,117 @@ function factorTerm(bucket: AtomicBucket): DamageFactorTerm {
   };
 }
 
+function buildStaticProfileDescription(fighters: Record<SideId, ResolvedFighter>, setupEffects: ActiveEffect[]): StaticProfileDescription {
+  const description: StaticProfileDescription = {
+    dealer: {
+      attacker: buildSideEntries(fighters.attacker, "dealer"),
+      defender: buildSideEntries(fighters.defender, "dealer")
+    },
+    taker: {
+      attacker: buildSideEntries(fighters.attacker, "taker"),
+      defender: buildSideEntries(fighters.defender, "taker")
+    }
+  };
+  for (const contribution of selectPassiveContributions(setupEffects)) {
+    addPassiveTerm(description[contribution.role][contribution.side][contribution.unit], contribution);
+  }
+  return description;
+}
+
+function buildSideEntries(fighter: ResolvedFighter, role: "dealer" | "taker"): Record<UnitType, StaticProfileEntry> {
+  return Object.fromEntries(UNIT_TYPES.map((unit) => [unit, buildStaticEntry(fighter, unit, role)])) as Record<UnitType, StaticProfileEntry>;
+}
+
+function buildStaticEntry(fighter: ResolvedFighter, unit: UnitType, role: "dealer" | "taker"): StaticProfileEntry {
+  const stats = unitBaseStats(fighter, unit);
+  const bonuses = unitPlayerBonuses(fighter, unit);
+  const buckets: StaticProfileEntry["buckets"] = {};
+  if (role === "dealer") {
+    setRawTerm(buckets, "troops.baseAttack", stats.attack);
+    setRawTerm(buckets, "troops.baseLethality", stats.lethality);
+    setPlayerTerm(buckets, "player.attack", bonuses.attack);
+    setPlayerTerm(buckets, "player.lethality", bonuses.lethality);
+  } else {
+    setRawTerm(buckets, "troops.baseHealth", stats.health);
+    setRawTerm(buckets, "troops.baseDefense", stats.defense);
+    setPlayerTerm(buckets, "player.health", bonuses.health);
+    setPlayerTerm(buckets, "player.defense", bonuses.defense);
+  }
+  return { buckets };
+}
+
+function setRawTerm(buckets: StaticProfileEntry["buckets"], bucket: StaticRawBucket, raw: number): void {
+  buckets[bucket] = { raw, factor: rawBucketFactor(raw), contributors: [] };
+}
+
+function setPlayerTerm(buckets: StaticProfileEntry["buckets"], bucket: StaticPlayerBucket, valuePct: number): void {
+  buckets[bucket] = {
+    totalPct: valuePct,
+    factor: pctBucketFactor(valuePct),
+    contributors: [{ effectId: `input:${bucket.slice("player.".length)}`, source: "input_stats", valuePct, bucket }]
+  };
+}
+
+function addPassiveTerm(entry: StaticProfileEntry, contribution: PassiveContribution): void {
+  const { bucket, effect, valuePct } = contribution;
+  const contributor = {
+    effectId: effect.source.effectId ?? effect.id,
+    source: sourceLabel(effect),
+    sourceSide: effect.ownerSide,
+    valuePct,
+    bucket,
+    stackingKey: effect.stackingKey,
+    sameEffectStacking: effect.sameEffectStacking
+  };
+  const existing = entry.buckets[bucket];
+  if (existing) {
+    existing.totalPct = (existing.totalPct ?? 0) + valuePct;
+    existing.factor = pctBucketFactor(existing.totalPct);
+    existing.contributors.push(contributor);
+  } else {
+    entry.buckets[bucket] = { totalPct: valuePct, factor: pctBucketFactor(valuePct), contributors: [contributor] };
+  }
+}
+
+function staticAppliedFragments(
+  entries: Record<SideId, Record<UnitType, StaticProfileEntry>>
+): Record<SideId, Record<UnitType, DamageEquationTrace["appliedEffects"]>> {
+  return Object.fromEntries(
+    (Object.entries(entries) as Array<[SideId, Record<UnitType, StaticProfileEntry>]>).map(([side, units]) => [
+      side,
+      Object.fromEntries(
+        (Object.entries(units) as Array<[UnitType, StaticProfileEntry]>).map(([unit, entry]) => [unit, passiveAppliedEffects(entry)])
+      )
+    ])
+  ) as Record<SideId, Record<UnitType, DamageEquationTrace["appliedEffects"]>>;
+}
+
+function passiveAppliedEffects(entry: StaticProfileEntry): DamageEquationTrace["appliedEffects"] {
+  const applied: DamageEquationTrace["appliedEffects"] = [];
+  for (const [bucket, term] of Object.entries(entry.buckets) as Array<[StaticDamageBucket, StaticProfileEntry["buckets"][StaticDamageBucket]]>) {
+    if (!bucket.startsWith("passive.") || !term) continue;
+    for (const contributor of term.contributors) {
+      applied.push({
+        kind: "modifier",
+        activeEffectId: contributor.effectId,
+        effectId: contributor.effectId,
+        bucket,
+        valuePct: contributor.valuePct,
+        source: contributor.source,
+        sourceSide: contributor.sourceSide,
+        stackingKey: contributor.stackingKey,
+        sameEffectStacking: contributor.sameEffectStacking
+      });
+    }
+  }
+  return applied;
+}
+
 function buildAggregationGroups(
   job: DamageJob,
   factors: Float64Array,
   contributors: DamageBucketTrace["contributors"][],
-  staticEntries: StaticDamageProfileEntry[]
+  staticEntries: StaticProfileEntry[]
 ): Record<string, DamageAggregationGroupTrace> {
   const groups: Record<string, DamageAggregationGroupTrace> = {};
   addStaticAggregationGroups(groups, staticEntries);
@@ -458,34 +614,34 @@ function buildAggregationGroups(
 
 function addStaticAggregationGroups(
   groups: Record<string, DamageAggregationGroupTrace>,
-  staticEntries: StaticDamageProfileEntry[]
+  staticEntries: StaticProfileEntry[]
 ): void {
-  const offense = staticEntries[0];
-  const defense = staticEntries[1];
-  if (!offense || !defense) return;
-  addStaticRawGroup(groups, "troops.baseAttack", "numerator", offense, "troops.baseAttack");
-  addStaticRawGroup(groups, "troops.baseLethality", "numerator", offense, "troops.baseLethality");
-  addStaticPctGroup(groups, "player.attacker.attack", "numerator", offense, "player.attack");
-  addStaticPctGroup(groups, "player.attacker.lethality", "numerator", offense, "player.lethality");
-  addStaticPctGroup(groups, "passive.attacker.attack.up", "numerator", offense, "passive.attack.up");
-  addStaticPctGroup(groups, "passive.attacker.lethality.up", "numerator", offense, "passive.lethality.up");
-  addStaticPctGroup(groups, "passive.defender.health.down", "numerator", defense, "passive.health.down");
-  addStaticPctGroup(groups, "passive.defender.defense.down", "numerator", defense, "passive.defense.down");
-  addStaticRawGroup(groups, "troops.baseHealth", "denominator", defense, "troops.baseHealth");
-  addStaticRawGroup(groups, "troops.baseDefense", "denominator", defense, "troops.baseDefense");
-  addStaticPctGroup(groups, "player.defender.health", "denominator", defense, "player.health");
-  addStaticPctGroup(groups, "player.defender.defense", "denominator", defense, "player.defense");
-  addStaticPctGroup(groups, "passive.attacker.attack.down", "denominator", offense, "passive.attack.down");
-  addStaticPctGroup(groups, "passive.attacker.lethality.down", "denominator", offense, "passive.lethality.down");
-  addStaticPctGroup(groups, "passive.defender.health.up", "denominator", defense, "passive.health.up");
-  addStaticPctGroup(groups, "passive.defender.defense.up", "denominator", defense, "passive.defense.up");
+  const dealer = staticEntries[0];
+  const taker = staticEntries[1];
+  if (!dealer || !taker) return;
+  addStaticRawGroup(groups, "troops.baseAttack", "numerator", dealer, "troops.baseAttack");
+  addStaticRawGroup(groups, "troops.baseLethality", "numerator", dealer, "troops.baseLethality");
+  addStaticPctGroup(groups, "player.dealer.attack", "numerator", dealer, "player.attack");
+  addStaticPctGroup(groups, "player.dealer.lethality", "numerator", dealer, "player.lethality");
+  addStaticPctGroup(groups, "passive.dealer.attack.up", "numerator", dealer, "passive.attack.up");
+  addStaticPctGroup(groups, "passive.dealer.lethality.up", "numerator", dealer, "passive.lethality.up");
+  addStaticPctGroup(groups, "passive.taker.health.down", "numerator", taker, "passive.health.down");
+  addStaticPctGroup(groups, "passive.taker.defense.down", "numerator", taker, "passive.defense.down");
+  addStaticRawGroup(groups, "troops.baseHealth", "denominator", taker, "troops.baseHealth");
+  addStaticRawGroup(groups, "troops.baseDefense", "denominator", taker, "troops.baseDefense");
+  addStaticPctGroup(groups, "player.taker.health", "denominator", taker, "player.health");
+  addStaticPctGroup(groups, "player.taker.defense", "denominator", taker, "player.defense");
+  addStaticPctGroup(groups, "passive.dealer.attack.down", "denominator", dealer, "passive.attack.down");
+  addStaticPctGroup(groups, "passive.dealer.lethality.down", "denominator", dealer, "passive.lethality.down");
+  addStaticPctGroup(groups, "passive.taker.health.up", "denominator", taker, "passive.health.up");
+  addStaticPctGroup(groups, "passive.taker.defense.up", "denominator", taker, "passive.defense.up");
 }
 
 function addStaticRawGroup(
   groups: Record<string, DamageAggregationGroupTrace>,
   id: string,
   placement: GroupPlacement,
-  entry: StaticDamageProfileEntry,
+  entry: StaticProfileEntry,
   bucket: StaticDamageBucket
 ): void {
   const term = entry.buckets[bucket];
@@ -494,7 +650,7 @@ function addStaticRawGroup(
     mode: "raw",
     placement,
     inputBuckets: [bucket],
-    factor: Math.max(0, term?.raw ?? 0),
+    factor: term?.factor ?? 0,
     contributors: term?.contributors ?? []
   };
 }
@@ -503,18 +659,17 @@ function addStaticPctGroup(
   groups: Record<string, DamageAggregationGroupTrace>,
   id: string,
   placement: GroupPlacement,
-  entry: StaticDamageProfileEntry,
+  entry: StaticProfileEntry,
   bucket: StaticDamageBucket
 ): void {
   const term = entry.buckets[bucket];
-  const totalPct = term?.totalPct ?? 0;
   groups[id] = {
     id,
     mode: "sum_pct",
     placement,
     inputBuckets: [bucket],
-    totalPct,
-    factor: 1 + totalPct / 100,
+    totalPct: term?.totalPct ?? 0,
+    factor: term?.factor ?? 1,
     contributors: term?.contributors ?? []
   };
 }
@@ -522,7 +677,7 @@ function addStaticPctGroup(
 function toTraceBuckets(
   factors: Float64Array,
   contributors: DamageBucketTrace["contributors"][],
-  staticEntries: StaticDamageProfileEntry[]
+  staticEntries: StaticProfileEntry[]
 ): Record<string, DamageBucketTrace> {
   const traced = Object.fromEntries(
     ATOMIC_BUCKETS.map((bucket, index) => {
@@ -535,11 +690,11 @@ function toTraceBuckets(
     })
   ) as Record<string, DamageBucketTrace>;
   for (const entry of staticEntries) {
-    for (const [bucket, term] of Object.entries(entry.buckets) as Array<[StaticDamageBucket, StaticDamageProfileEntry["buckets"][StaticDamageBucket]]>) {
+    for (const [bucket, term] of Object.entries(entry.buckets) as Array<[StaticDamageBucket, StaticProfileEntry["buckets"][StaticDamageBucket]]>) {
       if (!term) continue;
       traced[bucket] = term.raw !== undefined
-        ? { raw: term.raw, factor: Math.max(0, term.raw), contributors: [...term.contributors] }
-        : { totalPct: term.totalPct ?? 0, factor: 1 + (term.totalPct ?? 0) / 100, contributors: [...term.contributors] };
+        ? { raw: term.raw, factor: term.factor, contributors: [...term.contributors] }
+        : { totalPct: term.totalPct ?? 0, factor: term.factor, contributors: [...term.contributors] };
     }
   }
   return traced;
@@ -555,12 +710,12 @@ function appliedEffectBase(effect: ActiveEffect): { activeEffectId: string; effe
 }
 
 function counterDeltas(
-  attack: Pick<AttackIntent | DamageJob, "attackerSide" | "attackerUnit" | "defenderSide" | "defenderUnit">,
+  attack: Pick<AttackIntent | DamageJob, "dealerSide" | "dealerUnit" | "takerSide" | "takerUnit">,
   cause: "normal_attack" | "extra_skill_attack"
 ): AttackOutcome["counterDeltas"] {
   return [
-    { side: attack.attackerSide, unit: attack.attackerUnit, counter: "attacks", by: 1, cause },
-    { side: attack.defenderSide, unit: attack.defenderUnit, counter: "received_attacks", by: 1, cause }
+    { side: attack.dealerSide, unit: attack.dealerUnit, counter: "attacks", by: 1, cause },
+    { side: attack.takerSide, unit: attack.takerUnit, counter: "received_attacks", by: 1, cause }
   ];
 }
 

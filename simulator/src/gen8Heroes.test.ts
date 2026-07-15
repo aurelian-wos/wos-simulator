@@ -74,10 +74,17 @@ test("Gen8 combat skill values and active effect buckets match their definitions
   assert.equal(gatot.RoyalLegion.effects["RoyalLegion/1"].type, "active.hero.attack.down");
 
   assert.deepEqual(sonya.TreasureHunter.effects["TreasureHunter/1"].value, [4, 8, 12, 16, 20]);
-  assert.equal(sonya.BountyTemptation.effects["BountyTemptation/1"].type, "active.hero.damage.up");
+  assert.equal(sonya.BountyTemptation.effects["BountyTemptation/1"].type, "extra_skill_attack");
   assert.deepEqual(sonya.BountyTemptation.effects["BountyTemptation/1"].value, [15, 30, 45, 60, 75]);
+  assert.deepEqual(sonya.BountyTemptation.effects["BountyTemptation/1"].trigger_damage_jobs, [
+    { source: "use.source", target: "use.target" }
+  ]);
   assert.equal(sonya.BountyTemptation.effects["BountyTemptation/2"].type, "active.hero.attack.up");
   assert.deepEqual(sonya.TorrentialImpact.effects["TorrentialImpact/1"].value, [50, 100, 150, 200, 250]);
+  assert.equal(sonya.TorrentialImpact.effects["TorrentialImpact/1"].type, "extra_skill_attack");
+  assert.deepEqual(sonya.TorrentialImpact.effects["TorrentialImpact/1"].trigger_damage_jobs, [
+    { source: "use.source", target: "use.target" }
+  ]);
   assert.equal(sonya.TorrentialImpact.effects["TorrentialImpact/2"].type, "no_attack");
 
   assert.deepEqual(hendrik.WormsRavage.effects["WormsRavage/1"].value, [5, 10, 15, 20, 25]);
@@ -85,5 +92,8 @@ test("Gen8 combat skill values and active effect buckets match their definitions
   assert.deepEqual(hendrik.ArmorOfBarnacles.effects["ArmorOfBarnacles/1"].value, [6, 12, 18, 24, 30]);
   assert.equal(hendrik.ArmorOfBarnacles.effects["ArmorOfBarnacles/1"].type, "active.hero.defense.up");
   assert.deepEqual(hendrik.DragonsHeir.effects["DragonsHeir/1"].value, [8, 16, 24, 32, 40]);
-  assert.equal(hendrik.DragonsHeir.effects["DragonsHeir/1"].type, "active.hero.damage.up");
+  assert.equal(hendrik.DragonsHeir.effects["DragonsHeir/1"].type, "extra_skill_attack");
+  assert.deepEqual(hendrik.DragonsHeir.effects["DragonsHeir/1"].trigger_damage_jobs, [
+    { source: "use.source", target: "enemy.living" }
+  ]);
 });

@@ -151,11 +151,11 @@ export function battleResultToTrace(result: BattleResult, seed: string | number,
       defender: emptySideRound(roundTrace.roundStartTroops.defender),
     };
     for (const attack of attacksByRound.get(roundTrace.round) ?? []) {
-      const sourceUnit = traceUnit(attack.attackerUnit);
-      const targetUnit = traceUnit(attack.defenderUnit);
-      sideRounds[attack.attackerSide].kills[sourceUnit][targetUnit] += attack.kills;
+      const sourceUnit = traceUnit(attack.dealerUnit);
+      const targetUnit = traceUnit(attack.takerUnit);
+      sideRounds[attack.dealerSide].kills[sourceUnit][targetUnit] += attack.kills;
       for (const effect of uniqueEffects(attack.appliedEffects)) {
-        const sourceSide = effect.sourceSide ?? attack.attackerSide;
+        const sourceSide = effect.sourceSide ?? attack.dealerSide;
         sideRounds[sourceSide].effects.push(traceEffect(effect, attack, 1));
       }
     }
@@ -231,7 +231,7 @@ function emptyKillMatrix(): Record<SimulateTraceUnit, Record<SimulateTraceUnit, 
 function totalKills(result: BattleResult): SimulateTrace["total_kills"] {
   const totals = { attacker: emptyKillMatrix(), defender: emptyKillMatrix() };
   for (const attack of result.attacks) {
-    totals[attack.attackerSide][traceUnit(attack.attackerUnit)][traceUnit(attack.defenderUnit)] += attack.kills;
+    totals[attack.dealerSide][traceUnit(attack.dealerUnit)][traceUnit(attack.takerUnit)] += attack.kills;
   }
   return totals;
 }
@@ -272,8 +272,8 @@ function effectUsage(result: BattleResult): SimulateTrace["effect_usage"] {
   const grouped: SimulateTrace["effect_usage"] = { attacker: {}, defender: {} };
   for (const attack of result.attacks) {
     for (const effect of uniqueEffects(attack.appliedEffects)) {
-      const unit = unitLabel(attack.attackerUnit);
-      const sourceSide = effect.sourceSide ?? attack.attackerSide;
+      const unit = unitLabel(attack.dealerUnit);
+      const sourceSide = effect.sourceSide ?? attack.dealerSide;
       const unitRows = grouped[sourceSide][unit] ?? {};
       unitRows[effectLabel(effect)] = (unitRows[effectLabel(effect)] ?? 0) + 1;
       grouped[sourceSide][unit] = unitRows;
@@ -284,7 +284,7 @@ function effectUsage(result: BattleResult): SimulateTrace["effect_usage"] {
 
 function traceEffect(effect: AppliedEffect, attack: AttackOutcome, uses: number): SimulateTraceEffect {
   const sourceParts = effect.source.split("/");
-  const hero = sourceParts[0] || unitLabel(attack.attackerUnit);
+  const hero = sourceParts[0] || unitLabel(attack.dealerUnit);
   const skillName = sourceParts[1] || effect.effectId;
   const kindKey = effectKindKey(effect);
   return {
@@ -299,8 +299,8 @@ function traceEffect(effect: AppliedEffect, attack: AttackOutcome, uses: number)
     uses_count: uses,
     trigger_count: uses,
     value: effect.kind === "modifier" ? effect.valuePct : 0,
-    for_units: [traceUnit(attack.attackerUnit)],
-    vs_units: [traceUnit(attack.defenderUnit)],
+    for_units: [traceUnit(attack.dealerUnit)],
+    vs_units: [traceUnit(attack.takerUnit)],
   };
 }
 

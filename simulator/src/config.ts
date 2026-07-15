@@ -37,12 +37,11 @@ import Zinman from "../config/hero_definitions/Zinman.json" with { type: "json" 
 
 import { UNIT_TYPES } from "./types";
 import type { ConfigDiagnostics, EffectIntentDefinition, SimulatorConfig, SkillFile, TriggerDamageJobDefinition } from "./types";
-import { bucketDefinition, DYNAMIC_EFFECT_BUCKETS, STATIC_PASSIVE_BUCKETS } from "./damageBuckets";
-import { assertStaticPassiveEffectDefinition, isPassiveBucket } from "./staticDamageProfile";
+import { bucketDefinition, DYNAMIC_EFFECT_BUCKETS, isPassiveBucket, PASSIVE_BUCKETS } from "./damageBuckets";
 
 const KNOWN_EFFECT_TYPES = new Set([
   ...DYNAMIC_EFFECT_BUCKETS,
-  ...STATIC_PASSIVE_BUCKETS,
+  ...PASSIVE_BUCKETS,
   "extra_skill_attack",
   "dodge",
   "no_attack",
@@ -180,7 +179,7 @@ function collectEffectDiagnostics(skillFile: SkillFile, file: string, diagnostic
       validateNativeEffectUnits(effect as EffectIntentDefinition, file, skillId, effectId);
       validateNativeEffectValue(effect as EffectIntentDefinition, file, skillId, effectId);
       validateNativeEffectDuration(effect as EffectIntentDefinition, file, skillId, effectId);
-      assertStaticPassiveEffectDefinition(skill.trigger, effect as EffectIntentDefinition, file, skillId, effectId);
+      validateStaticBucketEffect(skill.trigger, effect as EffectIntentDefinition, file, skillId, effectId);
       if (type === "extra_skill_attack") validateExtraSkillAttackEffect(effect as EffectIntentDefinition, file, skillId, effectId);
       if (!KNOWN_EFFECT_TYPES.has(type)) {
         diagnostics.unsupportedEffects.push({
@@ -259,6 +258,38 @@ function validateNativeEffectUnits(effect: EffectIntentDefinition, file: string,
   throw new Error(
     `native effect units.applies_vs cannot be "all" at ${path}; use "any" for an unrestricted usage gate or trigger_damage_jobs target selectors for multi-target damage`
   );
+}
+
+// Static buckets are aggregated once per battle into the static damage profile, so any effect
+// that feeds one must itself be known at battle start, deterministic, immutable, and permanent.
+// Static buckets outside the passive family (troops/player) are input-derived and cannot be
+// produced by a skill at all.
+function validateStaticBucketEffect(
+  trigger: SkillFile["skills"][string]["trigger"],
+  effect: EffectIntentDefinition,
+  file: string,
+  skillId: string,
+  effectId: string
+): void {
+  const definition = bucketDefinition(effect.type);
+  if (definition?.phase !== "static") return;
+
+  const path = `${file}:${skillId}.${effectId}`;
+  if (!isPassiveBucket(effect.type)) {
+    throw new Error(`effect type ${effect.type} targets an input-derived static bucket and cannot be defined by a skill at ${path}`);
+  }
+  if (trigger.type !== "battle_start") {
+    throw new Error(`effect targeting static bucket ${effect.type} must use a battle_start trigger at ${path}`);
+  }
+  if (trigger.probability !== undefined) {
+    throw new Error(`effect targeting static bucket ${effect.type} cannot define trigger probability at ${path}`);
+  }
+  if (effect.value_evolution !== undefined) {
+    throw new Error(`effect targeting static bucket ${effect.type} cannot define value_evolution at ${path}`);
+  }
+  if (effect.duration !== undefined) {
+    throw new Error(`effect targeting static bucket ${effect.type} cannot define duration at ${path}`);
+  }
 }
 
 function validateNativeEffectValue(effect: EffectIntentDefinition, file: string, skillId: string, effectId: string): void {

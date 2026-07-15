@@ -140,7 +140,7 @@ test("runTestcases logs structured damage aggregation errors and continues", () 
   assert.equal(report.counts.executed, 1);
   assert.equal(report.errors[0]?.testcase_id, "bad_aggregation");
   assert.equal(report.details[0]?.errorDetails?.type, "DamageAggregationError");
-  assert.equal(report.details[0]?.errorDetails?.groupId, "player.defender.health");
+  assert.equal(report.details[0]?.errorDetails?.groupId, "player.taker.health");
   assert.equal(report.details[0]?.errorDetails?.factor, -0.050000000000000044);
   assert.equal(Object.values(report.testcases)[0]?.testcase_id, "next_case_runs");
 });

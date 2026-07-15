@@ -38,10 +38,10 @@ test("effect index returns bucket-tagged candidates from a direct job-shape look
       attacker: { infantry: 100, lancer: 0, marksman: 0 },
       defender: { infantry: 0, lancer: 100, marksman: 0 }
     },
-    attackerSide: "attacker",
-    attackerUnit: "infantry",
-    defenderSide: "defender",
-    defenderUnit: "lancer"
+    dealerSide: "attacker",
+    dealerUnit: "infantry",
+    takerSide: "defender",
+    takerUnit: "lancer"
   };
 
   assert.deepEqual(index.damageGroupsByJobShape[damageJobSlot(job)].flatMap((group) => group.effects), [effect]);
@@ -128,9 +128,9 @@ function job(): DamageJob {
       attacker: { infantry: 100, lancer: 0, marksman: 0 },
       defender: { infantry: 0, lancer: 100, marksman: 0 }
     },
-    attackerSide: "attacker",
-    attackerUnit: "infantry",
-    defenderSide: "defender",
-    defenderUnit: "lancer"
+    dealerSide: "attacker",
+    dealerUnit: "infantry",
+    takerSide: "defender",
+    takerUnit: "lancer"
   };
 }

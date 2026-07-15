@@ -1,11 +1,10 @@
 import type { ActiveEffect, DamageJob, SideId, UnitType } from "./types";
 import { unitMaskHas } from "./types";
-import { bucketDefinition, type BucketName, type StaticPassiveBucket } from "./damageBuckets";
-import { staticPassiveBucketRole } from "./staticDamageProfile";
+import { bucketDefinition, passiveBucketRole, type BucketName, type PassiveBucket } from "./damageBuckets";
 
 export interface Classification {
   kind: "bucket" | "control" | "extra_skill_attack" | "battle_order" | "report_only";
-  bucket?: BucketName | StaticPassiveBucket;
+  bucket?: BucketName | PassiveBucket;
   control?: "dodge" | "no_attack";
   reason?: string;
 }
@@ -22,18 +21,18 @@ export function classifyEffectForJob(effect: ActiveEffect, job: DamageJob): Clas
   if (type === "attack_order") return { kind: "battle_order" };
 
   const definition = bucketDefinition(type);
-  const staticPassiveRole = staticPassiveBucketRole(type);
-  if ((!definition || definition.valueType !== "pct") && !staticPassiveRole) return { kind: "report_only", reason: unsupportedReason(effect, job) };
-  if (staticPassiveRole) {
-    if (staticPassiveRole === "attacker" && effect.appliesTo.side === job.attackerSide) return { kind: "bucket", bucket: type as StaticPassiveBucket };
-    if (staticPassiveRole === "defender" && effect.appliesTo.side === job.defenderSide) return { kind: "bucket", bucket: type as StaticPassiveBucket };
+  const passiveRole = passiveBucketRole(type);
+  if ((!definition || definition.valueType !== "pct") && !passiveRole) return { kind: "report_only", reason: unsupportedReason(effect, job) };
+  if (passiveRole) {
+    if (passiveRole === "dealer" && effect.appliesTo.side === job.dealerSide) return { kind: "bucket", bucket: type as PassiveBucket };
+    if (passiveRole === "taker" && effect.appliesTo.side === job.takerSide) return { kind: "bucket", bucket: type as PassiveBucket };
     return { kind: "report_only", reason: unsupportedReason(effect, job) };
   }
   if (!definition) return { kind: "report_only", reason: unsupportedReason(effect, job) };
   if (definition.phase !== "dynamic") return { kind: "report_only", reason: unsupportedReason(effect, job) };
   if (definition.appliesTo !== undefined && definition.appliesTo !== job.kind) return { kind: "report_only", reason: "not_applicable_to_job_kind" };
-  if (definition.role === "attacker" && effect.appliesTo.side === job.attackerSide) return { kind: "bucket", bucket: definition.path };
-  if (definition.role === "defender" && effect.appliesTo.side === job.defenderSide) return { kind: "bucket", bucket: definition.path };
+  if (definition.role === "dealer" && effect.appliesTo.side === job.dealerSide) return { kind: "bucket", bucket: definition.path };
+  if (definition.role === "taker" && effect.appliesTo.side === job.takerSide) return { kind: "bucket", bucket: definition.path };
   return { kind: "report_only", reason: unsupportedReason(effect, job) };
 }
 
@@ -46,23 +45,23 @@ export function basicEffectApplies(effect: ActiveEffect, job: DamageJob): boolea
 }
 
 function controlEffectApplies(effect: ActiveEffect, job: DamageJob, control: "dodge" | "no_attack"): boolean {
-  const appliesToSide = control === "no_attack" ? job.attackerSide : job.defenderSide;
-  const appliesToUnit = control === "no_attack" ? job.attackerUnit : job.defenderUnit;
+  const appliesToSide = control === "no_attack" ? job.dealerSide : job.takerSide;
+  const appliesToUnit = control === "no_attack" ? job.dealerUnit : job.takerUnit;
   if (effect.appliesTo.side !== appliesToSide || !unitMaskHas(effect.appliesTo.units, appliesToUnit)) return false;
 
-  const appliesVsSide = control === "no_attack" ? job.defenderSide : job.attackerSide;
-  const appliesVsUnit = control === "no_attack" ? job.defenderUnit : job.attackerUnit;
+  const appliesVsSide = control === "no_attack" ? job.takerSide : job.dealerSide;
+  const appliesVsUnit = control === "no_attack" ? job.takerUnit : job.dealerUnit;
   return effect.appliesVs.side === appliesVsSide && unitMaskHas(effect.appliesVs.units, appliesVsUnit);
 }
 
 function unsupportedReason(effect: ActiveEffect, job: DamageJob): string {
-  if (effect.appliesTo.side === job.attackerSide) return "unsupported_attacker_effect";
-  if (effect.appliesTo.side === job.defenderSide) return "unsupported_defender_effect";
+  if (effect.appliesTo.side === job.dealerSide) return "unsupported_dealer_effect";
+  if (effect.appliesTo.side === job.takerSide) return "unsupported_taker_effect";
   return "wrong_side";
 }
 
 function unitForSide(side: SideId, job: DamageJob): UnitType | undefined {
-  if (side === job.attackerSide) return job.attackerUnit;
-  if (side === job.defenderSide) return job.defenderUnit;
+  if (side === job.dealerSide) return job.dealerUnit;
+  if (side === job.takerSide) return job.takerUnit;
   return undefined;
 }

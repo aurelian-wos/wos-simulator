@@ -57,8 +57,8 @@ export function skillMatchesTrigger(
   if (!intent) return true;
   const selectors = compiledTriggerForSkill(skill);
   return (
-    triggerScopeMatches(selectors.source, intent.attackerSide, intent.attackerUnit) &&
-    triggerScopeMatches(selectors.target, intent.defenderSide, intent.defenderUnit)
+    triggerScopeMatches(selectors.source, intent.dealerSide, intent.dealerUnit) &&
+    triggerScopeMatches(selectors.target, intent.takerSide, intent.takerUnit)
   );
 }
 
@@ -315,10 +315,10 @@ function resolveUnitScope(
     throw new Error('effect units.applies_vs cannot be "all"; use "any" for an unrestricted usage gate');
   }
   if ((value === "trigger.source" || value === "trigger") && attackIntent) {
-    return { side: attackIntent.attackerSide, units: unitMask(attackIntent.attackerUnit) };
+    return { side: attackIntent.dealerSide, units: unitMask(attackIntent.dealerUnit) };
   }
   if ((value === "trigger.target" || value === "target") && attackIntent) {
-    return { side: attackIntent.defenderSide, units: unitMask(attackIntent.defenderUnit) };
+    return { side: attackIntent.takerSide, units: unitMask(attackIntent.takerUnit) };
   }
   if (ownerSide && isRelationQualifiedSelector(value)) {
     const selector = parseTriggerSelector(value, "self");

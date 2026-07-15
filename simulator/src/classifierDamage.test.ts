@@ -2,11 +2,11 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { classifyEffectForJob } from "./classifier";
-import { calculateDamageJob } from "./damage";
-import { ATOMIC_BUCKETS, STATIC_PASSIVE_BUCKETS } from "./damageBuckets";
+import { calculateDamageJob, createDamageScratch, evaluateDamageExpression } from "./damage";
+import { ATOMIC_BUCKETS, DYNAMIC_BUCKETS, PASSIVE_BUCKETS, STATIC_BUCKETS, type BucketPlacement, type BucketRole } from "./damageBuckets";
 import { createEffectIndex, damageShapeSlotsForEffect, indexEffect } from "./effectIndex";
 import { activateEffect, evolvingActiveEffectValuePct, resolvedEffectScopeKey } from "./effects";
-import { buildStaticDamageProfile } from "./staticDamageProfile";
+import { buildStaticDamageBucketFactors, buildStaticDamageProfile } from "./staticDamageProfile";
 import { createRecorder, type BattleRecorder } from "./recorder";
 import type { ActiveEffect, DamageJob, ResolvedFighter } from "./types";
 import { ALL_UNIT_MASK, unitMask } from "./types";
@@ -20,10 +20,10 @@ const job: DamageJob = {
     attacker: { infantry: 1000, lancer: 0, marksman: 0 },
     defender: { infantry: 0, lancer: 1000, marksman: 0 }
   },
-  attackerSide: "attacker",
-  attackerUnit: "infantry",
-  defenderSide: "defender",
-  defenderUnit: "lancer",
+  dealerSide: "attacker",
+  dealerUnit: "infantry",
+  takerSide: "defender",
+  takerUnit: "lancer",
   sourceMultiplier: 1
 };
 
@@ -52,7 +52,7 @@ test("resolved effect scope matches concrete side and unit masks", () => {
     classifyEffectForJob(active, {
       ...job,
       id: "job-attacker-marksman",
-      attackerUnit: "marksman"
+      dealerUnit: "marksman"
     })?.reason,
     "not_applicable_to_job"
   );
@@ -60,7 +60,7 @@ test("resolved effect scope matches concrete side and unit masks", () => {
     classifyEffectForJob(active, {
       ...job,
       id: "job-defender-marksman",
-      defenderUnit: "marksman"
+      takerUnit: "marksman"
     })?.reason,
     "not_applicable_to_job"
   );
@@ -100,7 +100,7 @@ function calculateIndexedDamageJob(
   damageJob: DamageJob,
   fighters: Record<"attacker" | "defender", ResolvedFighter>,
   effects: ActiveEffect[],
-  options: Omit<Partial<Parameters<typeof calculateDamageJob>[3]>, "recorder"> & { recorder?: BattleRecorder; trace?: boolean } = {}
+  options: Omit<Partial<Parameters<typeof calculateDamageJob>[2]>, "recorder"> & { recorder?: BattleRecorder; trace?: boolean } = {}
 ) {
   const effectIndex = options.effectIndex ?? preparedEffectIndex(effects);
   if (!options.effectIndex) {
@@ -113,8 +113,9 @@ function calculateIndexedDamageJob(
   const recorder = options.recorder ?? createRecorder(options.trace === true ? "trace" : "standard", [], () => {
     throw new Error("damage-only test recorder has no battle resolution");
   });
+  recorder.recordStaticProfile(fighters, effects);
   const { trace: _trace, ...damageOptions } = options;
-  const result = calculateDamageJob(damageJob, fighters, effects, { ...damageOptions, recorder, effectIndex, staticDamageProfile, usedEffects });
+  const result = calculateDamageJob(damageJob, fighters, { ...damageOptions, recorder, effectIndex, staticDamageProfile, usedEffects });
   return { ...result, usedEffectIds: [...usedEffects].map((usedEffect) => usedEffect.id) };
 }
 
@@ -222,7 +223,7 @@ test("classifier routes the complete native bucket policy into atomic buckets", 
     const ownerSide = type.includes(".attack.") || type.includes(".lethality.") ? "attacker" : "defender";
     const bucket = classifyEffectForJob(effect(type, ownerSide), job)?.bucket;
     assert.equal(bucket, expectedBucket, type);
-    assert.ok(bucket !== undefined && (STATIC_PASSIVE_BUCKETS as readonly string[]).includes(bucket), `${type} route ${bucket} is not a static passive bucket`);
+    assert.ok(bucket !== undefined && (PASSIVE_BUCKETS as readonly string[]).includes(bucket), `${type} route ${bucket} is not a passive bucket`);
   }
 
   assert.equal(classifyEffectForJob(effect("passive.attack.down", "attacker", 5), job)?.bucket, "passive.attack.down");
@@ -232,22 +233,22 @@ test("passive stat bonuses only apply in the damage role that consumes that stat
   const reversedJob: DamageJob = {
     ...job,
     id: "job-reversed",
-    attackerSide: "defender",
-    attackerUnit: "lancer",
-    defenderSide: "attacker",
-    defenderUnit: "infantry"
+    dealerSide: "defender",
+    dealerUnit: "lancer",
+    takerSide: "attacker",
+    takerUnit: "infantry"
   };
   const passiveAttack = effect("passive.attack.up", "attacker", 10);
   const passiveHealth = effect("passive.health.up", "defender", 10);
 
   assert.equal(classifyEffectForJob(passiveAttack, job)?.bucket, "passive.attack.up");
-  assert.equal(classifyEffectForJob(passiveAttack, reversedJob)?.reason, "unsupported_defender_effect");
+  assert.equal(classifyEffectForJob(passiveAttack, reversedJob)?.reason, "unsupported_taker_effect");
   assert.equal(classifyEffectForJob(passiveHealth, job)?.bucket, "passive.health.up");
-  assert.equal(classifyEffectForJob(passiveHealth, reversedJob)?.reason, "unsupported_attacker_effect");
+  assert.equal(classifyEffectForJob(passiveHealth, reversedJob)?.reason, "unsupported_dealer_effect");
 });
 
 test("damage calculator requires indexed effect candidates", () => {
-  assert.throws(() => calculateDamageJob(job, simpleFighters(), [], { trace: true } as never), /effectIndex/i);
+  assert.throws(() => calculateDamageJob(job, simpleFighters(), { trace: true } as never), /effectIndex/i);
 });
 
 test("damage calculator uses centralized bucket definitions for player stat routing", () => {
@@ -332,12 +333,12 @@ test("passive stat bonuses aggregate as up sum over down sum on top of player st
 
   assert.equal(outcome.trace?.atomicBuckets["passive.attack.up"].totalPct, 30);
   assert.equal(outcome.trace?.atomicBuckets["passive.attack.down"].totalPct, 5);
-  assert.equal(outcome.trace?.aggregationGroups["passive.attacker.attack.up"].factor, 1.3);
-  assert.equal(outcome.trace?.aggregationGroups["passive.attacker.attack.down"].factor, 1.05);
+  assert.equal(outcome.trace?.aggregationGroups["passive.dealer.attack.up"].factor, 1.3);
+  assert.equal(outcome.trace?.aggregationGroups["passive.dealer.attack.down"].factor, 1.05);
   assert.equal(Number((outcome.kills / baseline.kills).toFixed(6)), Number((1.3 / 1.05).toFixed(6)));
 });
 
-test("static damage profile produces the same static bucket damage as per-job passive processing", () => {
+test("static profile factoring is identical to evaluating its buckets unfactored", () => {
   const fighters = simpleFighters();
   fighters.attacker.statBonuses.infantry.attack = 50;
   fighters.attacker.statBonuses.infantry.lethality = 25;
@@ -352,17 +353,88 @@ test("static damage profile produces the same static bucket damage as per-job pa
     effect("passive.health.down", "defender", 30),
     effect("passive.defense.up", "defender", 5)
   ];
-  const baseline = calculateIndexedDamageJob(job, fighters, passives, { trace: true });
-  const profile = buildStaticDamageProfile(fighters, passives);
-  const profiled = calculateIndexedDamageJob(job, fighters, passives, { trace: true, staticDamageProfile: profile });
+  const runtimeEffects = [
+    effect("active.hero.attack.up", "attacker", 15),
+    effect("active.troop.damage.down", "attacker", 12),
+    effect("active.hero.health.down", "defender", 8),
+    effect("type.normal.damageTaken.up", "defender", 7)
+  ];
+  const allEffects = [...passives, ...runtimeEffects];
+  const bucketFactors = buildStaticDamageBucketFactors(fighters, allEffects);
+  const profile = buildStaticDamageProfile(fighters, allEffects);
+  const scratch = createDamageScratch();
+  const profiled = calculateIndexedDamageJob(job, fighters, allEffects, {
+    trace: true,
+    staticDamageProfile: profile,
+    scratch,
+    capToTakerTroops: false
+  });
+  const dealerBuckets = bucketFactors[job.dealerSide][job.dealerUnit];
+  const takerBuckets = bucketFactors[job.takerSide][job.takerUnit];
+  const dealer = profile[job.dealerSide][job.dealerUnit];
+  const taker = profile[job.takerSide][job.takerUnit];
 
-  assert.ok(Math.abs(profiled.kills - baseline.kills) < 1e-12);
+  assert.equal(
+    dealer.dealerFactor.factors[0],
+    unfactoredStaticProduct(dealerBuckets, "dealer", "numerator") /
+      unfactoredStaticProduct(dealerBuckets, "dealer", "denominator")
+  );
+  assert.equal(
+    taker.takerFactor.factors[0],
+    unfactoredStaticProduct(takerBuckets, "taker", "numerator") /
+      unfactoredStaticProduct(takerBuckets, "taker", "denominator")
+  );
+  assert.equal(
+    evaluateDamageExpression(dealer.dealerFactor, taker.takerFactor).factors[0],
+    dealer.dealerFactor.factors[0] * taker.takerFactor.factors[0]
+  );
+  const unfactoredStaticNumerator =
+    unfactoredStaticProduct(dealerBuckets, "dealer", "numerator") *
+    unfactoredStaticProduct(takerBuckets, "taker", "numerator");
+  const unfactoredStaticDenominator =
+    unfactoredStaticProduct(dealerBuckets, "dealer", "denominator") *
+    unfactoredStaticProduct(takerBuckets, "taker", "denominator");
+  const unfactoredDamage =
+    unfactoredDynamicProduct(scratch.factors, job.kind, "numerator") * unfactoredStaticNumerator /
+    (100 * unfactoredDynamicProduct(scratch.factors, job.kind, "denominator") * unfactoredStaticDenominator);
+
+  assert.ok(Math.abs(profiled.kills - unfactoredDamage) < 1e-12);
   assert.equal(profiled.trace?.atomicBuckets["player.attack"].totalPct, 50);
   assert.equal(profiled.trace?.atomicBuckets["passive.attack.up"].totalPct, 20);
   assert.equal(profiled.trace?.atomicBuckets["passive.attack.down"].totalPct, 5);
   assert.equal(profiled.trace?.atomicBuckets["passive.health.down"].totalPct, 30);
-  assert.equal(profiled.trace?.aggregationGroups["passive.attacker.attack.up"].factor, 1.2);
+  assert.equal(profiled.trace?.atomicBuckets["active.hero.attack.up"].totalPct, 15);
+  assert.equal(profiled.trace?.atomicBuckets["type.normal.damageTaken.up"].totalPct, 7);
+  assert.equal(profiled.trace?.aggregationGroups["passive.dealer.attack.up"].factor, 1.2);
 });
+
+function unfactoredStaticProduct(
+  factors: Float64Array,
+  role: BucketRole,
+  placement: BucketPlacement
+): number {
+  return STATIC_BUCKETS.reduce(
+    (product, definition, index) =>
+      definition.role === role && definition.placement === placement ? product * factors[index] : product,
+    1
+  );
+}
+
+function unfactoredDynamicProduct(
+  factors: Float64Array,
+  kind: DamageJob["kind"],
+  placement: BucketPlacement
+): number {
+  return DYNAMIC_BUCKETS.reduce(
+    (product, definition, index) => {
+      const appliesTo = "appliesTo" in definition ? definition.appliesTo : undefined;
+      return definition.placement === placement && (!appliesTo || appliesTo === kind)
+        ? product * factors[index]
+        : product;
+    },
+    1
+  );
+}
 
 test("static damage profile preserves max stacking for duplicate passive effects", () => {
   const fighters = simpleFighters();
@@ -430,8 +502,8 @@ test("negative passive stat bonuses route to down buckets with positive factors"
   const outcome = calculateIndexedDamageJob(job, simpleFighters(), [passiveHealthDown], { trace: true });
 
   assert.equal(outcome.trace?.atomicBuckets["passive.health.down"].totalPct, 105);
-  assert.equal(outcome.trace?.aggregationGroups["passive.defender.health.down"].factor, 2.05);
-  assert.equal(outcome.trace?.aggregationGroups["passive.defender.health.down"].placement, "numerator");
+  assert.equal(outcome.trace?.aggregationGroups["passive.taker.health.down"].factor, 2.05);
+  assert.equal(outcome.trace?.aggregationGroups["passive.taker.health.down"].placement, "numerator");
   assert.equal(Number((outcome.kills / baseline.kills).toFixed(6)), 2.05);
 });
 
@@ -598,7 +670,7 @@ test("max-stacked activations with disjoint resolved unit scopes apply independe
   };
   const fighters = simpleFighters();
   const infantryOutcome = calculateIndexedDamageJob(job, fighters, [infantry, lancer], { trace: true });
-  const lancerOutcome = calculateIndexedDamageJob({ ...job, id: "lancer-job", attackerUnit: "lancer" }, fighters, [infantry, lancer], { trace: true });
+  const lancerOutcome = calculateIndexedDamageJob({ ...job, id: "lancer-job", dealerUnit: "lancer" }, fighters, [infantry, lancer], { trace: true });
 
   assert.equal(infantryOutcome.trace?.atomicBuckets["active.hero.lethality.up"].totalPct, 40);
   assert.deepEqual(infantryOutcome.usedEffectIds, ["max-infantry"]);
@@ -630,10 +702,10 @@ test('applies_vs "trigger.source" resolves to the trigger source when gating a c
       id: "intent",
       round: 1,
       source: "normal",
-      attackerSide: "attacker",
-      attackerUnit: "infantry",
-      defenderSide: "defender",
-      defenderUnit: "lancer",
+      dealerSide: "attacker",
+      dealerUnit: "infantry",
+      takerSide: "defender",
+      takerUnit: "lancer",
       orderIndex: 0,
       previousAttackCount: 0,
       projectedAttackCount: 1,
@@ -671,10 +743,10 @@ test('applies_vs "target" resolves to the trigger target', () => {
       id: "intent",
       round: 1,
       source: "normal",
-      attackerSide: "attacker",
-      attackerUnit: "infantry",
-      defenderSide: "defender",
-      defenderUnit: "lancer",
+      dealerSide: "attacker",
+      dealerUnit: "infantry",
+      takerSide: "defender",
+      takerUnit: "lancer",
       orderIndex: 0,
       previousAttackCount: 0,
       projectedAttackCount: 1,
@@ -711,10 +783,10 @@ test('applies_vs "target" still resolves to the trigger target for defensive eff
       id: "intent",
       round: 1,
       source: "normal",
-      attackerSide: "attacker",
-      attackerUnit: "infantry",
-      defenderSide: "defender",
-      defenderUnit: "lancer",
+      dealerSide: "attacker",
+      dealerUnit: "infantry",
+      takerSide: "defender",
+      takerUnit: "lancer",
       orderIndex: 0,
       previousAttackCount: 0,
       projectedAttackCount: 1,

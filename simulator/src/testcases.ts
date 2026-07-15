@@ -10,7 +10,7 @@ import {
 } from "./calibration";
 import { applyBenjaminiHochberg, compareOutcomeDistribution, type ParityComparisonMetrics } from "./parityMetrics";
 import { prepareBattle, runPrepared } from "./simulator";
-import { DamageAggregationError } from "./damage";
+import { DamageAggregationError } from "./staticDamageProfile";
 import type { BattleInput, BattleResult, FighterInput, SimulatorConfig, StatBlock, UnitType } from "./types";
 
 const DEFAULT_STOCHASTIC_REPEAT = 100;
@@ -775,8 +775,6 @@ function errorDetails(error: unknown): TestcaseErrorDetails | undefined {
     return {
       type: error.name,
       groupId: error.groupId,
-      round: error.round,
-      jobId: error.jobId,
       netPct: error.netPct,
       factor: error.factor,
       contributors: error.contributors

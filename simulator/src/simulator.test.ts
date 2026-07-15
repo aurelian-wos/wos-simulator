@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { loadSimulatorConfig } from "./config";
 import { createSeededRng, chancePasses } from "./effects";
 import { applyHeroGenerationStats, resolveFighter } from "./resolve";
-import { prepareBattle, runPrepared, simulateBearBattle, signedRemainingScore } from "./simulator";
+import { prepareBattle, runPrepared, simulateBattles, simulateBearBattle, signedRemainingScore } from "./simulator";
 import type { BattleInput, EffectIntentDefinition, FighterInput, ResolvedSkill, SimulationOptions, SimulatorConfig, SkillFile, UnitType } from "./types";
 
 function runOnce(input: BattleInput, config: SimulatorConfig, options: SimulationOptions = {}) {
@@ -35,6 +35,23 @@ test("runPrepared reuses the compiled input seed when no override is supplied", 
   assert.equal(prepared.winner, direct.winner);
   assert.equal(prepared.rounds, direct.rounds);
   assert.deepEqual(prepared.remaining, direct.remaining);
+});
+
+test("simulateBattles returns the requested replicates and rejects invalid counts", () => {
+  const config = loadSimulatorConfig();
+  const input: BattleInput = {
+    seed: "replicates",
+    maxRounds: 1,
+    attacker: { troops: { infantry_t1: 1000 }, stats: {}, heroes: {} },
+    defender: { troops: { infantry_t1: 1000 }, stats: {}, heroes: {} }
+  };
+
+  const results = simulateBattles(input, config, { count: 3, mode: "fast" });
+
+  assert.equal(results.length, 3);
+  assert.ok(results.every((result) => result.attacks.length === 0));
+  assert.throws(() => simulateBattles(input, config, { count: 0 }), /positive integer/i);
+  assert.throws(() => simulateBattles(input, config, { count: 1.5 }), /positive integer/i);
 });
 
 test("runPrepared returns structured result for a no-hero battle", () => {
@@ -100,7 +117,7 @@ test("standard battle outcomes include round and applied effects without full tr
     })
   );
 
-  const attack = result.attacks.find((entry) => entry.attackerSide === "attacker" && entry.attackerUnit === "infantry");
+  const attack = result.attacks.find((entry) => entry.dealerSide === "attacker" && entry.dealerUnit === "infantry");
   assert.equal(attack?.round, 1);
   assert.equal(attack?.appliedEffects.some((effect) => effect.effectId === "boost"), true);
   assert.equal(attack?.trace, undefined);
@@ -384,7 +401,7 @@ test("extra skill attacks against same-round exhausted targets are skipped entir
     { mode: "trace" }
   );
 
-  const normalAttack = result.attacks.find((attack) => attack.kind === "normal" && attack.attackerSide === "attacker");
+  const normalAttack = result.attacks.find((attack) => attack.kind === "normal" && attack.dealerSide === "attacker");
 
   assert.equal(result.attacks.some((attack) => attack.kind === "skill"), false);
   assert.equal(result.trace?.rounds[0]?.jobs.some((job) => job.kind === "skill"), false);
@@ -587,11 +604,11 @@ test("attack-duration effects with a round cap expire at the end of their active
     { mode: "trace" }
   );
 
-  const lancerAttacks = result.attacks.filter((attack) => attack.attackerSide === "attacker" && attack.attackerUnit === "lancer");
-  assert.equal(lancerAttacks.find((attack) => attack.jobId.startsWith("r2:"))?.defenderUnit, "marksman");
-  assert.equal(lancerAttacks.find((attack) => attack.jobId.startsWith("r3:"))?.defenderUnit, "infantry");
+  const lancerAttacks = result.attacks.filter((attack) => attack.dealerSide === "attacker" && attack.dealerUnit === "lancer");
+  assert.equal(lancerAttacks.find((attack) => attack.jobId.startsWith("r2:"))?.takerUnit, "marksman");
+  assert.equal(lancerAttacks.find((attack) => attack.jobId.startsWith("r3:"))?.takerUnit, "infantry");
   const round4LancerAttack = lancerAttacks.find((attack) => attack.jobId.startsWith("r4:"));
-  assert.equal(round4LancerAttack?.defenderUnit, "marksman");
+  assert.equal(round4LancerAttack?.takerUnit, "marksman");
   assert.equal(round4LancerAttack?.appliedEffects.some((effect) => effect.effectId === "mark"), false);
 });
 
@@ -763,7 +780,7 @@ test("attack delay skips eligible attacks before the effect can apply", () => {
     })
   );
 
-  const skillAttacks = result.attacks.filter((attack) => attack.kind === "skill" && attack.attackerSide === "attacker");
+  const skillAttacks = result.attacks.filter((attack) => attack.kind === "skill" && attack.dealerSide === "attacker");
   assert.equal(skillAttacks.length, 1);
   assert.ok(skillAttacks[0].jobId.startsWith("r2:"));
 });
@@ -805,7 +822,7 @@ test("attack delay skips eligible damage jobs before a modifier can apply", () =
   );
 
   const normalAttacks = result.attacks.filter(
-    (attack) => attack.kind === "normal" && attack.attackerSide === "attacker"
+    (attack) => attack.kind === "normal" && attack.dealerSide === "attacker"
   );
   assert.equal(normalAttacks[0].appliedEffects.some((effect) => effect.effectId === "delayedBoost"), false);
   assert.equal(normalAttacks[1].appliedEffects.some((effect) => effect.effectId === "delayedBoost"), true);
@@ -1064,7 +1081,7 @@ test("no_attack applies_to cancels that unit attacking, not attacks targeting th
     ["r1:attacker:infantry:0:cancelled"]
   );
   assert.equal(
-    result.attacks.some((attack) => attack.attackerSide === "defender" && attack.defenderSide === "attacker" && attack.defenderUnit === "infantry" && attack.cancelReason === "no_attack"),
+    result.attacks.some((attack) => attack.dealerSide === "defender" && attack.takerSide === "attacker" && attack.takerUnit === "infantry" && attack.cancelReason === "no_attack"),
     false
   );
 });
@@ -1106,7 +1123,7 @@ test("dodge applies_to cancels attacks targeting that unit, not that unit attack
     ["r1:attacker:infantry:0:cancelled"]
   );
   assert.equal(
-    result.attacks.some((attack) => attack.attackerSide === "defender" && attack.attackerUnit === "infantry" && attack.cancelReason === "dodge"),
+    result.attacks.some((attack) => attack.dealerSide === "defender" && attack.dealerUnit === "infantry" && attack.cancelReason === "dodge"),
     false
   );
 });
@@ -1452,7 +1469,7 @@ test("fighter passive effects are added to the static profile after battle_start
     { mode: "trace" }
   );
 
-  const attack = result.attacks.find((entry) => entry.attackerSide === "attacker" && entry.attackerUnit === "infantry");
+  const attack = result.attacks.find((entry) => entry.dealerSide === "attacker" && entry.dealerUnit === "infantry");
   assert.equal(attack?.trace?.atomicBuckets["passive.attack.up"].totalPct, 30);
   assert.equal(attack?.trace?.atomicBuckets["passive.attack.down"].totalPct, 5);
   assert.deepEqual(
@@ -1505,7 +1522,7 @@ test("extra skill attacks with array trigger damage targets hit those defender u
 
   const skillJobs = result.trace?.rounds[0]?.jobs.filter((job) => job.kind === "skill") ?? [];
   assert.deepEqual(
-    skillJobs.map((job) => [job.sourceEffectId, job.defenderUnit]),
+    skillJobs.map((job) => [job.sourceEffectId, job.takerUnit]),
     [
       ["hitLancer", "lancer"],
       ["hitMarksman", "marksman"]
@@ -1550,7 +1567,7 @@ test('extra skill attacks with applies_vs "any" keep current-target compatibilit
 
   const skillJobs = result.trace?.rounds[0]?.jobs.filter((job) => job.kind === "skill") ?? [];
   assert.deepEqual(
-    skillJobs.map((job) => [job.sourceEffectId, job.defenderUnit]),
+    skillJobs.map((job) => [job.sourceEffectId, job.takerUnit]),
     [["hitAny", "lancer"]]
   );
 });
@@ -1660,7 +1677,7 @@ test("same-round outcomes are capped to available target troops before tracing s
   );
 
   const defenderLosses = result.attacks
-    .filter((attack) => attack.defenderSide === "defender" && attack.defenderUnit === "infantry")
+    .filter((attack) => attack.takerSide === "defender" && attack.takerUnit === "infantry")
     .reduce((sum, attack) => sum + attack.kills, 0);
   const doubleBlast = result.skillReport.attacker.find((entry) => entry.skillId === "DoubleBlast");
 
@@ -1705,12 +1722,12 @@ test("committed losses clamp exhausted floating point residue before next-round 
     { mode: "trace" }
   );
   const roundOneInfantryLosses = result.attacks
-    .filter((attack) => attack.jobId.startsWith("r1:") && attack.defenderSide === "attacker" && attack.defenderUnit === "infantry")
+    .filter((attack) => attack.jobId.startsWith("r1:") && attack.takerSide === "attacker" && attack.takerUnit === "infantry")
     .map((attack) => attack.kills);
   const roundTwo = result.trace?.rounds.find((round) => round.round === 2);
   const defenderTargets = roundTwo?.intents
-    .filter((intent) => intent.attackerSide === "defender")
-    .map((intent) => intent.defenderUnit);
+    .filter((intent) => intent.dealerSide === "defender")
+    .map((intent) => intent.takerUnit);
 
   assert.ok(roundOneInfantryLosses.every((kills) => !Number.isInteger(kills)));
   assert.equal(roundOneInfantryLosses.reduce((sum, kills) => sum + kills, 0), 10);
@@ -1837,10 +1854,10 @@ test("attack-triggered extra skill attacks activate then resolve trigger damage 
 
   assert.equal(normalJobs.length, 2);
   assert.equal(skillJobs.length, 1);
-  assert.equal(skillJobs[0]?.attackerSide, normalJobs[0]?.attackerSide);
-  assert.equal(skillJobs[0]?.attackerUnit, normalJobs[0]?.attackerUnit);
-  assert.equal(skillJobs[0]?.defenderSide, normalJobs[0]?.defenderSide);
-  assert.equal(skillJobs[0]?.defenderUnit, normalJobs[0]?.defenderUnit);
+  assert.equal(skillJobs[0]?.dealerSide, normalJobs[0]?.dealerSide);
+  assert.equal(skillJobs[0]?.dealerUnit, normalJobs[0]?.dealerUnit);
+  assert.equal(skillJobs[0]?.takerSide, normalJobs[0]?.takerSide);
+  assert.equal(skillJobs[0]?.takerUnit, normalJobs[0]?.takerUnit);
 });
 
 test("cancelled normal attacks do not consume extra skill attack uses", () => {
@@ -1940,7 +1957,7 @@ test("extra skill attack effects cannot be used by later enemy normal attacks", 
 
   const skillJobs = result.trace?.rounds[0]?.jobs.filter((job) => job.kind === "skill") ?? [];
   assert.deepEqual(
-    skillJobs.map((job) => `${job.attackerSide}.${job.attackerUnit}->${job.defenderSide}.${job.defenderUnit}`),
+    skillJobs.map((job) => `${job.dealerSide}.${job.dealerUnit}->${job.takerSide}.${job.takerUnit}`),
     ["attacker.marksman->defender.infantry"]
   );
   assert.deepEqual(result.extraSkillAttackJobsByEffect, { hitAgain: 1 });
@@ -1995,7 +2012,7 @@ test("extra skill trigger damage jobs can resolve to multiple living enemy targe
 
   const skillJobs = result.trace?.rounds[0]?.jobs.filter((job) => job.kind === "skill") ?? [];
   assert.deepEqual(
-    skillJobs.map((job) => job.defenderUnit).sort(),
+    skillJobs.map((job) => job.takerUnit).sort(),
     ["infantry", "infantry", "lancer", "marksman"]
   );
   assert.equal(result.skillReport.attacker.find((entry) => entry.skillId === "MultiTargetShot")?.triggersSeen, 1);
@@ -2157,7 +2174,7 @@ test("extra skill attack applies_vs must match the current normal attack target"
 
   const jobs = result.trace?.rounds[0]?.jobs ?? [];
   assert.deepEqual(
-    jobs.map((job) => `${job.kind}:${job.attackerUnit}->${job.defenderUnit}`),
+    jobs.map((job) => `${job.kind}:${job.dealerUnit}->${job.takerUnit}`),
     ["normal:marksman->infantry", "normal:infantry->marksman", "normal:lancer->marksman"]
   );
   assert.deepEqual(result.extraSkillAttackJobsByEffect, {});
@@ -2252,9 +2269,9 @@ test("attack-triggered source and target selectors resolve to concrete active sc
     { mode: "trace" }
   );
 
-  const attackerAttack = result.attacks.find((attack) => attack.attackerSide === "attacker" && attack.attackerUnit === "infantry");
-  const defenderLancerAttack = result.attacks.find((attack) => attack.attackerSide === "defender" && attack.attackerUnit === "lancer");
-  const defenderMarksmanAttack = result.attacks.find((attack) => attack.attackerSide === "defender" && attack.attackerUnit === "marksman");
+  const attackerAttack = result.attacks.find((attack) => attack.dealerSide === "attacker" && attack.dealerUnit === "infantry");
+  const defenderLancerAttack = result.attacks.find((attack) => attack.dealerSide === "defender" && attack.dealerUnit === "lancer");
+  const defenderMarksmanAttack = result.attacks.find((attack) => attack.dealerSide === "defender" && attack.dealerUnit === "marksman");
 
   assert.equal(attackerAttack?.trace?.atomicBuckets["active.hero.lethality.down"].totalPct, 50);
   assert.equal(defenderLancerAttack?.trace?.atomicBuckets["active.hero.lethality.down"].totalPct, 0);
@@ -2295,9 +2312,9 @@ test('attack-triggered target selector with applies_vs "any" gates later opposin
     { mode: "trace" }
   );
 
-  const attackerAttack = result.attacks.find((attack) => attack.attackerSide === "attacker" && attack.attackerUnit === "infantry");
-  const defenderLancerAttack = result.attacks.find((attack) => attack.attackerSide === "defender" && attack.attackerUnit === "lancer");
-  const defenderMarksmanAttack = result.attacks.find((attack) => attack.attackerSide === "defender" && attack.attackerUnit === "marksman");
+  const attackerAttack = result.attacks.find((attack) => attack.dealerSide === "attacker" && attack.dealerUnit === "infantry");
+  const defenderLancerAttack = result.attacks.find((attack) => attack.dealerSide === "defender" && attack.dealerUnit === "lancer");
+  const defenderMarksmanAttack = result.attacks.find((attack) => attack.dealerSide === "defender" && attack.dealerUnit === "marksman");
 
   assert.equal(attackerAttack?.trace?.atomicBuckets["active.hero.lethality.down"].totalPct, 0);
   assert.equal(defenderLancerAttack?.trace?.atomicBuckets["active.hero.lethality.down"].totalPct, 50);

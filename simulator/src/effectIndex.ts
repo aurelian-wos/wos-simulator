@@ -86,17 +86,17 @@ export function expireEffectIndex(index: EffectIndex, effect: ActiveEffect): voi
 }
 
 export function damageJobSlot(job: DamageJob): number {
-  return damageJobShapeSlot(job.kind, job.attackerSide, job.attackerUnit, job.defenderSide, job.defenderUnit);
+  return damageJobShapeSlot(job.kind, job.dealerSide, job.dealerUnit, job.takerSide, job.takerUnit);
 }
 
 export function damageJobShapeSlot(
   jobKind: DamageKind,
-  attackerSide: SideId,
-  attackerUnit: UnitType,
-  defenderSide: SideId,
-  defenderUnit: UnitType
+  dealerSide: SideId,
+  dealerUnit: UnitType,
+  takerSide: SideId,
+  takerUnit: UnitType
 ): number {
-  return (((kindIndex(jobKind) * 2 + sideIndex(attackerSide)) * 3 + unitIndex(attackerUnit)) * 2 + sideIndex(defenderSide)) * 3 + unitIndex(defenderUnit);
+  return (((kindIndex(jobKind) * 2 + sideIndex(dealerSide)) * 3 + unitIndex(dealerUnit)) * 2 + sideIndex(takerSide)) * 3 + unitIndex(takerUnit);
 }
 
 const JOB_SHAPE_CACHE = new Map<number, Uint8Array>();
@@ -133,7 +133,7 @@ function buildShapeSlots(effect: ActiveEffect, bucket: AtomicBucket): Uint8Array
     for (const appliesToUnit of unitsFromMask(effect.appliesTo.units)) {
       for (const appliesVsUnit of unitsFromMask(effect.appliesVs.units)) {
         slots.push(
-          definition.role === "attacker"
+          definition.role === "dealer"
             ? damageJobShapeSlot(jobKind, effect.appliesTo.side, appliesToUnit, effect.appliesVs.side, appliesVsUnit)
             : damageJobShapeSlot(jobKind, effect.appliesVs.side, appliesVsUnit, effect.appliesTo.side, appliesToUnit)
         );

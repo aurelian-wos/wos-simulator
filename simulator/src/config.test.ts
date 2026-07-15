@@ -177,7 +177,7 @@ test("loadSimulatorConfig rejects negative native bucket effect values", () => {
   assert.throws(() => loadSimulatorConfigFromDir(root), /negative.*active\.hero\.attack\.down.*value/i);
 });
 
-test("loadSimulatorConfig rejects passive effects that are not battle-start static", () => {
+test("loadSimulatorConfig rejects effects targeting static buckets unless they are fully static", () => {
   const turnRoot = writeConfigWithTroopEffect({
     type: "passive.attack.up",
     value: 10
@@ -198,6 +198,14 @@ test("loadSimulatorConfig rejects passive effects that are not battle-start stat
     },
     { type: "battle_start" }
   );
+  const emptyDurationRoot = writeConfigWithTroopEffect(
+    {
+      type: "passive.attack.up",
+      value: 10,
+      duration: {}
+    },
+    { type: "battle_start" }
+  );
   const probabilityRoot = writeConfigWithTroopEffect(
     {
       type: "passive.attack.up",
@@ -206,10 +214,25 @@ test("loadSimulatorConfig rejects passive effects that are not battle-start stat
     { type: "battle_start", probability: 50 }
   );
 
-  assert.throws(() => loadSimulatorConfigFromDir(turnRoot), /passive.*battle_start/i);
-  assert.throws(() => loadSimulatorConfigFromDir(durationRoot), /passive.*battle.*duration/i);
-  assert.throws(() => loadSimulatorConfigFromDir(evolvingRoot), /passive.*value_evolution/i);
-  assert.throws(() => loadSimulatorConfigFromDir(probabilityRoot), /passive.*probability.*deterministic/i);
+  assert.throws(() => loadSimulatorConfigFromDir(turnRoot), /static bucket passive\.attack\.up.*battle_start/i);
+  assert.throws(() => loadSimulatorConfigFromDir(durationRoot), /static bucket passive\.attack\.up.*duration/i);
+  assert.throws(() => loadSimulatorConfigFromDir(emptyDurationRoot), /static bucket passive\.attack\.up.*duration/i);
+  assert.throws(() => loadSimulatorConfigFromDir(evolvingRoot), /static bucket passive\.attack\.up.*value_evolution/i);
+  assert.throws(() => loadSimulatorConfigFromDir(probabilityRoot), /static bucket passive\.attack\.up.*probability/i);
+});
+
+test("loadSimulatorConfig rejects skill effects targeting input-derived static buckets", () => {
+  const playerRoot = writeConfigWithTroopEffect(
+    { type: "player.attack", value: 10 },
+    { type: "battle_start" }
+  );
+  const troopsRoot = writeConfigWithTroopEffect(
+    { type: "troops.baseAttack", value: 10 },
+    { type: "battle_start" }
+  );
+
+  assert.throws(() => loadSimulatorConfigFromDir(playerRoot), /input-derived static bucket/i);
+  assert.throws(() => loadSimulatorConfigFromDir(troopsRoot), /input-derived static bucket/i);
 });
 
 test("loadSimulatorConfig rejects invalid trigger_damage_jobs selector strings", () => {

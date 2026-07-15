@@ -58,6 +58,9 @@ interface Runtime {
   // chargeUsedEffects (uses += 1 each) after every job in every mode.
   usedEffects: ActiveEffect[];
   staticDamageProfile?: StaticDamageProfile;
+  // Materialized battle_start + input passive effects; recorders derive their own static profile
+  // description from these, so the runtime carries no trace-shaped data.
+  setupEffects: ActiveEffect[];
   damageScratch: DamageScratch;
   rng: Rng;
   skills: RuntimeSkills;
@@ -116,8 +119,8 @@ interface RunLoopOptions {
   capJobKills: boolean;
   commitLosses: boolean;
   scoreSide?: {
-    attackerSide: SideId;
-    defenderSide: SideId;
+    dealerSide: SideId;
+    takerSide: SideId;
   };
 }
 
@@ -150,7 +153,7 @@ export function simulateBearBattle(
     capRoundKills: false,
     capJobKills: false,
     commitLosses: false,
-    scoreSide: { attackerSide: "attacker", defenderSide: "defender" }
+    scoreSide: { dealerSide: "attacker", takerSide: "defender" }
   });
   return {
     ...buildBattleResult(run),
@@ -161,14 +164,16 @@ export function simulateBearBattle(
 /**
  * A resolved battle ready to run many times with different seeds. When battle-start is deterministic,
  * the entire pre-loop runtime (`template`) is seed-independent and built once; each run clones its
- * mutable state and reuses the skills + static profile by reference. For stochastic battle-start the
- * template is absent and runs reuse only the resolved fighters.
+ * mutable state and reuses the skills + static profile by reference. For stochastic battle-start,
+ * the template is absent; resolved fighters, skills, and the static profile are still reused while
+ * chance-bearing setup state is rebuilt per run.
  */
 export interface CompiledBattle {
   input: BattleInput;
   config: SimulatorConfig;
   fighters: Record<SideId, ResolvedFighter>;
   template?: Runtime;
+  staticProfile: StaticDamageProfile;
   runtimeSkills: RuntimeSkills;
   deterministicBattleStart: boolean;
 }
@@ -179,9 +184,16 @@ export function prepareBattle(input: BattleInput, config: SimulatorConfig): Comp
   const fighters: Record<SideId, ResolvedFighter> = { attacker, defender };
   const runtimeSkills = buildRuntimeSkills([attacker, defender]);
   const deterministicBattleStart = !runtimeSkills.battleStart.some(hasChanceTrigger);
-  // Deterministic battle-start => the entire pre-loop runtime is seed-independent; build it once.
-  const template = deterministicBattleStart ? setupRuntime(fighters, input, "simulator-prepare", NULL_RECORDER, runtimeSkills) : undefined;
-  return { input, config, fighters, template, runtimeSkills, deterministicBattleStart };
+  if (deterministicBattleStart) {
+    // The entire pre-loop runtime is seed-independent, so build it once and clone it per run.
+    const template = setupRuntime(fighters, input, "simulator-prepare", NULL_RECORDER, runtimeSkills);
+    return { input, config, fighters, template, staticProfile: template.staticDamageProfile!, runtimeSkills, deterministicBattleStart };
+  }
+  // Chance-bearing battle-start effects must be rolled per run. Build only the deterministic
+  // setup effects that feed static buckets here; do not execute and discard the stochastic setup.
+  const staticEffects = materializeStaticSetupEffects(fighters, input, runtimeSkills);
+  const staticProfile = buildStaticDamageProfile(fighters, staticEffects);
+  return { input, config, fighters, staticProfile, runtimeSkills, deterministicBattleStart };
 }
 
 export function runPrepared(compiled: CompiledBattle, seed?: string | number, options: SimulationOptions = {}): BattleResult {
@@ -189,6 +201,27 @@ export function runPrepared(compiled: CompiledBattle, seed?: string | number, op
   // undefined seed would otherwise clobber compiled.input.seed and silently lose reproducibility.
   const runInput = seed === undefined ? compiled.input : { ...compiled.input, seed };
   return buildBattleResult(runBattle(runInput, compiled.config, options, compiled));
+}
+
+/**
+ * Prepare the battle once and run `count` replicates, reusing the compiled fighters, skills, and
+ * static damage profile across every run. Replicate 0 runs with the input's own seed; replicate
+ * `i` runs with `${seed}#${i}` so results are reproducible and distinct.
+ */
+export function simulateBattles(
+  input: BattleInput,
+  config: SimulatorConfig,
+  options: SimulationOptions & { count?: number } = {}
+): BattleResult[] {
+  const { count = 1, ...runOptions } = options;
+  if (!Number.isInteger(count) || count < 1) {
+    throw new Error(`simulateBattles count must be a positive integer, got ${JSON.stringify(count)}`);
+  }
+  const compiled = prepareBattle(input, config);
+  const baseSeed = input.seed ?? "simulator-default";
+  return Array.from({ length: count }, (_, index) =>
+    runPrepared(compiled, index === 0 ? baseSeed : `${baseSeed}#${index}`, runOptions)
+  );
 }
 
 function buildBattleResult(run: BattleRun): BattleResult {
@@ -220,17 +253,38 @@ function setupRuntime(
   input: BattleInput,
   seed: string | number,
   recorder: BattleRecorder,
-  runtimeSkills?: RuntimeSkills
+  runtimeSkills?: RuntimeSkills,
+  prebuiltProfile?: StaticDamageProfile
 ): Runtime {
   const runtime = createRuntime([fighters.attacker, fighters.defender], createSeededRng(seed), runtimeSkills);
   const setupEffects = [
     ...triggerSkills("battle_start", 0, runtime.skills.battleStart, runtime, recorder),
-    ...addInputPassiveEffects(runtime, input.attacker.passive, "attacker"),
-    ...addInputPassiveEffects(runtime, input.defender.passive, "defender")
+    ...createInputPassiveEffects(input.attacker.passive, "attacker"),
+    ...createInputPassiveEffects(input.defender.passive, "defender")
   ];
-  runtime.staticDamageProfile = buildStaticDamageProfile(fighters, setupEffects);
+  // Effects feeding static buckets are validated deterministic, so the profile is seed-independent
+  // and a prepared build can be reused even when other battle_start skills are stochastic.
+  runtime.staticDamageProfile = prebuiltProfile ?? buildStaticDamageProfile(fighters, setupEffects);
+  runtime.setupEffects = setupEffects;
+  recorder.recordStaticProfile(fighters, setupEffects);
   runtime.preparedEffects = setupEffects.filter(isRuntimeIndexableEffect);
   return runtime;
+}
+
+function materializeStaticSetupEffects(
+  fighters: Record<SideId, ResolvedFighter>,
+  input: BattleInput,
+  runtimeSkills: RuntimeSkills
+): ActiveEffect[] {
+  const runtime = createRuntime([fighters.attacker, fighters.defender], createSeededRng("simulator-static-profile"), runtimeSkills);
+  const staticSkills = runtimeSkills.battleStart.filter((skill) =>
+    skill.effects.some((effect) => bucketDefinition(effect.type)?.phase === "static")
+  );
+  return [
+    ...triggerSkills("battle_start", 0, staticSkills, runtime, NULL_RECORDER),
+    ...createInputPassiveEffects(input.attacker.passive, "attacker"),
+    ...createInputPassiveEffects(input.defender.passive, "defender")
+  ];
 }
 
 // Deterministic battle-start effects are materialized once in a prepared runtime. Replay only
@@ -264,6 +318,7 @@ function cloneRuntime(template: Runtime, rng: Rng): Runtime {
     expireEffectsByRound: cloneEffectSchedule(template.expireEffectsByRound, cloneEffect),
     usedEffects: [],
     staticDamageProfile: template.staticDamageProfile,
+    setupEffects: template.setupEffects,
     damageScratch: createDamageScratch(),
     rng,
     skills: template.skills,
@@ -316,6 +371,7 @@ function runBattle(
     };
     const recorder = recorderFor(options, fighters);
     const runtime = cloneRuntime(prepared.template, createSeededRng(input.seed ?? "simulator-default"));
+    recorder.recordStaticProfile(fighters, runtime.setupEffects);
     recordPreparedBattleStartSkills(runtime, recorder);
     return runLoop(input, fighters, runtime, recorder, options, loopOptions);
   }
@@ -323,7 +379,7 @@ function runBattle(
   const defender = prepared ? cloneFighterForRun(prepared.fighters.defender) : resolveFighter(input.defender, "defender", config, input.engagement_type);
   const fighters: Record<SideId, ResolvedFighter> = { attacker, defender };
   const recorder = recorderFor(options, fighters);
-  const runtime = setupRuntime(fighters, input, input.seed ?? "simulator-default", recorder, prepared?.runtimeSkills);
+  const runtime = setupRuntime(fighters, input, input.seed ?? "simulator-default", recorder, prepared?.runtimeSkills, prepared?.staticProfile);
   return runLoop(input, fighters, runtime, recorder, options, loopOptions);
 }
 
@@ -348,12 +404,13 @@ function runLoop(
     dodge: options.useEffectsOnDodge ?? true,
     no_attack: options.useEffectsOnNoAttack ?? true
   };
+  if (!runtime.staticDamageProfile) throw new Error("runLoop requires a runtime with a static damage profile");
   const damageJobOptions = {
     recorder,
     effectIndex: runtime.effectIndex,
     staticDamageProfile: runtime.staticDamageProfile,
     scratch: runtime.damageScratch,
-    capToDefenderTroops: loopOptions.capJobKills,
+    capToTakerTroops: loopOptions.capJobKills,
     usedEffects: runtime.usedEffects
   };
 
@@ -377,7 +434,7 @@ function runLoop(
     const roundTargetDamage = emptyRoundTargetDamage();
     for (const intent of intents) {
       const matchingTriggerSkills = runtime.skills.attackDeclaredByJobShape[
-        damageJobShapeSlot("normal", intent.attackerSide, intent.attackerUnit, intent.defenderSide, intent.defenderUnit)
+        damageJobShapeSlot("normal", intent.dealerSide, intent.dealerUnit, intent.takerSide, intent.takerUnit)
       ] ?? [];
       triggerSkills("attack_declared", round, matchingTriggerSkills, runtime, recorder, intent);
       const job = normalJob(intent, roundStartTroops);
@@ -414,9 +471,9 @@ function runLoop(
       }
 
       recorder.recordScheduledDamageJob(job);
-      const normalResult = calculateDamageJob(job, fighters, [], damageJobOptions);
+      const normalResult = calculateDamageJob(job, fighters, damageJobOptions);
       if (loopOptions.capRoundKills) capJobToRemainingTarget(normalResult, job, roundStartTroops, roundTargetDamage, recorder);
-      if (loopOptions.scoreSide && job.attackerSide === loopOptions.scoreSide.attackerSide && job.defenderSide === loopOptions.scoreSide.defenderSide) {
+      if (loopOptions.scoreSide && job.dealerSide === loopOptions.scoreSide.dealerSide && job.takerSide === loopOptions.scoreSide.takerSide) {
         score += normalResult.kills;
       }
       chargeUsedEffects(runtime);
@@ -433,7 +490,7 @@ function runLoop(
       for (const extraJob of extraSkill.jobs) {
         if (loopOptions.capRoundKills && targetExhausted(extraJob, roundStartTroops, roundTargetDamage)) continue;
         recorder.recordScheduledDamageJob(extraJob);
-        const extraResult = calculateDamageJob(extraJob, fighters, [], damageJobOptions);
+        const extraResult = calculateDamageJob(extraJob, fighters, damageJobOptions);
         if (loopOptions.capRoundKills) capJobToRemainingTarget(extraResult, extraJob, roundStartTroops, roundTargetDamage, recorder);
         processedExtraEffectIds.add(extraJob.sourceEffectId ?? "");
         processedExtraJobIds.add(extraJob.id);
@@ -441,7 +498,7 @@ function runLoop(
           runtime.extraSkillAttackJobsByEffect[extraJob.sourceEffectId] = (runtime.extraSkillAttackJobsByEffect[extraJob.sourceEffectId] ?? 0) + 1;
         }
         results.push({ job: extraJob, result: extraResult });
-        if (loopOptions.scoreSide && extraJob.attackerSide === loopOptions.scoreSide.attackerSide && extraJob.defenderSide === loopOptions.scoreSide.defenderSide) {
+        if (loopOptions.scoreSide && extraJob.dealerSide === loopOptions.scoreSide.dealerSide && extraJob.takerSide === loopOptions.scoreSide.takerSide) {
           score += extraResult.kills;
         }
         chargeUsedEffects(runtime);
@@ -501,16 +558,16 @@ function triggerRoundStartSkills(
   activated.push(...triggerSkills("round_start", round, runtime.skills.roundStartGlobal, runtime, recorder));
   for (const skill of runtime.skills.roundStartPerUnit) {
     const side = roundTriggerSourceSide(skill);
-    const defenderSide = roundTriggerTargetSide(skill, side);
+    const takerSide = roundTriggerTargetSide(skill, side);
     if (!skillMatchesTrigger(skill, "round_start", round)) continue;
     recorder.recordSkillTriggerAttempt(skill);
     if (!chancePasses(skill, runtime.rng)) continue;
     recorder.recordSkillTriggered(skill);
     let orderIndex = 0;
-    for (const attackerUnit of roundTriggerUnits(skill, roundStartTroops)) {
-      const defenderUnit = chooseDefenderUnit(attackerUnit, side, defenderSide, roundStartTroops, runtime.effectIndex, round);
-      if (!defenderUnit) continue;
-      const intent = syntheticRoundIntent(round, side, attackerUnit, defenderSide, defenderUnit, orderIndex, runtime);
+    for (const dealerUnit of roundTriggerUnits(skill, roundStartTroops)) {
+      const takerUnit = chooseTakerUnit(dealerUnit, side, takerSide, roundStartTroops, runtime.effectIndex);
+      if (!takerUnit) continue;
+      const intent = syntheticRoundIntent(round, side, dealerUnit, takerSide, takerUnit, orderIndex, runtime);
       if (!skillMatchesTrigger(skill, "round_start", round, intent)) continue;
       for (const effectIntent of skill.effects) {
         const effect = activateEffect(skill, effectIntent, round, intent);
@@ -545,26 +602,26 @@ function roundTriggerTargetSide(skill: ResolvedSkill, sourceSide: SideId): SideI
 
 function syntheticRoundIntent(
   round: number,
-  attackerSide: SideId,
-  attackerUnit: UnitType,
-  defenderSide: SideId,
-  defenderUnit: UnitType,
+  dealerSide: SideId,
+  dealerUnit: UnitType,
+  takerSide: SideId,
+  takerUnit: UnitType,
   orderIndex: number,
   runtime: Runtime
 ): AttackIntent {
   return {
-    id: `r${round}:${attackerSide}:${attackerUnit}:turn:${orderIndex}`,
+    id: `r${round}:${dealerSide}:${dealerUnit}:turn:${orderIndex}`,
     round,
     source: "normal",
-    attackerSide,
-    attackerUnit,
-    defenderSide,
-    defenderUnit,
+    dealerSide,
+    dealerUnit,
+    takerSide,
+    takerUnit,
     orderIndex,
-    previousAttackCount: runtime.counters.attacks[attackerSide][attackerUnit],
-    projectedAttackCount: runtime.counters.attacks[attackerSide][attackerUnit],
-    previousReceivedAttackCount: runtime.counters.received[defenderSide][defenderUnit],
-    projectedReceivedAttackCount: runtime.counters.received[defenderSide][defenderUnit]
+    previousAttackCount: runtime.counters.attacks[dealerSide][dealerUnit],
+    projectedAttackCount: runtime.counters.attacks[dealerSide][dealerUnit],
+    previousReceivedAttackCount: runtime.counters.received[takerSide][takerUnit],
+    projectedReceivedAttackCount: runtime.counters.received[takerSide][takerUnit]
   };
 }
 
@@ -598,6 +655,7 @@ function createRuntime(fighters: ResolvedFighter[], rng: Rng, preparedSkills?: R
     expireEffectsByRound: [],
     usedEffects: [],
     staticDamageProfile: undefined,
+    setupEffects: [],
     damageScratch: createDamageScratch(),
     rng,
     skills,
@@ -662,9 +720,9 @@ function buildRuntimeSkills(fighters: ResolvedFighter[]): RuntimeSkills {
   const attackDeclaredByJobShape: Array<ResolvedSkill[] | undefined> = Array.from({ length: DAMAGE_JOB_SHAPE_SLOTS });
   for (const skill of attackDeclared) {
     const trigger = compiledTriggerForSkill(skill);
-    for (const attackerUnit of unitsFromMask(trigger.source.units)) {
-      for (const defenderUnit of unitsFromMask(trigger.target.units)) {
-        const slot = damageJobShapeSlot("normal", trigger.source.side, attackerUnit, trigger.target.side, defenderUnit);
+    for (const dealerUnit of unitsFromMask(trigger.source.units)) {
+      for (const takerUnit of unitsFromMask(trigger.target.units)) {
+        const slot = damageJobShapeSlot("normal", trigger.source.side, dealerUnit, trigger.target.side, takerUnit);
         const matching = attackDeclaredByJobShape[slot];
         if (matching) matching.push(skill);
         else attackDeclaredByJobShape[slot] = [skill];
@@ -707,23 +765,23 @@ function assertDisjointResolvedGroupSlots(effectId: string, slots: Uint8Array, e
 function potentialActivationIntents(skill: ResolvedSkill): Array<AttackIntent | undefined> {
   if (skill.trigger.type === "battle_start" || (skill.trigger.type === "turn" && skill.trigger.source === undefined)) return [undefined];
   const trigger = compiledTriggerForSkill(skill);
-  const attackerSide = trigger.source.side;
-  let defenderSide = trigger.target.side;
-  if (skill.trigger.type === "turn" && defenderSide === attackerSide) defenderSide = oppositeSide(attackerSide);
-  if (defenderSide === attackerSide) return [];
-  const attackerUnits = unitsFromMask(trigger.source.units);
-  const defenderUnits = unitsFromMask(trigger.target.units);
+  const dealerSide = trigger.source.side;
+  let takerSide = trigger.target.side;
+  if (skill.trigger.type === "turn" && takerSide === dealerSide) takerSide = oppositeSide(dealerSide);
+  if (takerSide === dealerSide) return [];
+  const dealerUnits = unitsFromMask(trigger.source.units);
+  const takerUnits = unitsFromMask(trigger.target.units);
   const intents: AttackIntent[] = [];
-  for (const attackerUnit of attackerUnits) {
-    for (const defenderUnit of defenderUnits) {
+  for (const dealerUnit of dealerUnits) {
+    for (const takerUnit of takerUnits) {
       intents.push({
         id: "group-plan",
         round: 1,
         source: "normal",
-        attackerSide,
-        attackerUnit,
-        defenderSide,
-        defenderUnit,
+        dealerSide,
+        dealerUnit,
+        takerSide,
+        takerUnit,
         orderIndex: 0,
         previousAttackCount: 0,
         projectedAttackCount: 1,
@@ -774,7 +832,7 @@ function processEffectSchedule(runtime: Runtime, round: number): void {
   }
 }
 
-function addInputPassiveEffects(runtime: Runtime, passive: FighterInput["passive"], side: SideId): ActiveEffect[] {
+function createInputPassiveEffects(passive: FighterInput["passive"], side: SideId): ActiveEffect[] {
   const effects: ActiveEffect[] = [];
   if (!passive) return effects;
   for (const stat of ["attack", "defense", "lethality", "health"] as const) {
@@ -808,7 +866,6 @@ function addInputPassiveEffects(runtime: Runtime, passive: FighterInput["passive
         uses: 0,
         sameEffectStacking: "add"
       };
-      addActiveEffect(runtime, effect);
       effects.push(effect);
     }
   }
@@ -848,28 +905,28 @@ function resolveAttackIntents(
 ): AttackIntent[] {
   const intents: AttackIntent[] = [];
   for (const side of ["attacker", "defender"] as SideId[]) {
-    const defenderSide = oppositeSide(side);
+    const takerSide = oppositeSide(side);
     let orderIndex = 0;
-    for (const attackerUnit of UNIT_TYPES) {
-      if ((roundStartTroops[side][attackerUnit] ?? 0) <= 0) continue;
-      const ordered = orderFromEffects(attackerUnit, side, runtime.effectIndex, true);
-      const defenderUnit = firstLivingUnit(ordered?.order ?? UNIT_TYPES, defenderSide, roundStartTroops);
-      if (!defenderUnit) continue;
-      const intentId = `r${round}:${side}:${attackerUnit}:${orderIndex}`;
+    for (const dealerUnit of UNIT_TYPES) {
+      if ((roundStartTroops[side][dealerUnit] ?? 0) <= 0) continue;
+      const ordered = orderFromEffects(dealerUnit, side, runtime.effectIndex, true);
+      const takerUnit = firstLivingUnit(ordered?.order ?? UNIT_TYPES, takerSide, roundStartTroops);
+      if (!takerUnit) continue;
+      const intentId = `r${round}:${side}:${dealerUnit}:${orderIndex}`;
       if (ordered) {
         chargeEffectUse(runtime, ordered.effect);
-        recorder.recordBattleOrder(intentId, ordered.effect, defenderUnit);
+        recorder.recordBattleOrder(intentId, ordered.effect, takerUnit);
       }
-      const previousAttackCount = runtime.counters.attacks[side][attackerUnit];
-      const previousReceivedAttackCount = runtime.counters.received[defenderSide][defenderUnit];
+      const previousAttackCount = runtime.counters.attacks[side][dealerUnit];
+      const previousReceivedAttackCount = runtime.counters.received[takerSide][takerUnit];
       intents.push({
         id: intentId,
         round,
         source: "normal",
-        attackerSide: side,
-        attackerUnit,
-        defenderSide,
-        defenderUnit,
+        dealerSide: side,
+        dealerUnit,
+        takerSide,
+        takerUnit,
         orderIndex,
         previousAttackCount,
         projectedAttackCount: previousAttackCount + 1,
@@ -884,16 +941,15 @@ function resolveAttackIntents(
 
 // Synthetic round-start trigger targeting reuses attack-order effects to pick a target but
 // does not charge them: no real attack intent is being ordered.
-function chooseDefenderUnit(
-  attackerUnit: UnitType,
-  attackerSide: SideId,
-  defenderSide: SideId,
+function chooseTakerUnit(
+  dealerUnit: UnitType,
+  dealerSide: SideId,
+  takerSide: SideId,
   roundStartTroops: DamageJob["roundStartTroops"],
-  effectIndex: EffectIndex,
-  round: number
+  effectIndex: EffectIndex
 ): UnitType | undefined {
-  const order = orderFromEffects(attackerUnit, attackerSide, effectIndex, false)?.order ?? UNIT_TYPES;
-  return firstLivingUnit(order, defenderSide, roundStartTroops);
+  const order = orderFromEffects(dealerUnit, dealerSide, effectIndex, false)?.order ?? UNIT_TYPES;
+  return firstLivingUnit(order, takerSide, roundStartTroops);
 }
 
 function firstLivingUnit(order: readonly UnitType[], side: SideId, roundStartTroops: DamageJob["roundStartTroops"]): UnitType | undefined {
@@ -901,14 +957,14 @@ function firstLivingUnit(order: readonly UnitType[], side: SideId, roundStartTro
 }
 
 function orderFromEffects(
-  attackerUnit: UnitType,
-  attackerSide: SideId,
+  dealerUnit: UnitType,
+  dealerSide: SideId,
   index: EffectIndex,
   advanceAttackDelay: boolean
 ): { order: UnitType[]; effect: ActiveEffect } | undefined {
   for (const effect of index.battleOrder) {
     if (effect.intent.type !== "attack_order") continue;
-    if (effect.appliesTo.side !== attackerSide || !unitMaskHas(effect.appliesTo.units, attackerUnit)) continue;
+    if (effect.appliesTo.side !== dealerSide || !unitMaskHas(effect.appliesTo.units, dealerUnit)) continue;
     if (Array.isArray(effect.intent.value)) {
       try {
         if (advanceAttackDelay ? !advanceEffectAttackDelay(effect) : !isEffectAttackReady(effect)) continue;
@@ -960,10 +1016,10 @@ function normalJob(intent: AttackIntent, roundStartTroops: DamageJob["roundStart
     kind: "normal",
     sourceIntentId: intent.id,
     roundStartTroops,
-    attackerSide: intent.attackerSide,
-    attackerUnit: intent.attackerUnit,
-    defenderSide: intent.defenderSide,
-    defenderUnit: intent.defenderUnit,
+    dealerSide: intent.dealerSide,
+    dealerUnit: intent.dealerUnit,
+    takerSide: intent.takerSide,
+    takerUnit: intent.takerUnit,
     sourceMultiplier: 1
   };
 }
@@ -1004,10 +1060,10 @@ function extraSkillJobs(
             kind: "skill",
             sourceIntentId: normalAttack.sourceIntentId,
             roundStartTroops,
-            attackerSide: source.side,
-            attackerUnit: source.unit,
-            defenderSide: target.side,
-            defenderUnit: target.unit,
+            dealerSide: source.side,
+            dealerUnit: source.unit,
+            takerSide: target.side,
+            takerUnit: target.unit,
             sourceEffectId,
             sourceMultiplier: multiplier
           };
@@ -1055,10 +1111,10 @@ function selectStackedExtraAttackEffectGroups(effects: ActiveEffect[], round: nu
 
 function extraAttackEffectAppliesToNormalAttack(effect: ActiveEffect, normalAttack: DamageJob): boolean {
   return (
-    effect.appliesTo.side === normalAttack.attackerSide &&
-    unitMaskHas(effect.appliesTo.units, normalAttack.attackerUnit) &&
-    effect.appliesVs.side === normalAttack.defenderSide &&
-    unitMaskHas(effect.appliesVs.units, normalAttack.defenderUnit)
+    effect.appliesTo.side === normalAttack.dealerSide &&
+    unitMaskHas(effect.appliesTo.units, normalAttack.dealerUnit) &&
+    effect.appliesVs.side === normalAttack.takerSide &&
+    unitMaskHas(effect.appliesVs.units, normalAttack.takerUnit)
   );
 }
 
@@ -1074,17 +1130,17 @@ function resolveTriggerJobSelector(
   normalAttack: DamageJob,
   roundStartTroops: DamageJob["roundStartTroops"]
 ): TriggerJobUnit[] {
-  if (selector === "use.source") return [{ side: normalAttack.attackerSide, unit: normalAttack.attackerUnit }];
-  if (selector === "use.target") return [{ side: normalAttack.defenderSide, unit: normalAttack.defenderUnit }];
+  if (selector === "use.source") return [{ side: normalAttack.dealerSide, unit: normalAttack.dealerUnit }];
+  if (selector === "use.target") return [{ side: normalAttack.takerSide, unit: normalAttack.takerUnit }];
   if (selector === "effect.applies_to") return unitsFromMask(effect.appliesTo.units).map((unit) => ({ side: effect.appliesTo.side, unit }));
   if (selector === "effect.applies_vs") return unitsFromMask(effect.appliesVs.units).map((unit) => ({ side: effect.appliesVs.side, unit }));
-  if (selector === "enemy.living") return livingUnits(normalAttack.defenderSide, roundStartTroops);
-  if (selector === "self.living") return livingUnits(normalAttack.attackerSide, roundStartTroops);
+  if (selector === "enemy.living") return livingUnits(normalAttack.takerSide, roundStartTroops);
+  if (selector === "self.living") return livingUnits(normalAttack.dealerSide, roundStartTroops);
   const units = unitListFromSelector(selector);
   if (!units) {
     throw new Error(`trigger_damage_jobs ${role} selector is required and must be a supported selector, got ${JSON.stringify(selector)}`);
   }
-  const fallbackSide = role === "source" ? normalAttack.attackerSide : normalAttack.defenderSide;
+  const fallbackSide = role === "source" ? normalAttack.dealerSide : normalAttack.takerSide;
   return units.map((unit) => ({ side: fallbackSide, unit }));
 }
 
@@ -1125,8 +1181,8 @@ function targetExhausted(
   roundStartTroops: DamageJob["roundStartTroops"],
   roundTargetDamage: Record<SideId, Record<UnitType, number>>
 ): boolean {
-  const available = Math.max(0, roundStartTroops[job.defenderSide][job.defenderUnit] ?? 0);
-  return available <= 0 || roundTargetDamage[job.defenderSide][job.defenderUnit] >= available;
+  const available = Math.max(0, roundStartTroops[job.takerSide][job.takerUnit] ?? 0);
+  return available <= 0 || roundTargetDamage[job.takerSide][job.takerUnit] >= available;
 }
 
 function capJobToRemainingTarget(
@@ -1136,11 +1192,11 @@ function capJobToRemainingTarget(
   roundTargetDamage: Record<SideId, Record<UnitType, number>>,
   recorder: BattleRecorder
 ): void {
-  const available = Math.max(0, roundStartTroops[job.defenderSide][job.defenderUnit] ?? 0);
-  const alreadyDamaged = roundTargetDamage[job.defenderSide][job.defenderUnit];
+  const available = Math.max(0, roundStartTroops[job.takerSide][job.takerUnit] ?? 0);
+  const alreadyDamaged = roundTargetDamage[job.takerSide][job.takerUnit];
   const remaining = Math.max(0, available - alreadyDamaged);
   result.kills = Math.min(result.kills, remaining);
-  roundTargetDamage[job.defenderSide][job.defenderUnit] += result.kills;
+  roundTargetDamage[job.takerSide][job.takerUnit] += result.kills;
   recorder.recordFinalKills(result);
 }
 
@@ -1151,7 +1207,7 @@ function commitRound(cancelled: CancelledAttack[], results: DamageJobResult[], f
   commitRoundCounters(cancelled, results, runtime);
   const losses: Record<SideId, Record<UnitType, number>> = { attacker: emptyTroops(), defender: emptyTroops() };
   for (const { job, result } of results) {
-    losses[job.defenderSide][job.defenderUnit] += result.kills;
+    losses[job.takerSide][job.takerUnit] += result.kills;
   }
   for (const side of ["attacker", "defender"] as SideId[]) {
     for (const unit of UNIT_TYPES) {
@@ -1162,12 +1218,12 @@ function commitRound(cancelled: CancelledAttack[], results: DamageJobResult[], f
 
 function commitRoundCounters(cancelled: CancelledAttack[], results: DamageJobResult[], runtime: Runtime): void {
   for (const entry of cancelled) {
-    runtime.counters.attacks[entry.intent.attackerSide][entry.intent.attackerUnit] += 1;
-    runtime.counters.received[entry.intent.defenderSide][entry.intent.defenderUnit] += 1;
+    runtime.counters.attacks[entry.intent.dealerSide][entry.intent.dealerUnit] += 1;
+    runtime.counters.received[entry.intent.takerSide][entry.intent.takerUnit] += 1;
   }
   for (const { job, result } of results) {
-    runtime.counters.attacks[job.attackerSide][job.attackerUnit] += 1;
-    runtime.counters.received[job.defenderSide][job.defenderUnit] += 1;
+    runtime.counters.attacks[job.dealerSide][job.dealerUnit] += 1;
+    runtime.counters.received[job.takerSide][job.takerUnit] += 1;
   }
 }
 
@@ -1228,7 +1284,7 @@ export function signedRemainingScore(result: BattleResult): number {
 
 function bearScore(attacks: AttackOutcome[]): number {
   return attacks
-    .filter((attack) => attack.attackerSide === "attacker" && attack.defenderSide === "defender")
+    .filter((attack) => attack.dealerSide === "attacker" && attack.takerSide === "defender")
     .reduce((sum, attack) => sum + attack.kills, 0);
 }
 
