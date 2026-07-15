@@ -45,6 +45,44 @@ test("runOptimizeRatio evaluates candidate battles in fast simulator mode", asyn
   assert.deepEqual(calls.map((options) => options.mode), calls.map(() => "fast"));
 });
 
+test("adaptive progress is battle-weighted and tightens totals after deduplication", async () => {
+  const progress: Array<[number, number]> = [];
+  const timings: Array<{ stage: string; compositions: number; replicatesPerComposition: number; simulations: number; totalMs: number }> = [];
+  const payload = {
+    ...sampleOptimizePayload(),
+    search_mode: "adaptive" as const,
+    adaptive_phase1_replicates: 2,
+    adaptive_phase2_replicates: 3,
+    adaptive_final_replicates: 5,
+  };
+
+  await runOptimizeRatio(payload, {
+    config: loadSimulatorConfig(),
+    runBattles: (_input, _config, seeds) => seeds.map(() => fakeBattleResult()),
+    onProgress: (done, total) => progress.push([done, total]),
+    onStageTiming: (timing) => timings.push(timing),
+  });
+
+  assert.deepEqual(progress.at(-1), [10, 10]);
+  assert.ok(progress.some(([done, total]) => done === 5 && total === 205));
+  assert.ok(progress.some(([done, total]) => done === 5 && total === 10));
+  assert.equal(progress.every(([done, total]) => done <= total), true);
+  assert.deepEqual(
+    timings.map(({ stage, compositions, replicatesPerComposition, simulations }) => ({
+      stage,
+      compositions,
+      replicatesPerComposition,
+      simulations,
+    })),
+    [
+      { stage: "coarse", compositions: 1, replicatesPerComposition: 2, simulations: 2 },
+      { stage: "local", compositions: 1, replicatesPerComposition: 3, simulations: 3 },
+      { stage: "finalist", compositions: 1, replicatesPerComposition: 5, simulations: 5 },
+    ],
+  );
+  assert.equal(timings.every(({ totalMs }) => totalMs >= 0), true);
+});
+
 function sampleOptimizePayload(): OptimizeRatioRequestPayload {
   return {
     attacker: sampleSide({ infantry: 10, lancer: 0, marksman: 0 }),

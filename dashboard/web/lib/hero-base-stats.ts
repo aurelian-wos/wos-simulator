@@ -11,7 +11,8 @@ export type HeroStatCategory =
   | "S4"
   | "S5"
   | "S6"
-  | "S7";
+  | "S7"
+  | "S8";
 
 export interface HeroBaseStats {
   attack: number;

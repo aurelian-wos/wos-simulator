@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
+import { EditableNumberInput } from "@/components/EditableNumberInput";
 import { runWorkerTournament } from "@/lib/simulator/worker-client";
 import {
   JOINER_POOL,
@@ -417,11 +418,11 @@ function NumberField({ label, value, min, onChange }: { label: string; value: nu
   return (
     <label className="block text-xs text-slate-300">
       {label}
-      <input
-        type="number"
+      <EditableNumberInput
         value={value}
         min={min}
-        onChange={(event) => onChange(Math.max(min ?? Number.NEGATIVE_INFINITY, Number(event.target.value) || 0))}
+        parse="int"
+        onValueChange={(next) => onChange(Math.max(min ?? Number.NEGATIVE_INFINITY, next))}
         className="mt-1 h-9 w-full rounded border bg-slate-950 px-2 text-sm text-slate-100"
         style={{ borderColor: "var(--border-color)" }}
       />
@@ -433,13 +434,12 @@ function DecimalField({ label, value, min, max, step, onChange }: { label: strin
   return (
     <label className="block text-xs text-slate-300">
       {label}
-      <input
-        type="number"
+      <EditableNumberInput
         value={value}
         min={min}
         max={max}
         step={step}
-        onChange={(event) => onChange(clamp(Number(event.target.value) || 0, min, max))}
+        onValueChange={(next) => onChange(clamp(next, min, max))}
         className="mt-1 h-9 w-full rounded border bg-slate-950 px-2 text-sm text-slate-100"
         style={{ borderColor: "var(--border-color)" }}
       />

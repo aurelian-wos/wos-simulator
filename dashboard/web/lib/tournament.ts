@@ -122,14 +122,17 @@ export interface TournamentRunOptions {
 
 export const MAIN_POOL: Record<string, MainHeroRole> = {
   Edith: "inf",
+  Gatot: "inf",
   Hector: "inf",
   "Wu Ming": "inf",
   Gordon: "lanc",
   Mia: "lanc",
   Philly: "lanc",
+  Sonya: "lanc",
   Alonso: "mark",
   Bradley: "mark",
   Greg: "mark",
+  Hendrik: "mark",
   Wayne: "mark",
 };
 

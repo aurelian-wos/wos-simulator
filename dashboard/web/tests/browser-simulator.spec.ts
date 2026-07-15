@@ -1,5 +1,45 @@
 import { expect, test } from "@playwright/test";
 
+test("numeric fields can be cleared before typing a replacement", async ({
+  page,
+}) => {
+  await page.goto("/simulate");
+
+  const simulateReplicates = page.getByRole("spinbutton", {
+    name: "Replicates",
+  });
+  await simulateReplicates.fill("");
+  await expect(simulateReplicates).toHaveValue("");
+  await simulateReplicates.pressSequentially("5000");
+  await simulateReplicates.blur();
+  await expect(simulateReplicates).toHaveValue("5000");
+
+  const troopCount = page
+    .locator('input[aria-label="infantry troop count"]')
+    .first();
+  await troopCount.fill("");
+  await expect(troopCount).toHaveValue("");
+  await troopCount.pressSequentially("5000");
+  await troopCount.blur();
+  await expect(troopCount).toHaveValue("5000");
+
+  await page.goto("/bear");
+  const bearReplicates = page.getByRole("spinbutton", { name: "Replicates" });
+  await bearReplicates.fill("");
+  await expect(bearReplicates).toHaveValue("");
+  await bearReplicates.pressSequentially("5000");
+  await bearReplicates.blur();
+  await expect(bearReplicates).toHaveValue("5000");
+
+  await page.goto("/tournament");
+  const totalTroops = page.getByRole("spinbutton", { name: "Total troops" });
+  await totalTroops.fill("");
+  await expect(totalTroops).toHaveValue("");
+  await totalTroops.pressSequentially("5000");
+  await totalTroops.blur();
+  await expect(totalTroops).toHaveValue("5000");
+});
+
 test("server compute routes are removed", async ({ request }) => {
   await expect((await request.post("/api/simulate")).status()).toBe(404);
   await expect((await request.post("/api/simulate/optimize-ratio")).status()).toBe(404);

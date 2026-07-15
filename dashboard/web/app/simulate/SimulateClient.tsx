@@ -84,9 +84,11 @@ import {
 import { readJsonOrThrow } from "@/lib/simulate/api";
 import {
   buildInitialSavedRunState,
+  MAX_SURFACE_JOBS,
   savedRunToFormState,
   type SavedRunMeta,
 } from "@/lib/simulate/saved-run-state";
+import { recommendedBrowserWorkerCount } from "@/lib/simulator/worker-count";
 import {
   attackerSurfaceValues,
   defenderSurfaceValues,
@@ -118,6 +120,13 @@ const SIDE_LABELS: Record<Side, string> = {
   attacker: "Attacker",
   defender: "Defender",
 };
+
+function defaultSurfaceJobsForBrowser(): number {
+  return Math.min(
+    MAX_SURFACE_JOBS,
+    recommendedBrowserWorkerCount(window.navigator.hardwareConcurrency),
+  );
+}
 const RECENT_RUNS_PAGE_SIZE = 20;
 const DEFAULT_PAGE_TITLE = "Simulate Battle - WOS Simulator Dashboard";
 const AUTO_SELECT_INPUT_TYPES = new Set([
@@ -642,6 +651,11 @@ export default function SimulateClient({
   }, []);
 
   useEffect(() => {
+    if (initialRunId || initialSavedRun) return;
+    setSurfaceJobs(defaultSurfaceJobsForBrowser());
+  }, [initialRunId, initialSavedRun]);
+
+  useEffect(() => {
     const workspace = workspaceRef.current;
     const actionDock = actionDockRef.current;
     if (!workspace || !actionDock) return;
@@ -878,7 +892,7 @@ export default function SimulateClient({
       setRunOptionsOpen(false);
       setSurfacePointsPerEdge(plainState.surfacePointsPerEdge);
       setSurfaceReplicates(plainState.surfaceReplicates);
-      setSurfaceJobs(plainState.surfaceJobs);
+      setSurfaceJobs(defaultSurfaceJobsForBrowser());
       setSimulateProgress(null);
       setOptimizeProgress(null);
       setSurfaceProgress(null);
@@ -1103,7 +1117,7 @@ export default function SimulateClient({
     setRunMode("optimise");
     setOptimizeLoading(true);
     resetRunOutputs();
-    setOptimizeProgress({ done: 0, total: estimatedOptimizeCompositions });
+    setOptimizeProgress({ done: 0, total: estimatedOptimizeBattles });
     try {
       const basePayload = toApiPayload(
         attacker,
@@ -1429,7 +1443,7 @@ export default function SimulateClient({
           progress: {
             active: optimizeLoading,
             done: optimizeProgress?.done ?? 0,
-            total: optimizeProgress?.total ?? estimatedOptimizeCompositions,
+            total: optimizeProgress?.total ?? estimatedOptimizeBattles,
           },
           error: optimizeError,
           primaryLabel: optimizeLoading ? "Optimising..." : "Optimise ratio",

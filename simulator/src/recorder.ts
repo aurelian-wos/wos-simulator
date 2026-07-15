@@ -56,8 +56,8 @@ export interface DamageJobRecorder {
  */
 export interface BattleRecorder {
   startDamageJob(): DamageJobRecorder;
+  recordSkillTriggerAttempt(skill: ResolvedSkill): void;
   recordSkillTriggered(skill: ResolvedSkill): void;
-  recordSkillActivated(skill: ResolvedSkill): void;
   recordSkillEffectActivated(skill: ResolvedSkill): void;
   recordSkillDamageJob(job: DamageJob, effect: ActiveEffect): void;
   recordBattleOrder(intentId: string, effect: ActiveEffect, chosenTarget: UnitType): void;
@@ -96,8 +96,8 @@ export class NullRecorder implements BattleRecorder {
   }
 
   recordBattleOrder() {}
+  recordSkillTriggerAttempt() {}
   recordSkillTriggered() {}
-  recordSkillActivated() {}
   recordSkillEffectActivated() {}
   recordSkillDamageJob() {}
   recordScheduledDamageJob() {}
@@ -165,11 +165,9 @@ export class BasicInfoRecorder implements BattleRecorder {
     return new BasicDamageJobRecorder();
   }
 
-  recordSkillTriggered(skill: ResolvedSkill): void {
-    this.incrementSkillReport(skill, "triggersSeen");
-  }
+  recordSkillTriggerAttempt(_skill: ResolvedSkill): void {}
 
-  recordSkillActivated(skill: ResolvedSkill): void {
+  recordSkillTriggered(skill: ResolvedSkill): void {
     this.incrementSkillReport(skill, "skillActivations");
   }
 
@@ -275,7 +273,7 @@ export class BasicInfoRecorder implements BattleRecorder {
     this.skillDamageKeys.clear();
   }
 
-  private incrementSkillReport(skill: ResolvedSkill, field: "triggersSeen" | "skillActivations" | "effectActivations"): void {
+  protected incrementSkillReport(skill: ResolvedSkill, field: "triggersSeen" | "skillActivations" | "effectActivations"): void {
     const report = this.skillReports[skill.side].get(skillReportKey(skill));
     if (report) report[field] += 1;
   }
@@ -292,6 +290,10 @@ export class FullTraceRecorder extends BasicInfoRecorder {
 
   override startDamageJob(): DamageJobRecorder {
     return new FullDamageJobRecorder();
+  }
+
+  override recordSkillTriggerAttempt(skill: ResolvedSkill): void {
+    this.incrementSkillReport(skill, "triggersSeen");
   }
 
   override recordScheduledDamageJob(job: DamageJob): void {

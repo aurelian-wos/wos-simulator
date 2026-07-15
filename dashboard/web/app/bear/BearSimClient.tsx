@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type FocusEventHandler, type MouseEventHandler } from "react";
+import { EditableNumberInput } from "@/components/EditableNumberInput";
 import OptimizeRatioScatterChart from "@/components/OptimizeRatioScatterChart";
 import PlayerStatProfileModal from "@/components/PlayerStatProfileModal";
 import SimulateOutcomeChart from "@/components/SimulateOutcomeChart";
@@ -930,12 +931,12 @@ export default function BearSimClient({
           <div className="sim-runbar mb-4 sm:mb-6" data-testid="bear-runbar">
             <label className="flex min-w-0 flex-col gap-1">
               <span className="text-[10px] font-black uppercase tracking-wider" style={{ color: "var(--sim-muted)" }}>Replicates</span>
-              <input
-                type="number"
+              <EditableNumberInput
                 min={1}
                 max={5000}
                 value={replicates}
-                onChange={(event) => setReplicates(Math.max(1, Math.min(5000, parseInt(event.target.value || "1", 10))))}
+                parse="int"
+                onValueChange={(value) => setReplicates(Math.max(1, Math.min(5000, value)))}
                 className="sim-input font-mono text-sm tabular-nums"
                 style={{ textAlign: "right" }}
               />
@@ -1197,13 +1198,12 @@ function SmallNumberInput({ label, value, onChange, min, max, disabled = false }
   return (
     <label className="flex flex-col gap-1">
       <span className="sim-field-label">{label}</span>
-      <input
-        type="number"
+      <EditableNumberInput
         min={min}
         max={max}
         disabled={disabled}
         value={value}
-        onChange={(event) => onChange(Math.max(min, Math.min(max, parseFloat(event.target.value || String(min)))))}
+        onValueChange={(next) => onChange(Math.max(min, Math.min(max, next)))}
         className="sim-input min-h-[42px] px-3 py-2 text-right font-mono text-sm tabular-nums"
         style={{ opacity: disabled ? 0.55 : 1 }}
       />

@@ -1,0 +1,107 @@
+{
+  "name": "Hendrik",
+  "hero_generation": "S8",
+  "troop_type": "marksman",
+  "skills": {
+    "WormsRavage": {
+      "description": "Captain Hendrik commands a gigantic naval shipworm to gnaw at the enemies' armor, reducing all enemy troops' Defense by X%.",
+      "trigger": {
+        "type": "battle_start"
+      },
+      "effects": {
+        "WormsRavage/1": {
+          "type": "active.hero.defense.down",
+          "value": [
+            5,
+            10,
+            15,
+            20,
+            25
+          ],
+          "units": {
+            "applies_to": "enemy.any"
+          }
+        }
+      }
+    },
+    "ArmorOfBarnacles": {
+      "description": "Hendrik covers all friendly Troops with a layer of hard-shelled barnacles every 4 turns, increasing their Defense by X% for 2 turns.",
+      "trigger": {
+        "type": "turn",
+        "every": 4
+      },
+      "effects": {
+        "ArmorOfBarnacles/1": {
+          "type": "active.hero.defense.up",
+          "value": [
+            6,
+            12,
+            18,
+            24,
+            30
+          ],
+          "duration": {
+            "turns": {
+              "count": 2
+            }
+          },
+          "same_effect_stacking": "max"
+        }
+      }
+    },
+    "DragonsHeir": {
+      "description": "Every 3 turns, the ancient abyssal spirit's descendants will work together with Hendrik's Marksmen to launch an attack, dealing X% damage to all enemies.",
+      "trigger": {
+        "type": "turn",
+        "every": 3,
+        "source": "marksman"
+      },
+      "effects": {
+        "DragonsHeir/1": {
+          "type": "active.hero.damage.up",
+          "value": [
+            8,
+            16,
+            24,
+            32,
+            40
+          ],
+          "units": {
+            "applies_to": "trigger.source",
+            "applies_vs": "trigger.target"
+          },
+          "duration": {
+            "attacks": {
+              "count": 1
+            }
+          }
+        }
+      }
+    },
+    "AbyssalBlessing": {
+      "description": "Widget bonus: Increase Attack by X% for all troops when rallying.",
+      "trigger": {
+        "type": "battle_start"
+      },
+      "requirements": [
+        {
+          "level": 1,
+          "type": "engagement_type",
+          "value": "rally"
+        }
+      ],
+      "effects": {
+        "AbyssalBlessing/1": {
+          "type": "passive.attack.up",
+          "value": [
+            5,
+            7.5,
+            10,
+            12.5,
+            15
+          ]
+        }
+      }
+    }
+  }
+}

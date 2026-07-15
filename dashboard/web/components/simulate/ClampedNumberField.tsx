@@ -1,5 +1,7 @@
 "use client";
 
+import { EditableNumberInput } from "@/components/EditableNumberInput";
+
 export function ClampedNumberField({
   className = "sim-input min-h-[42px] px-3 py-2 text-right font-mono text-sm tabular-nums",
   inputMode,
@@ -28,19 +30,16 @@ export function ClampedNumberField({
   return (
     <label className={wrapperClassName}>
       <span className="sim-field-label">{label}</span>
-      <input
-        type="number"
+      <EditableNumberInput
         name={name}
         min={min}
         max={max}
         inputMode={inputMode}
         value={value}
-        onChange={(e) => {
-          const raw = e.target.value || String(min);
-          const parsed = parse === "float" ? parseFloat(raw) : parseInt(raw, 10);
-          const finite = Number.isFinite(parsed) ? parsed : min;
-          onChange(Math.max(min, max === undefined ? finite : Math.min(max, finite)));
-        }}
+        parse={parse}
+        onValueChange={(parsed) =>
+          onChange(Math.max(min, max === undefined ? parsed : Math.min(max, parsed)))
+        }
         placeholder={placeholder}
         className={className}
       />

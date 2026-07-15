@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp } from "node:fs/promises";
+import { appendFile, mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -186,4 +186,21 @@ test("simulation store filters and pages PvP, bear, and ratio explorer run histo
     kinds: ["ratio_explorer"],
   });
   assert.deepEqual(ratioExplorerPage.runs.map((run: SavedSimulationRunListItem) => run.kind), ["ratio_explorer"]);
+});
+
+test("simulation run listing does not read the saved result payload", async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "wos-sim-runs-"));
+  process.env.SIM_RUNS_DIR = dir;
+  const store = await import(`./simulation-store.ts?case=${Date.now()}`);
+
+  const saved = await store.saveSimulationRun("simulate", pvpRequest, pvpResult);
+  await appendFile(
+    path.join(dir, `${saved.id}.json`),
+    "this makes the result payload invalid JSON",
+    "utf8",
+  );
+
+  const page = await store.listSimulationRunsPage({ limit: 20 });
+  assert.equal(page.runs.length, 1);
+  assert.equal(page.runs[0]?.id, saved.id);
 });

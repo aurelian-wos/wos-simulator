@@ -72,6 +72,9 @@ export function assertStaticPassiveEffectDefinition(
   if (trigger.type !== "battle_start") {
     throw new Error(`passive effect ${effect.type} must use battle_start trigger at ${path}`);
   }
+  if (trigger.probability !== undefined) {
+    throw new Error(`passive effect ${effect.type} cannot define trigger probability at ${path}; passive effects must be deterministic`);
+  }
   if (effect.value_evolution !== undefined) {
     throw new Error(`passive effect ${effect.type} cannot define value_evolution at ${path}; passive effects must be static`);
   }

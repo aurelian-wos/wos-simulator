@@ -11,6 +11,8 @@ export const DEFAULT_OPTIMIZE_SIDE = "attacker" as const;
 export const ADAPTIVE_PHASE1_REPLICATES = 20;
 export const ADAPTIVE_PHASE2_REPLICATES = 20;
 export const ADAPTIVE_FINAL_REPLICATES = 200;
+export const MAX_ADAPTIVE_PRELIMINARY_REPLICATES = 500;
+export const MAX_ADAPTIVE_FINAL_REPLICATES = 2_000;
 export const ADAPTIVE_MAX_PHASE2_SEEDS = 30;
 export const ADAPTIVE_LOCAL_NEIGHBOURS_PER_SEED = 49;
 export const ADAPTIVE_MAX_FINALISTS = 40;
@@ -85,7 +87,7 @@ export function estimateAdaptiveCompositionCount(
 ): number {
   // 5% grid with infantry constrained to 30%-70% plus bounded local/final
   // phases. The exact local candidate count depends on phase-1 rankings, so
-  // this is intentionally a stable worst-case progress estimate for the UI.
+  // this is intentionally a stable worst-case composition estimate for the UI.
   return (
     estimateAdaptivePhase1Count(minPct, maxPct) +
     ADAPTIVE_MAX_PHASE2_SEEDS * ADAPTIVE_LOCAL_NEIGHBOURS_PER_SEED +
@@ -108,10 +110,14 @@ export function estimateAdaptiveBattleCount(
   );
 }
 
-function normaliseAdaptiveReplicateCount(value: unknown, fallback: number): number {
+function normaliseAdaptiveReplicateCount(
+  value: unknown,
+  fallback: number,
+  maximum: number,
+): number {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return fallback;
-  return Math.max(1, Math.min(500, Math.floor(parsed)));
+  return Math.max(1, Math.min(maximum, Math.floor(parsed)));
 }
 
 export function resolveAdaptiveSearchSettings(
@@ -121,14 +127,17 @@ export function resolveAdaptiveSearchSettings(
     adaptive_phase1_replicates: normaliseAdaptiveReplicateCount(
       settings?.adaptive_phase1_replicates,
       ADAPTIVE_PHASE1_REPLICATES,
+      MAX_ADAPTIVE_PRELIMINARY_REPLICATES,
     ),
     adaptive_phase2_replicates: normaliseAdaptiveReplicateCount(
       settings?.adaptive_phase2_replicates,
       ADAPTIVE_PHASE2_REPLICATES,
+      MAX_ADAPTIVE_PRELIMINARY_REPLICATES,
     ),
     adaptive_final_replicates: normaliseAdaptiveReplicateCount(
       settings?.adaptive_final_replicates,
       ADAPTIVE_FINAL_REPLICATES,
+      MAX_ADAPTIVE_FINAL_REPLICATES,
     ),
   };
 }

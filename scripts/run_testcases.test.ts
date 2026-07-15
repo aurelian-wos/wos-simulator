@@ -168,6 +168,7 @@ test("cli stdout --print-failing includes standard traces for failing testcases"
   assert.match(human, /Failing testcase standard traces/);
   assert.match(human, /failing_case \(testcases\/failing\.json#0\)/);
   assert.match(human, /"damage": 123/);
+  assert.match(human, /Final totals\nTestcases run: 1\nFailed vs game: 1\nImproved vs game: 0\nWorse vs game: 0\nAverage signed error: -1\.00%\n$/);
 });
 
 test("cli --workers runs testcase cases through worker pool", () => {
@@ -350,6 +351,34 @@ test("cli --human writes a readable testcase summary table", () => {
   assert.throws(() => JSON.parse(result.stdout), "human output should not be JSON");
 });
 
+test("cli --human compares with the latest prior summary", () => {
+  const outputDir = tempDir("simulator-parity-human-previous");
+  const previous = summaryReport([["simple_001", false, 5]]);
+  Object.values(previous.testcases)[0]!.file = "testcases/emulator_verified/simple_001_nc.json";
+  writeFileSync(resolve(outputDir, "previous.json"), JSON.stringify(previous));
+
+  const result = spawnSync(
+    "npx",
+    [
+      "--yes",
+      "tsx",
+      "scripts/run_testcases.ts",
+      "--matching",
+      "simple_001",
+      "--repeat",
+      "1",
+      "--output-dir",
+      outputDir,
+      "--no-run-snapshot",
+      "--human",
+    ],
+    { cwd: repoRoot, encoding: "utf8" },
+  );
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /Final totals\nTestcases run: 1\nFailed vs game: 0\nImproved vs game: 1\nWorse vs game: 0\nAverage signed error: \+0\.00%\n$/);
+});
+
 test("human summary shows ten individual runs for failing repeated stochastic testcases", () => {
   const text = formatHumanSummary({
     reportKind: "simulator-parity-summary",
@@ -433,6 +462,27 @@ test("human summary shows ten individual runs for failing repeated stochastic te
   assert.match(text, /#1\s+Molly,Bahiti i:1000 l:200 m:30\s+Sergey i:900 l:100 m:20\s+i:80 l:20 m:0 \(100\)\s+i:40 l:10 m:0 \(50\)\s+50\s+-50\s+2\s+4\.50\s+<1e-12/);
   assert.match(text, /#10\s+Molly,Bahiti i:1000 l:200 m:30\s+Sergey i:900 l:100 m:20\s+i:89 l:20 m:0 \(109\)\s+i:49 l:10 m:0 \(59\)\s+50/);
   assert.doesNotMatch(text, /#11\s+Molly/);
+});
+
+test("human stdout ends with dashboard-equivalent run totals", () => {
+  const previous = summaryReport([
+    ["transition_improved", false, 2],
+    ["bias_improved", true, -3],
+    ["transition_worse", true, 1],
+    ["bias_worse", false, 1],
+    ["signed_only", true, -2],
+  ]);
+  const current = summaryReport([
+    ["transition_improved", true, 1.5],
+    ["bias_improved", true, -1],
+    ["transition_worse", false, 0.5],
+    ["bias_worse", false, 2],
+    ["signed_only", true, 2],
+    ["new_failure", false, -3],
+  ]);
+
+  const text = formatStdout(current, { human: true, printFailing: false }, previous);
+  assert.match(text, /Final totals\nTestcases run: 6\nFailed vs game: 3\nImproved vs game: 2\nWorse vs game: 2\nAverage signed error: \+0\.33%\n$/);
 });
 
 test("human summary does not count missing legacy baseline rows as warnings", () => {
@@ -616,6 +666,54 @@ function tempDir(prefix: string): string {
   const dir = resolve(tmpdir(), `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`);
   mkdirSync(dir, { recursive: true });
   return dir;
+}
+
+function summaryReport(entries: Array<[testcaseId: string, passes: boolean, biasPct: number]>): TestcaseRunReport {
+  return {
+    reportKind: "simulator-parity-summary",
+    schemaVersion: 1,
+    createdAt: "2026-01-02T03:04:05.000Z",
+    options: { repeat: 1 },
+    counts: {
+      filesFound: entries.length,
+      testcasesFound: entries.length,
+      executed: entries.length,
+      warnings: 0,
+      errors: 0,
+      comparedToGame: entries.length,
+      comparedToBaseline: 0,
+    },
+    warnings: [],
+    errors: [],
+    testcases: Object.fromEntries(entries.map(([testcaseId, passes, biasPct]) => [
+      `testcases/${testcaseId}.json#0`,
+      {
+        file: `testcases/${testcaseId}.json`,
+        testcase_id: testcaseId,
+        idx: 0,
+        deterministic: true,
+        sampleCount: 1,
+        game: {
+          n_candidate: 1,
+          mu_candidate: 100 + biasPct,
+          sigma_candidate: 0,
+          n_reference: 1,
+          mu_reference: 100,
+          sigma_reference: 0,
+          bias_raw: biasPct,
+          bias_pct: biasPct,
+          sem: 0,
+          stat_type: "deterministic",
+          stat: null,
+          p: null,
+          q: null,
+          passes,
+        },
+        baseline: null,
+      },
+    ])),
+    details: [],
+  };
 }
 
 function runCliWithFixedDate(outputDir: string, preloadPath: string, fixedDate: string): SpawnSyncReturns<string> {

@@ -2,12 +2,15 @@
 
 import type { Dispatch, SetStateAction } from "react";
 import {
+  MAX_ADAPTIVE_FINAL_REPLICATES,
+  MAX_ADAPTIVE_PRELIMINARY_REPLICATES,
   recommendedOptimizeStep,
   type OptimizeSearchMode,
   type OptimizeSide,
 } from "@/lib/optimize-ratio";
 import { ClampedNumberField, NumberStringField } from "./ClampedNumberField";
 import { ProgressBar } from "./SharedSimComponents";
+import { MAX_SURFACE_JOBS } from "@/lib/simulate/saved-run-state";
 
 export type RunMode = "simulate" | "optimise" | "explore";
 
@@ -207,7 +210,7 @@ export function RunModeCommandBar({
                     label="Coarse reps"
                     name="optimise.adaptive.phase1Replicates"
                     min={1}
-                    max={500}
+                    max={MAX_ADAPTIVE_PRELIMINARY_REPLICATES}
                     value={adaptivePhase1Replicates}
                     onChange={setAdaptivePhase1Replicates}
                   />
@@ -215,7 +218,7 @@ export function RunModeCommandBar({
                     label="Local reps"
                     name="optimise.adaptive.phase2Replicates"
                     min={1}
-                    max={500}
+                    max={MAX_ADAPTIVE_PRELIMINARY_REPLICATES}
                     value={adaptivePhase2Replicates}
                     onChange={setAdaptivePhase2Replicates}
                   />
@@ -223,7 +226,7 @@ export function RunModeCommandBar({
                     label="Final reps"
                     name="optimise.adaptive.finalReplicates"
                     min={1}
-                    max={500}
+                    max={MAX_ADAPTIVE_FINAL_REPLICATES}
                     value={adaptiveFinalReplicates}
                     onChange={setAdaptiveFinalReplicates}
                   />
@@ -308,7 +311,7 @@ export function RunModeCommandBar({
                 label="Workers"
                 name="explore.workers"
                 min={1}
-                max={16}
+                max={MAX_SURFACE_JOBS}
                 value={surfaceJobs}
                 onChange={setSurfaceJobs}
               />

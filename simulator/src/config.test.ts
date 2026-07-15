@@ -198,10 +198,18 @@ test("loadSimulatorConfig rejects passive effects that are not battle-start stat
     },
     { type: "battle_start" }
   );
+  const probabilityRoot = writeConfigWithTroopEffect(
+    {
+      type: "passive.attack.up",
+      value: 10
+    },
+    { type: "battle_start", probability: 50 }
+  );
 
   assert.throws(() => loadSimulatorConfigFromDir(turnRoot), /passive.*battle_start/i);
   assert.throws(() => loadSimulatorConfigFromDir(durationRoot), /passive.*battle.*duration/i);
   assert.throws(() => loadSimulatorConfigFromDir(evolvingRoot), /passive.*value_evolution/i);
+  assert.throws(() => loadSimulatorConfigFromDir(probabilityRoot), /passive.*probability.*deterministic/i);
 });
 
 test("loadSimulatorConfig rejects invalid trigger_damage_jobs selector strings", () => {

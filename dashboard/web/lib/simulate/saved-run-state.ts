@@ -38,6 +38,7 @@ import {
 export const DEFAULT_SURFACE_POINTS_PER_EDGE = 11;
 export const DEFAULT_SURFACE_REPLICATES = 5;
 export const DEFAULT_SURFACE_JOBS = 4;
+export const MAX_SURFACE_JOBS = 16;
 
 export interface SavedRunMeta {
   id: string;
@@ -174,7 +175,12 @@ export function savedRunToFormState(
         1,
         50,
       ),
-      surfaceJobs: clampInteger(surfaceRequest.jobs, DEFAULT_SURFACE_JOBS, 1, 16),
+      surfaceJobs: clampInteger(
+        surfaceRequest.jobs,
+        DEFAULT_SURFACE_JOBS,
+        1,
+        MAX_SURFACE_JOBS,
+      ),
       surfaceShownPointsPerEdge: pointsPerEdge,
     };
   }

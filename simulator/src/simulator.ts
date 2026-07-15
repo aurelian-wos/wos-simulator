@@ -238,9 +238,9 @@ function setupRuntime(
 function recordPreparedBattleStartSkills(runtime: Runtime, recorder: BattleRecorder): void {
   for (const skill of runtime.skills.battleStart) {
     if (!skillMatchesTrigger(skill, "battle_start", 0)) continue;
-    recorder.recordSkillTriggered(skill);
+    recorder.recordSkillTriggerAttempt(skill);
     if (!chancePasses(skill, runtime.rng)) continue;
-    recorder.recordSkillActivated(skill);
+    recorder.recordSkillTriggered(skill);
     for (const _effect of skill.effects) recorder.recordSkillEffectActivated(skill);
   }
 }
@@ -503,9 +503,9 @@ function triggerRoundStartSkills(
     const side = roundTriggerSourceSide(skill);
     const defenderSide = roundTriggerTargetSide(skill, side);
     if (!skillMatchesTrigger(skill, "round_start", round)) continue;
-    recorder.recordSkillTriggered(skill);
+    recorder.recordSkillTriggerAttempt(skill);
     if (!chancePasses(skill, runtime.rng)) continue;
-    recorder.recordSkillActivated(skill);
+    recorder.recordSkillTriggered(skill);
     let orderIndex = 0;
     for (const attackerUnit of roundTriggerUnits(skill, roundStartTroops)) {
       const defenderUnit = chooseDefenderUnit(attackerUnit, side, defenderSide, roundStartTroops, runtime.effectIndex, round);
@@ -826,9 +826,9 @@ function triggerSkills(
   const activated: ActiveEffect[] = [];
   for (const skill of skills) {
     if (!skillMatchesTrigger(skill, triggerType, round, intent)) continue;
-    recorder.recordSkillTriggered(skill);
+    recorder.recordSkillTriggerAttempt(skill);
     if (!chancePasses(skill, runtime.rng)) continue;
-    recorder.recordSkillActivated(skill);
+    recorder.recordSkillTriggered(skill);
     for (const effectIntent of skill.effects) {
       const effect = activateEffect(skill, effectIntent, round, intent);
       addActiveEffect(runtime, effect);

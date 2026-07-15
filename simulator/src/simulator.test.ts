@@ -156,7 +156,11 @@ test("fast, standard, and trace recorders expose their complete output contracts
   const traceAttacksWithoutEquations = trace.attacks.map(({ trace: _equation, ...attack }) => attack);
   const standardAttacksWithoutEquations = standard.attacks.map(({ trace: _equation, ...attack }) => attack);
   assert.deepEqual(traceAttacksWithoutEquations, standardAttacksWithoutEquations);
-  assert.deepEqual(trace.skillReport, standard.skillReport);
+  const standardSkill = standard.skillReport.attacker.find((entry) => entry.skillId === "RecordedBoost");
+  const traceSkill = trace.skillReport.attacker.find((entry) => entry.skillId === "RecordedBoost");
+  assert.deepEqual(traceSkill && { ...traceSkill, triggersSeen: 0 }, standardSkill);
+  assert.equal(standardSkill?.triggersSeen, 0);
+  assert.equal(traceSkill?.triggersSeen, 1);
   assert.ok(trace.trace);
   assert.deepEqual(trace.trace.resolved, trace.resolved);
   assert.equal(trace.trace.rounds.length, trace.rounds);
@@ -446,13 +450,55 @@ test("round-start trigger source self.any rolls once then creates one target-loc
           }
         }
       }
-    })
+    }),
+    { mode: "trace" }
   );
 
   const report = result.skillReport.attacker.find((entry) => entry.skillId === "RoundFanout");
   assert.equal(report?.triggersSeen, 1);
   assert.equal(report?.skillActivations, 1);
   assert.equal(report?.effectActivations, 2);
+});
+
+test("failed probability gates are recorded as trigger attempts only in trace mode", () => {
+  const input: BattleInput = {
+    maxRounds: 1,
+    attacker: {
+      troops: { infantry_t1: 100 },
+      heroes: { NeverProc: { skill_1: 1 } }
+    },
+    defender: {
+      troops: { infantry_t1: 100 },
+      heroes: {}
+    }
+  };
+  const config = minimalConfig({
+    NeverProc: {
+      name: "NeverProc",
+      skills: {
+        FailedBattleStart: {
+          trigger: { type: "battle_start", probability: 0 },
+          effects: {
+            buff: {
+              type: "active.hero.attack.up",
+              value: 100,
+              units: { applies_to: "self.infantry", applies_vs: "any" }
+            }
+          }
+        }
+      }
+    }
+  });
+
+  const standard = runOnce(input, config);
+  const trace = runOnce(input, config, { mode: "trace" });
+  const standardReport = standard.skillReport.attacker.find((entry) => entry.skillId === "FailedBattleStart");
+  const traceReport = trace.skillReport.attacker.find((entry) => entry.skillId === "FailedBattleStart");
+
+  assert.equal(standardReport?.triggersSeen, 0);
+  assert.equal(standardReport?.skillActivations, 0);
+  assert.equal(traceReport?.triggersSeen, 1);
+  assert.equal(traceReport?.skillActivations, 0);
 });
 
 test("attack trigger source and target selectors match relative to the skill owner", () => {
@@ -485,7 +531,8 @@ test("attack trigger source and target selectors match relative to the skill own
           }
         }
       }
-    })
+    }),
+    { mode: "trace" }
   );
 
   const report = result.skillReport.defender.find((entry) => entry.skillId === "EnemyHitsInfantry");

@@ -1,4 +1,4 @@
-import { runOptimizeRatio, runOptimizeBatchDirect, type OptimizeBatchResult, type OptimizeBatchTask } from "@/lib/simulator/optimise";
+import { runOptimizeRatio, runOptimizeBatchDirect, type OptimizeBatchResult, type OptimizeBatchTask, type OptimizeStageTiming } from "@/lib/simulator/optimise";
 import { runBearOptimizeRatio, runBearSimulation, runBearSimulationTrace } from "@/lib/simulator/bear";
 import { runSimulation, runSimulationBatchDirect, runSimulationTrace, type SimulateBatchResult, type SimulateBatchTask } from "@/lib/simulator/simulate";
 import { runProgressiveSurfaceSweep, runPair, type SurfaceBatchResult, type SurfaceBatchTask } from "@/lib/simulator/surface";
@@ -8,13 +8,15 @@ import { runBattleTasksDirect, runTournament, type BattleSummary, type BattleTas
 import type { SimulatorConfig } from "@simulator/types";
 import { BatchWorkerPool, batchTasksByWeight, type BatchWorker } from "@simulator/workerPool";
 import type { OptimizeRatioRequestPayload, SimulateRequestPayload } from "@/lib/simulate-run";
+import { recommendedBrowserWorkerCount } from "@/lib/simulator/worker-count";
 
 let activeJobId: number | null = null;
 let activeSimulateWorkers: Worker[] = [];
 let activeOptimizeWorkers: Worker[] = [];
 let activeTournamentPool: BatchWorkerPool<BattleTask, BattleSummary, number> | null = null;
 let activeSurfaceWorkers: Worker[] = [];
-const BATTLE_WORKER_COUNT = 8;
+const AVAILABLE_PROCESSORS = Math.max(1, self.navigator.hardwareConcurrency || 1);
+const BATTLE_WORKER_COUNT = recommendedBrowserWorkerCount(AVAILABLE_PROCESSORS);
 const TOURNAMENT_BATCH_WEIGHT = 64;
 
 self.onmessage = (event: MessageEvent<SimulatorWorkerRequest>) => {
@@ -66,11 +68,24 @@ async function handleMessage(request: SimulatorWorkerRequest): Promise<void> {
       });
       postIfActive(request.id, { id: request.id, type: "bearOptimizeResult", data });
     } else if (request.type === "optimizeRatio") {
+      const optimizeStartedAt = performance.now();
+      let totalWorkerMs = 0;
       const data = await runOptimizeRatio(request.payload, {
         seedBase: `optimize:${request.id}`,
         onProgress: (done, total) => postIfActive(request.id, { id: request.id, type: "progress", done, total }),
+        onStageTiming: (timing) => {
+          const activeWorkers = optimizeWorkerCount(timing.compositions);
+          totalWorkerMs += timing.totalMs * activeWorkers;
+          logOptimizeStageTiming(timing, activeWorkers);
+        },
         runBatches: createOptimizeBatchRunner(request.id, BATTLE_WORKER_COUNT),
       });
+      const totalMs = performance.now() - optimizeStartedAt;
+      console.info(
+        `[optimise] total: ${data.compositions_tested.toLocaleString()} ratios, ${data.projected_battles.toLocaleString()} simulations; ` +
+        `${formatDuration(totalMs)} wall time; ${formatAverage(totalWorkerMs, data.projected_battles)} worker-normalized/simulation; ` +
+        `${BATTLE_WORKER_COUNT.toLocaleString()} workers from ${AVAILABLE_PROCESSORS.toLocaleString()} available processors`,
+      );
       postIfActive(request.id, { id: request.id, type: "optimizeResult", data });
     } else if (request.type === "progressiveSurfaceSweep") {
       const data = await runProgressiveSurfaceSweep(request.payload, {
@@ -102,6 +117,33 @@ async function handleMessage(request: SimulatorWorkerRequest): Promise<void> {
   } finally {
     if (activeJobId === request.id) activeJobId = null;
   }
+}
+
+function logOptimizeStageTiming(
+  timing: OptimizeStageTiming,
+  activeWorkers: number,
+): void {
+  const workerNormalizedMs = timing.totalMs * activeWorkers;
+  console.info(
+    `[optimise] ${timing.stage}: ${timing.compositions.toLocaleString()} ratios × ` +
+    `${timing.replicatesPerComposition.toLocaleString()} reps = ${timing.simulations.toLocaleString()} simulations; ` +
+    `${formatDuration(timing.totalMs)} wall time; ${formatAverage(workerNormalizedMs, timing.simulations)} worker-normalized/simulation; ` +
+    `${activeWorkers.toLocaleString()} active workers`,
+  );
+}
+
+function optimizeWorkerCount(compositions: number): number {
+  return Math.max(1, Math.min(BATTLE_WORKER_COUNT, compositions));
+}
+
+function formatDuration(milliseconds: number): string {
+  return milliseconds >= 1_000
+    ? `${(milliseconds / 1_000).toFixed(2)} s`
+    : `${milliseconds.toFixed(1)} ms`;
+}
+
+function formatAverage(totalMs: number, count: number): string {
+  return `${(totalMs / Math.max(1, count)).toFixed(3)} ms`;
 }
 
 function postIfActive(id: number, message: SimulatorWorkerResponse): void {

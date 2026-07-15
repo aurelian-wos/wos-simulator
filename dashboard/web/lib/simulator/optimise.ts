@@ -41,10 +41,21 @@ export interface OptimizeBatchResult {
   point: OptimizeRatioPoint;
 }
 
+export interface OptimizeStageTiming {
+  stage: NonNullable<OptimizeRatioPoint["search_phase"]>;
+  compositions: number;
+  replicatesPerComposition: number;
+  simulations: number;
+  totalMs: number;
+  averageMsPerComposition: number;
+  averageMsPerSimulation: number;
+}
+
 interface RunOptimizeRatioOptions {
   config?: SimulatorConfig;
   seedBase?: string;
   onProgress?: (done: number, total: number) => void;
+  onStageTiming?: (timing: OptimizeStageTiming) => void;
   runBattles?: OptimizeBattleRunner;
   runBatches?: (
     request: OptimizeRatioRequestPayload,
@@ -150,7 +161,19 @@ async function runGridOptimize(
     throw new Error(`Search too expensive: ${projectedBattles} projected battles exceeds the limit of ${MAX_OPTIMIZE_BATTLES}. Increase the grid step or lower search replicates.`);
   }
 
-  const points = await evaluateBatch(request, compositions, replicates, config, battleRunner, options.seedBase ?? "optimize", "grid", 0, compositions.length, options);
+  const points = await evaluateBatch(
+    request,
+    compositions,
+    replicates,
+    config,
+    battleRunner,
+    options.seedBase ?? "optimize",
+    "grid",
+    0,
+    projectedBattles,
+    replicates,
+    options,
+  );
   return finalizeOptimizeResult(request, {
     total,
     step,
@@ -181,13 +204,35 @@ async function runAdaptiveOptimize(
   const phase1Compositions = [...percentageGrid(total, 5, infantryMinPct, infantryMaxPct)];
   if (phase1Compositions.length === 0) throw new Error("No valid 5% grid ratios fit inside the requested infantry range.");
 
-  const estimatedTotal = estimatedAdaptiveCompositions(phase1Compositions.length);
   const seedBase = options.seedBase ?? "optimize";
-  const phase1 = await evaluateBatch(request, phase1Compositions, adaptiveSettings.adaptive_phase1_replicates, config, battleRunner, seedBase, "coarse", 0, estimatedTotal, options);
+  const phase1Battles = phase1Compositions.length * adaptiveSettings.adaptive_phase1_replicates;
+  const estimatedTotalBattles =
+    phase1Battles +
+    ADAPTIVE_MAX_PHASE2_SEEDS * ADAPTIVE_LOCAL_NEIGHBOURS_PER_SEED * adaptiveSettings.adaptive_phase2_replicates +
+    ADAPTIVE_MAX_FINALISTS * adaptiveSettings.adaptive_final_replicates;
+  const phase1 = await evaluateBatch(
+    request,
+    phase1Compositions,
+    adaptiveSettings.adaptive_phase1_replicates,
+    config,
+    battleRunner,
+    seedBase,
+    "coarse",
+    0,
+    estimatedTotalBattles,
+    adaptiveSettings.adaptive_phase1_replicates,
+    options,
+  );
   const optimizeSide = normalizeOptimizeSide(request.optimize_side);
   const topByWin = rankOptimizeRows(phase1, optimizeSide).slice(0, 10);
   const topByMargin = [...phase1].sort((a, b) => b.avg_margin - a.avg_margin).slice(0, 10);
   const phase2Compositions = adaptiveNeighbours(dedupeResults([...topByWin, ...topByMargin]), total, infantryMinPct, infantryMaxPct);
+  const phase2Battles = phase2Compositions.length * adaptiveSettings.adaptive_phase2_replicates;
+  const phase2EstimatedTotalBattles =
+    phase1Battles +
+    phase2Battles +
+    ADAPTIVE_MAX_FINALISTS * adaptiveSettings.adaptive_final_replicates;
+  options.onProgress?.(phase1Battles, phase2EstimatedTotalBattles);
   const phase2 = await evaluateBatch(
     request,
     phase2Compositions,
@@ -196,8 +241,9 @@ async function runAdaptiveOptimize(
     battleRunner,
     seedBase,
     "local",
-    phase1Compositions.length,
-    estimatedTotal,
+    phase1Battles,
+    phase2EstimatedTotalBattles,
+    adaptiveSettings.adaptive_phase2_replicates,
     options
   );
   const topByConservativeWin = [...phase2]
@@ -207,7 +253,9 @@ async function runAdaptiveOptimize(
     .sort((a, b) => (b.conservative_margin ?? 0) - (a.conservative_margin ?? 0) || (b.conservative_win_rate ?? 0) - (a.conservative_win_rate ?? 0))
     .slice(0, ADAPTIVE_MAX_PHASE2_SEEDS);
   const finalists = dedupeResults([...topByConservativeWin, ...topByConservativeMargin]).slice(0, ADAPTIVE_MAX_FINALISTS).map(resultKey);
-  const finalTotal = phase1Compositions.length + phase2Compositions.length + finalists.length;
+  const finalistBattles = finalists.length * adaptiveSettings.adaptive_final_replicates;
+  const actualTotalBattles = phase1Battles + phase2Battles + finalistBattles;
+  options.onProgress?.(phase1Battles + phase2Battles, actualTotalBattles);
   const finalistPoints = await evaluateBatch(
     request,
     finalists,
@@ -216,15 +264,13 @@ async function runAdaptiveOptimize(
     battleRunner,
     seedBase,
     "finalist",
-    phase1Compositions.length + phase2Compositions.length,
-    finalTotal,
+    phase1Battles + phase2Battles,
+    actualTotalBattles,
+    adaptiveSettings.adaptive_final_replicates,
     options
   );
   const points = [...phase1, ...phase2, ...finalistPoints];
-  const projectedBattles =
-    phase1Compositions.length * adaptiveSettings.adaptive_phase1_replicates +
-    phase2Compositions.length * adaptiveSettings.adaptive_phase2_replicates +
-    finalists.length * adaptiveSettings.adaptive_final_replicates;
+  const projectedBattles = actualTotalBattles;
 
   return finalizeOptimizeResult(request, {
     total,
@@ -255,8 +301,10 @@ function evaluateBatch(
   phase: NonNullable<OptimizeRatioPoint["search_phase"]>,
   progressStart: number,
   progressTotal: number,
-  options: Pick<RunOptimizeRatioOptions, "onProgress" | "runBatches">,
+  progressWeight: number,
+  options: Pick<RunOptimizeRatioOptions, "onProgress" | "onStageTiming" | "runBatches">,
 ): Promise<OptimizeRatioPoint[]> {
+  const startedAt = nowMs();
   const tasks = compositions.map((composition, index) => ({
     taskIndex: index,
     composition,
@@ -265,16 +313,31 @@ function evaluateBatch(
     phase,
   }));
   const reportProgress = (done: number) => {
-    options.onProgress?.(progressStart + done, progressTotal);
+    options.onProgress?.(progressStart + done * progressWeight, progressTotal);
   };
   const resultsPromise = options.runBatches
     ? options.runBatches(request, tasks, (done) => reportProgress(done))
     : Promise.resolve(runOptimizeBatchDirect(request, tasks, config, battleRunner, (done) => reportProgress(done)));
-  return resultsPromise.then((results) =>
-    [...results]
+  return resultsPromise.then((results) => {
+    const totalMs = nowMs() - startedAt;
+    const simulations = compositions.length * replicates;
+    options.onStageTiming?.({
+      stage: phase,
+      compositions: compositions.length,
+      replicatesPerComposition: replicates,
+      simulations,
+      totalMs,
+      averageMsPerComposition: totalMs / Math.max(1, compositions.length),
+      averageMsPerSimulation: totalMs / Math.max(1, simulations),
+    });
+    return [...results]
       .sort((a, b) => a.taskIndex - b.taskIndex)
-      .map((result) => result.point),
-  );
+      .map((result) => result.point);
+  });
+}
+
+function nowMs(): number {
+  return globalThis.performance?.now() ?? Date.now();
 }
 
 export function runOptimizeBatchDirect(
@@ -465,10 +528,6 @@ function dedupeResults(results: readonly OptimizeRatioPoint[]): OptimizeRatioPoi
 
 function resultKey(row: OptimizeRatioPoint): Composition {
   return [row.infantry_count, row.lancer_count, row.marksman_count];
-}
-
-function estimatedAdaptiveCompositions(phase1Count: number): number {
-  return phase1Count + ADAPTIVE_MAX_PHASE2_SEEDS * ADAPTIVE_LOCAL_NEIGHBOURS_PER_SEED + ADAPTIVE_MAX_FINALISTS;
 }
 
 function normaliseStep(total: number, rawStep: number): number {

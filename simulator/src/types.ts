@@ -436,7 +436,9 @@ export interface SkillReportEntry {
   skillId: string;
   skillName: string;
   level: number;
+  /** Matching trigger opportunities, including failed probability rolls; populated only in trace mode. */
   triggersSeen: number;
+  /** Successful triggers whose probability gate passed. */
   skillActivations: number;
   effectActivations: number;
   skillKills: number;

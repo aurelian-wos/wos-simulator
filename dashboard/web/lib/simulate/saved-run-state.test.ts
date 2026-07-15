@@ -71,7 +71,7 @@ test("savedRunToFormState hydrates optimize settings from a single parser", () =
   assert.equal(state.optimizeStepInput, "2500");
   assert.equal(state.adaptivePhase1Replicates, 1);
   assert.equal(state.adaptivePhase2Replicates, 12);
-  assert.equal(state.adaptiveFinalReplicates, 500);
+  assert.equal(state.adaptiveFinalReplicates, 600);
   assert.equal(state.optimizeInfantryMinPct, 25);
   assert.equal(state.optimizeInfantryMaxPct, 75);
   assert.equal(state.optimizeSearchMode, "grid");

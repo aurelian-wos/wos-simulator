@@ -1,0 +1,104 @@
+{
+  "name": "Gatot",
+  "hero_generation": "S8",
+  "troop_type": "infantry",
+  "skills": {
+    "GoldenGuard": {
+      "description": "Gatot commands his troops with imperial guard tactics, increasing his Infantry's Defense by X%.",
+      "trigger": {
+        "type": "battle_start"
+      },
+      "effects": {
+        "GoldenGuard/1": {
+          "type": "active.hero.defense.up",
+          "value": [
+            6,
+            12,
+            18,
+            24,
+            30
+          ],
+          "units": {
+            "applies_to": [
+              "infantry"
+            ]
+          }
+        }
+      }
+    },
+    "KingsBestowal": {
+      "description": "The great kings bless Gatot's Infantry, granting Infantry a Shield with protection equal to Attack * X% each time they attack, for 1 turn.",
+      "trigger": {
+        "type": "attack",
+        "source": "infantry"
+      },
+      "effects": {
+        "KingsBestowal/1": {
+          "type": "active.hero.damageTaken.down",
+          "value": [
+            6,
+            12,
+            18,
+            24,
+            30
+          ],
+          "units": {
+            "applies_to": "trigger.source"
+          },
+          "duration": {
+            "turns": {
+              "count": 1
+            }
+          },
+          "same_effect_stacking": "max"
+        }
+      }
+    },
+    "RoyalLegion": {
+      "description": "Gatot's formidable legion instills fear in enemies, reducing their Attack by X%.",
+      "trigger": {
+        "type": "battle_start"
+      },
+      "effects": {
+        "RoyalLegion/1": {
+          "type": "active.hero.attack.down",
+          "value": [
+            5,
+            10,
+            15,
+            20,
+            25
+          ],
+          "units": {
+            "applies_to": "enemy.any"
+          }
+        }
+      }
+    },
+    "IndestructibleCity": {
+      "description": "Widget bonus: Increase Defense by X% for all troops when defending.",
+      "trigger": {
+        "type": "battle_start"
+      },
+      "requirements": [
+        {
+          "level": 1,
+          "type": "engagement_type",
+          "value": "garrison"
+        }
+      ],
+      "effects": {
+        "IndestructibleCity/1": {
+          "type": "passive.defense.up",
+          "value": [
+            5,
+            7.5,
+            10,
+            12.5,
+            15
+          ]
+        }
+      }
+    }
+  }
+}

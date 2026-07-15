@@ -3,7 +3,11 @@ import {
   estimateAdaptiveBattleCount,
   estimateAdaptiveCompositionCount,
   estimateCompositionCount,
+  MAX_ADAPTIVE_FINAL_REPLICATES,
+  MAX_ADAPTIVE_PRELIMINARY_REPLICATES,
+  MAX_OPTIMIZE_BATTLES,
   recommendedOptimizeStep,
+  resolveAdaptiveSearchSettings,
   resolveInfantryBounds,
 } from "../lib/optimize-ratio";
 
@@ -24,6 +28,28 @@ test.describe("optimize-ratio helpers", () => {
     expect(estimateAdaptiveBattleCount()).toBe(39380);
     expect(estimateAdaptiveCompositionCount(25, 75)).toBe(1631);
     expect(estimateAdaptiveBattleCount(25, 75)).toBe(39820);
+  });
+
+  test("adaptive replicate limits allow a larger finalist sample", () => {
+    expect(
+      resolveAdaptiveSearchSettings({
+        adaptive_phase1_replicates: 9_000,
+        adaptive_phase2_replicates: 9_000,
+        adaptive_final_replicates: 9_000,
+      }),
+    ).toEqual({
+      adaptive_phase1_replicates: MAX_ADAPTIVE_PRELIMINARY_REPLICATES,
+      adaptive_phase2_replicates: MAX_ADAPTIVE_PRELIMINARY_REPLICATES,
+      adaptive_final_replicates: MAX_ADAPTIVE_FINAL_REPLICATES,
+    });
+
+    const highAccuracyBattles = estimateAdaptiveBattleCount(30, 70, {
+      adaptive_phase1_replicates: 200,
+      adaptive_phase2_replicates: 200,
+      adaptive_final_replicates: 2_000,
+    });
+    expect(highAccuracyBattles).toBe(393_800);
+    expect(highAccuracyBattles).toBeLessThanOrEqual(MAX_OPTIMIZE_BATTLES);
   });
 
   test("composition count still supports full simplex searches when explicitly requested", () => {

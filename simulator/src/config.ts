@@ -7,10 +7,12 @@ import Bahiti from "../config/hero_definitions/Bahiti.json" with { type: "json" 
 import Bradley from "../config/hero_definitions/Bradley.json" with { type: "json" };
 import Edith from "../config/hero_definitions/Edith.json" with { type: "json" };
 import Flint from "../config/hero_definitions/Flint.json" with { type: "json" };
+import Gatot from "../config/hero_definitions/Gatot.json" with { type: "json" };
 import Gordon from "../config/hero_definitions/Gordon.json" with { type: "json" };
 import Greg from "../config/hero_definitions/Greg.json" with { type: "json" };
 import Gwen from "../config/hero_definitions/Gwen.json" with { type: "json" };
 import Hector from "../config/hero_definitions/Hector.json" with { type: "json" };
+import Hendrik from "../config/hero_definitions/Hendrik.json" with { type: "json" };
 import Jasser from "../config/hero_definitions/Jasser.json" with { type: "json" };
 import Jeronimo from "../config/hero_definitions/Jeronimo.json" with { type: "json" };
 import Jessie from "../config/hero_definitions/Jessie.json" with { type: "json" };
@@ -28,6 +30,7 @@ import Reina from "../config/hero_definitions/Reina.json" with { type: "json" };
 import Renee from "../config/hero_definitions/Renee.json" with { type: "json" };
 import SeoYoon from "../config/hero_definitions/Seo-yoon.json" with { type: "json" };
 import Sergey from "../config/hero_definitions/Sergey.json" with { type: "json" };
+import Sonya from "../config/hero_definitions/Sonya.json" with { type: "json" };
 import Wayne from "../config/hero_definitions/Wayne.json" with { type: "json" };
 import WuMing from "../config/hero_definitions/WuMing.json" with { type: "json" };
 import Zinman from "../config/hero_definitions/Zinman.json" with { type: "json" };
@@ -53,10 +56,12 @@ const DEFAULT_HERO_DEFINITIONS = {
   Bradley,
   Edith,
   Flint,
+  Gatot,
   Gordon,
   Greg,
   Gwen,
   Hector,
+  Hendrik,
   Jasser,
   Jeronimo,
   Jessie,
@@ -74,6 +79,7 @@ const DEFAULT_HERO_DEFINITIONS = {
   Renee,
   "Seo-yoon": SeoYoon,
   Sergey,
+  Sonya,
   Wayne,
   WuMing,
   Zinman

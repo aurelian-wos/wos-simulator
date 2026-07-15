@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { EditableNumberInput } from "@/components/EditableNumberInput";
 import {
   TroopCategory,
   heroesForCategory,
@@ -874,17 +875,13 @@ function UploadPetModifier({
       <span className="min-w-0 truncate opacity-60">
         {PET_MODIFIER_LABELS[name]}
       </span>
-      <input
-        type="number"
+      <EditableNumberInput
         min={0}
         max={max}
         step={0.5}
         value={value}
-        onChange={(e) => {
-          const parsed = parseFloat(e.target.value);
-          const next = Number.isNaN(parsed)
-            ? 0
-            : Math.max(0, Math.min(max, Math.round(parsed * 2) / 2));
+        onValueChange={(parsed) => {
+          const next = Math.max(0, Math.min(max, Math.round(parsed * 2) / 2));
           onChange(name, next);
         }}
         className="sim-input min-h-[30px] px-2 text-right font-mono text-[10px] tabular-nums"

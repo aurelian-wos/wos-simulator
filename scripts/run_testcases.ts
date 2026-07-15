@@ -1,5 +1,5 @@
 #!/usr/bin/env tsx
-import { mkdirSync, statSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { cpus } from "node:os";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -22,18 +22,19 @@ import { TestcaseWorkerPool } from "./testcase_worker_pool";
 export async function main(argv = process.argv.slice(2)): Promise<void> {
   try {
     const options = parseArgs(argv);
+    const previousReport = options.human ? loadLatestRunReport(options.outputDir) : undefined;
     const config = loadSimulatorConfig();
     const report = await runCliTestcases(options, config);
-    const stdout = formatStdout(report, options);
+    const stdout = formatStdout(report, options, previousReport);
     if (options.noRunSnapshot) {
       if (options.dbIngest) throw new Error("--db-ingest requires a run snapshot; remove --no-run-snapshot");
-      console.log(stdout);
+      writeStdout(stdout);
     } else {
       const snapshot = writeRunSnapshot(report, options.outputDir);
       const dbIngest = options.dbIngest
         ? ingestReport(snapshot.summaryPath, { dbPath: options.dbPath })
         : undefined;
-      console.log(stdout);
+      writeStdout(stdout);
       console.error(JSON.stringify({ ...snapshot, ...(dbIngest ? { dbIngest } : {}) }, null, 2));
     }
     const failed = report.counts.errors > 0;
@@ -42,6 +43,10 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     console.error(JSON.stringify({ error: error instanceof Error ? error.message : String(error) }, null, 2));
     process.exitCode = 1;
   }
+}
+
+function writeStdout(output: string): void {
+  process.stdout.write(output.endsWith("\n") ? output : `${output}\n`);
 }
 
 const entryPath = process.argv[1] ? pathToFileURL(process.argv[1]).href : "";
@@ -118,17 +123,95 @@ function readPositiveIntegerOption(args: string[], index: number, option: string
   return parsed;
 }
 
-export function formatStdout(report: TestcaseRunReport, options: Pick<CliOptions, "human" | "printFailing">): string {
+export function formatStdout(
+  report: TestcaseRunReport,
+  options: Pick<CliOptions, "human" | "printFailing">,
+  previousReport?: TestcaseRunReport
+): string {
   if (options.human) {
     const summary = formatHumanSummary(report);
-    if (!options.printFailing) return summary;
-    const traces = formatFailingStandardTracesHuman(report);
-    return traces ? `${summary.trimEnd()}\n\n${traces}` : summary;
+    const traces = options.printFailing ? formatFailingStandardTracesHuman(report) : "";
+    const footer = formatHumanFooter(report, previousReport);
+    return [summary, traces, footer]
+      .filter((section) => section.length > 0)
+      .map((section) => section.trimEnd())
+      .join("\n\n") + "\n";
   }
 
   const summary = buildSummaryForOutput(report);
   if (!options.printFailing) return JSON.stringify(summary, null, 2);
   return JSON.stringify({ ...summary, failingStandardTraces: failingStandardTraces(report) }, null, 2);
+}
+
+export function formatHumanFooter(report: TestcaseRunReport, previousReport?: TestcaseRunReport): string {
+  const totals = humanRunTotals(report, previousReport);
+  return [
+    "Final totals",
+    `Testcases run: ${totals.executed}`,
+    `Failed vs game: ${totals.failedVsGame}`,
+    `Improved vs game: ${totals.improvedVsGame}`,
+    `Worse vs game: ${totals.worseVsGame}`,
+    `Average signed error: ${formatSignedPercentage(totals.averageSignedErrorPct)}`
+  ].join("\n");
+}
+
+interface HumanRunTotals {
+  executed: number;
+  failedVsGame: number;
+  improvedVsGame: number;
+  worseVsGame: number;
+  averageSignedErrorPct: number | null;
+}
+
+function humanRunTotals(report: TestcaseRunReport, previousReport?: TestcaseRunReport): HumanRunTotals {
+  const current = Object.values(report.testcases).filter(hasGameComparison);
+  const previousByKey = new Map(
+    Object.values(previousReport?.testcases ?? {})
+      .filter(hasGameComparison)
+      .map((entry) => [dashboardComparisonKey(entry), entry])
+  );
+  let improvedVsGame = 0;
+  let worseVsGame = 0;
+
+  for (const entry of current) {
+    const previous = previousByKey.get(dashboardComparisonKey(entry));
+    if (!previous) continue;
+    if ((!previous.game.passes && entry.game.passes) || (
+      previous.game.passes === entry.game.passes &&
+      Math.abs(previous.game.bias_pct) > Math.abs(entry.game.bias_pct)
+    )) {
+      improvedVsGame += 1;
+    } else if ((previous.game.passes && !entry.game.passes) || (
+      previous.game.passes === entry.game.passes &&
+      Math.abs(entry.game.bias_pct) > Math.abs(previous.game.bias_pct)
+    )) {
+      worseVsGame += 1;
+    }
+  }
+
+  const signedErrors = current.map((entry) => entry.game.bias_pct);
+  return {
+    executed: report.counts.executed,
+    failedVsGame: current.filter((entry) => !entry.game.passes).length,
+    improvedVsGame,
+    worseVsGame,
+    averageSignedErrorPct: signedErrors.length > 0
+      ? signedErrors.reduce((sum, value) => sum + value, 0) / signedErrors.length
+      : null
+  };
+}
+
+function hasGameComparison(entry: TestcaseSummaryEntry): entry is TestcaseSummaryEntry & { game: NonNullable<TestcaseSummaryEntry["game"]> } {
+  return entry.game !== null && Number.isFinite(entry.game.bias_pct);
+}
+
+function dashboardComparisonKey(entry: TestcaseSummaryEntry): string {
+  return `${entry.file.replaceAll("\\", "/")}|${entry.testcase_id}|${entry.idx}`;
+}
+
+function formatSignedPercentage(value: number | null): string {
+  if (value === null || !Number.isFinite(value)) return "-";
+  return `${value >= 0 ? "+" : ""}${value.toFixed(2)}%`;
 }
 
 export function formatHumanSummary(report: TestcaseRunReport): string {
@@ -404,6 +487,32 @@ function erf(x: number): number {
 
 function caseKey(file: string, index: number): string {
   return `${file.replaceAll("\\", "/")}#${index}`;
+}
+
+function loadLatestRunReport(outputDir: string): TestcaseRunReport | undefined {
+  try {
+    return readdirSync(outputDir)
+      .filter((name) => name.endsWith(".json"))
+      .map((name) => resolve(outputDir, name))
+      .filter((path) => statSync(path).isFile())
+      .map((path) => {
+        try {
+          const report = JSON.parse(readFileSync(path, "utf8")) as Partial<TestcaseRunReport>;
+          if (report.reportKind !== "simulator-parity-summary" || !report.testcases || !report.counts) return undefined;
+          const createdAt = Date.parse(report.createdAt ?? "");
+          return {
+            report: report as TestcaseRunReport,
+            timestamp: Number.isFinite(createdAt) ? createdAt : statSync(path).mtimeMs
+          };
+        } catch {
+          return undefined;
+        }
+      })
+      .filter((candidate): candidate is { report: TestcaseRunReport; timestamp: number } => candidate !== undefined)
+      .sort((left, right) => right.timestamp - left.timestamp)[0]?.report;
+  } catch {
+    return undefined;
+  }
 }
 
 function defaultOutputDir(): string {

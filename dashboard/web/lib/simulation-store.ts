@@ -16,6 +16,15 @@ import {
 } from "@/lib/simulate-run";
 
 const ID_RE = /^[A-Za-z0-9_-]{8,128}$/;
+const LIST_READ_BATCH_SIZE = 32;
+const LIST_HEADER_CHUNK_SIZE = 64 * 1024;
+const LIST_HEADER_LIMIT = 256 * 1024;
+const RESULT_FIELD_MARKER = /,\r?\n  "result":/;
+
+const listItemCache = new Map<
+  string,
+  { modifiedAt: number; item: SavedSimulationRunListItem }
+>();
 
 export const SIM_RUNS_DIR =
   process.env.SIM_RUNS_DIR ??
@@ -68,6 +77,67 @@ function assertSavedSimulationDoc(
     throw new Error("Saved simulation document is malformed");
   }
   return doc as SavedSimulationRunDocument;
+}
+
+function assertSavedSimulationListDoc(
+  value: unknown,
+): Omit<SavedSimulationRunDocument, "result"> {
+  if (!value || typeof value !== "object") {
+    throw new Error("Saved simulation document is missing");
+  }
+  const doc = value as Partial<SavedSimulationRunDocument>;
+  if (
+    doc.version !== 1 ||
+    typeof doc.id !== "string" ||
+    !ID_RE.test(doc.id) ||
+    !isSavedSimulationKind(doc.kind) ||
+    typeof doc.created_at !== "string" ||
+    doc.request === undefined
+  ) {
+    throw new Error("Saved simulation document is malformed");
+  }
+  return doc as Omit<SavedSimulationRunDocument, "result">;
+}
+
+async function readSimulationRunListItem(
+  filePath: string,
+): Promise<SavedSimulationRunListItem> {
+  const handle = await fs.open(filePath, "r");
+  const chunks: Buffer[] = [];
+  let bytesReadTotal = 0;
+  let raw = "";
+
+  try {
+    while (bytesReadTotal < LIST_HEADER_LIMIT) {
+      const chunk = Buffer.allocUnsafe(LIST_HEADER_CHUNK_SIZE);
+      const { bytesRead } = await handle.read(
+        chunk,
+        0,
+        chunk.length,
+        bytesReadTotal,
+      );
+      if (bytesRead === 0) break;
+      chunks.push(chunk.subarray(0, bytesRead));
+      bytesReadTotal += bytesRead;
+      raw = Buffer.concat(chunks).toString("utf8");
+      if (RESULT_FIELD_MARKER.test(raw)) break;
+    }
+  } finally {
+    await handle.close();
+  }
+
+  const marker = raw.match(RESULT_FIELD_MARKER);
+  const value = marker
+    ? JSON.parse(`${raw.slice(0, marker.index)}\n}`)
+    : JSON.parse(await fs.readFile(filePath, "utf8"));
+  const doc = assertSavedSimulationListDoc(value);
+  return {
+    id: doc.id,
+    kind: doc.kind,
+    created_at: doc.created_at,
+    share_url: buildSimulationShareUrl(doc.id, doc.kind),
+    title: buildSimulationRunTitle(doc.request, doc.kind),
+  };
 }
 
 export async function saveSimulationRun(
@@ -137,36 +207,69 @@ export async function listSimulationRunsPage(
     if (nodeErr?.code !== "ENOENT") throw err;
     return { runs: [], has_more: false, next_offset: 0 };
   }
-  const docs: SavedSimulationRunDocument[] = [];
+  const candidates = (
+    await Promise.all(
+      entries
+        .filter((entry) => entry.isFile() && entry.name.endsWith(".json"))
+        .map(async (entry) => {
+          try {
+            const stats = await fs.stat(path.join(SIM_RUNS_DIR, entry.name));
+            return { name: entry.name, modifiedAt: stats.mtimeMs };
+          } catch {
+            return null;
+          }
+        }),
+    )
+  )
+    .filter((candidate) => candidate !== null)
+    .sort(
+      (a, b) =>
+        b.modifiedAt - a.modifiedAt || b.name.localeCompare(a.name),
+    );
 
-  for (const entry of entries) {
-    if (!entry.isFile() || !entry.name.endsWith(".json")) continue;
-    try {
-      const raw = await fs.readFile(
-        path.join(SIM_RUNS_DIR, entry.name),
-        "utf8",
-      );
-      const doc = assertSavedSimulationDoc(JSON.parse(raw));
-      if (kindSet && !kindSet.has(doc.kind)) continue;
-      docs.push(doc);
-    } catch {
-      // Ignore partial or stale scratch files so one bad save does not break
-      // the recent-run picker.
+  const requiredCount = offset + limit + 1;
+  const matchingRuns: SavedSimulationRunListItem[] = [];
+  let start = 0;
+  while (start < candidates.length && matchingRuns.length < requiredCount) {
+    const batchSize = Math.min(
+      LIST_READ_BATCH_SIZE,
+      requiredCount - matchingRuns.length,
+    );
+    const batch = candidates.slice(start, start + batchSize);
+    start += batch.length;
+    const batchRuns = await Promise.all(
+      batch.map(async (candidate) => {
+        const cached = listItemCache.get(candidate.name);
+        if (cached?.modifiedAt === candidate.modifiedAt) return cached.item;
+        try {
+          const item = await readSimulationRunListItem(
+            path.join(SIM_RUNS_DIR, candidate.name),
+          );
+          listItemCache.set(candidate.name, {
+            modifiedAt: candidate.modifiedAt,
+            item,
+          });
+          return item;
+        } catch {
+          // Ignore partial or stale scratch files so one bad save does not
+          // break the recent-run picker.
+          return null;
+        }
+      }),
+    );
+    for (const run of batchRuns) {
+      if (run && (!kindSet || kindSet.has(run.kind))) matchingRuns.push(run);
     }
   }
 
-  const sorted = docs.sort((a, b) => b.created_at.localeCompare(a.created_at));
-  const pageDocs = sorted.slice(offset, offset + limit);
+  const sorted = matchingRuns.sort((a, b) =>
+    b.created_at.localeCompare(a.created_at),
+  );
+  const pageRuns = sorted.slice(offset, offset + limit);
   const page = {
-    runs: pageDocs.map((doc) => ({
-      id: doc.id,
-      kind: doc.kind,
-      created_at: doc.created_at,
-      share_url: buildSimulationShareUrl(doc.id, doc.kind),
-      title: buildSimulationRunTitle(doc.request, doc.kind),
-    })),
-    has_more: offset + pageDocs.length < sorted.length,
-    next_offset: offset + pageDocs.length,
+    runs: pageRuns,
+    has_more: sorted.length > offset + pageRuns.length,
+    next_offset: offset + pageRuns.length,
   };
   return page;
 }

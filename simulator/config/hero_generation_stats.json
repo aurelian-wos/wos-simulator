@@ -56,5 +56,11 @@
     "defense": 650.52,
     "lethality": 160.5,
     "health": 160.5
+  },
+  "S8": {
+    "attack": 780.62,
+    "defense": 780.62,
+    "lethality": 193,
+    "health": 193
   }
 }

@@ -7,6 +7,7 @@ import {
   type KeyboardEventHandler,
   type ReactNode,
 } from "react";
+import { EditableNumberInput } from "@/components/EditableNumberInput";
 import {
   HEROES,
   Skill4Stat,
@@ -917,18 +918,14 @@ function PetModifierInput({
       <span className="min-w-0 truncate opacity-70">
         {PET_MODIFIER_LABELS[name]}
       </span>
-      <input
-        type="number"
+      <EditableNumberInput
         name={`${which}.pets.${name}`}
         min={0}
         max={max}
         step={0.5}
         value={value}
-        onChange={(e) => {
-          const parsed = parseFloat(e.target.value);
-          const next = Number.isNaN(parsed)
-            ? 0
-            : Math.max(0, Math.min(max, Math.round(parsed * 2) / 2));
+        onValueChange={(parsed) => {
+          const next = Math.max(0, Math.min(max, Math.round(parsed * 2) / 2));
           onChange(name, next);
         }}
         className="sim-input min-h-[30px] px-2 text-right text-[10px] tabular-nums"
@@ -984,21 +981,20 @@ function TroopColumn({
       </span>
       <label>
         <span className="sim-field-label">Troops</span>
-        <input
+        <EditableNumberInput
           ref={countInputRef}
-          type="number"
           name={`${which}.troops.${cat}.count`}
           min={0}
           inputMode="numeric"
           value={state.troops[cat]}
+          parse="int"
           onKeyDown={onCountKeyDown}
-          onChange={(e) => {
-            const v = parseInt(e.target.value || "0", 10);
+          onValueChange={(value) => {
             setState((prev) => ({
               ...prev,
               troops: {
                 ...prev.troops,
-                [cat]: isNaN(v) ? 0 : Math.max(0, v),
+                [cat]: Math.max(0, value),
               },
             }));
           }}
