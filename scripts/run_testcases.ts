@@ -16,7 +16,7 @@ import {
   type TestcaseSummaryEntry,
   type TestcaseRunOptions,
   type TestcaseRunReport
-} from "../simulator/src/testcases";
+} from "../simulator/src/tooling/testcases";
 import { TestcaseWorkerPool } from "./testcase_worker_pool";
 
 export async function main(argv = process.argv.slice(2)): Promise<void> {

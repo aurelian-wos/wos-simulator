@@ -32,7 +32,7 @@ export function addStats(a: StatBlock, b: Partial<StatBlock>): StatBlock {
   };
 }
 
-export function numberField(input: StatBlockInput | undefined, ...keys: Array<string | number>): number {
+function numberField(input: StatBlockInput | undefined, ...keys: Array<string | number>): number {
   if (!input) return 0;
   for (const key of keys) {
     const value = Array.isArray(input) ? (typeof key === "number" ? input[key] : undefined) : valueForObjectKey(input as Record<string, unknown>, key);
@@ -54,6 +54,5 @@ export function valueAtLevel(value: unknown, level: number): number | string[] {
     return Number(selected) || 0;
   }
   if (typeof value === "number") return value;
-  if (Array.isArray(value)) return value.map(String);
   return Number(value) || 0;
 }

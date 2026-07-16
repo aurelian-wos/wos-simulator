@@ -106,7 +106,7 @@ export function createSeededRng(seed: string | number = "simulator-default"): Rn
   };
 }
 
-export function crossedFrequency(previous: number, current: number, frequency: number, first = frequency): boolean {
+function crossedFrequency(previous: number, current: number, frequency: number, first = frequency): boolean {
   if (current < first) return false;
   if (previous < first) return true;
   return Math.floor((previous - first) / frequency) < Math.floor((current - first) / frequency);
@@ -278,7 +278,7 @@ export interface ParsedTriggerSelector {
   units?: UnitType[];
 }
 
-export function parseTriggerSelector(value: unknown, defaultRelation: TriggerSelectorRelation): ParsedTriggerSelector {
+function parseTriggerSelector(value: unknown, defaultRelation: TriggerSelectorRelation): ParsedTriggerSelector {
   if (typeof value === "string") {
     const [maybeRelation, maybeUnit, ...extra] = value.split(".");
     if (extra.length === 0 && (maybeRelation === "self" || maybeRelation === "enemy")) {
@@ -290,7 +290,7 @@ export function parseTriggerSelector(value: unknown, defaultRelation: TriggerSel
   return { relation: defaultRelation, units: normalizeUnitList(value) };
 }
 
-export function sideForTriggerRelation(skillSide: SideId, relation: TriggerSelectorRelation): SideId {
+function sideForTriggerRelation(skillSide: SideId, relation: TriggerSelectorRelation): SideId {
   return relation === "self" ? skillSide : oppositeSide(skillSide);
 }
 

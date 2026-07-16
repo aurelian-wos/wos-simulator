@@ -111,7 +111,7 @@ interface BattleRun {
   attacks: AttackOutcome[];
   trace?: BattleTrace;
   skillReport: BattleResult["skillReport"];
-  score?: number;
+  score: number;
 }
 
 interface RunLoopOptions {
@@ -124,7 +124,7 @@ interface RunLoopOptions {
   };
 }
 
-export function bearFighterInput(): FighterInput {
+function bearFighterInput(): FighterInput {
   return {
     name: "Bear",
     troops: { [BEAR_TROOP_ID]: 5000 },
@@ -157,16 +157,18 @@ export function simulateBearBattle(
   });
   return {
     ...buildBattleResult(run),
-    score: run.score ?? bearScore(run.attacks)
+    score: run.score
   };
 }
 
 /**
  * A resolved battle ready to run many times with different seeds. When battle-start is deterministic,
  * the entire pre-loop runtime (`template`) is seed-independent and built once; each run clones its
- * mutable state and reuses the skills + static profile by reference. For stochastic battle-start,
- * the template is absent; resolved fighters, skills, and the static profile are still reused while
- * chance-bearing setup state is rebuilt per run.
+ * mutable state and reuses the skills + static profile by reference. The prepared damage-group
+ * graph contains shared mutable activation arrays, so runs using one CompiledBattle must remain
+ * synchronous and non-re-entrant. A future interleaved/async runner must clone that graph instead
+ * of sharing it. For stochastic battle-start, the template is absent; resolved fighters, skills,
+ * and the static profile are still reused while chance-bearing setup state is rebuilt per run.
  */
 export interface CompiledBattle {
   input: BattleInput;
@@ -637,10 +639,8 @@ function classifyRandomness(skills: ResolvedSkill[]): BattleRandomness {
 }
 
 function hasChanceTrigger(skill: ResolvedSkill): boolean {
-  const probability = skill.trigger.probability;
-  if (probability === undefined) return false;
-  const value = Array.isArray(probability) ? Number(probability[Math.max(0, Math.min(probability.length - 1, skill.level - 1))]) : Number(probability);
-  return Number.isFinite(value) && value > 0 && value < 100;
+  const probabilityPct = compiledTriggerForSkill(skill).probabilityPct;
+  return probabilityPct > 0 && probabilityPct < 100;
 }
 
 function createRuntime(fighters: ResolvedFighter[], rng: Rng, preparedSkills?: RuntimeSkills): Runtime {
@@ -673,7 +673,7 @@ function buildRuntimeSkills(fighters: ResolvedFighter[]): RuntimeSkills {
   const all = fighters.flatMap((fighter) => [...(fighter.heroSkills ?? []), ...fighter.troopSkills]);
   for (const skill of all) compiledTriggerForSkill(skill);
   const damageGroups: NonNullable<ActiveEffect["damageIndexGroup"]>[] = [];
-  const damageGroupsByJobShape: NonNullable<ActiveEffect["damageIndexGroup"]>[][] = Array.from({ length: 72 }, () => []);
+  const damageGroupsByJobShape: NonNullable<ActiveEffect["damageIndexGroup"]>[][] = Array.from({ length: DAMAGE_JOB_SHAPE_SLOTS }, () => []);
   const plansByDefinition: Record<SideId, Map<object, DamageGroupPlan>> = {
     attacker: new Map(),
     defender: new Map()
@@ -963,15 +963,11 @@ function orderFromEffects(
   advanceAttackDelay: boolean
 ): { order: UnitType[]; effect: ActiveEffect } | undefined {
   for (const effect of index.battleOrder) {
-    if (effect.intent.type !== "attack_order") continue;
     if (effect.appliesTo.side !== dealerSide || !unitMaskHas(effect.appliesTo.units, dealerUnit)) continue;
     if (Array.isArray(effect.intent.value)) {
-      try {
-        if (advanceAttackDelay ? !advanceEffectAttackDelay(effect) : !isEffectAttackReady(effect)) continue;
-        return { order: effect.intent.value.map((value) => normalizeUnitType(String(value))), effect };
-      } catch {
-        return undefined;
-      }
+      const order = effect.intent.value.map((value) => normalizeUnitType(String(value)));
+      if (advanceAttackDelay ? !advanceEffectAttackDelay(effect) : !isEffectAttackReady(effect)) continue;
+      return { order, effect };
     }
   }
   return undefined;
@@ -1280,12 +1276,6 @@ export function signedRemainingScore(result: BattleResult): number {
   if (result.winner === "attacker") return total(result.remaining.attacker);
   if (result.winner === "defender") return -total(result.remaining.defender);
   return 0;
-}
-
-function bearScore(attacks: AttackOutcome[]): number {
-  return attacks
-    .filter((attack) => attack.dealerSide === "attacker" && attack.takerSide === "defender")
-    .reduce((sum, attack) => sum + attack.kills, 0);
 }
 
 function total(troops: Record<UnitType, number>): number {

@@ -133,6 +133,7 @@ export interface SkillRequirement {
 
 export interface SkillFile {
   name: string;
+  aliases?: string[];
   hero_generation?: string;
   troop_type?: UnitType | string;
   skills: Record<string, Omit<SkillDefinition, "id" | "name">>;

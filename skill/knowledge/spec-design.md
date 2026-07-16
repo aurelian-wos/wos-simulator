@@ -49,7 +49,7 @@ simulator/src/effects.ts
 simulator/src/effectIndex.ts
 simulator/src/damage.ts
 simulator/src/simulator.ts
-simulator/src/testcases.ts
+simulator/src/tooling/testcases.ts
 scripts/run_testcases.ts
 ```
 

@@ -10,6 +10,7 @@ import type {
 import { UNIT_TYPES } from "./types";
 import {
   ATOMIC_BUCKETS,
+  ATOMIC_BUCKET_INDEX,
   DYNAMIC_BUCKETS,
   EVALUATED_DAMAGE_BUCKET,
   STATIC_BUCKETS,
@@ -70,7 +71,6 @@ export interface DamageResult {
   trace?: DamageEquationTrace;
 }
 
-const BUCKET_IDS = Object.fromEntries(ATOMIC_BUCKETS.map((bucket, index) => [bucket, index])) as Record<AtomicBucket, NumericBucketId>;
 const STATIC_BUCKET_IDS = Object.fromEntries(STATIC_BUCKETS.map((bucket, index) => [bucket.path, index])) as Record<StaticDamageBucket, NumericBucketId>;
 const DYNAMIC_FACTOR_TERMS = compileDamageTerms(DYNAMIC_BUCKETS);
 const STATIC_FACTOR_TERMS = compileDamageTerms(STATIC_BUCKETS);
@@ -254,7 +254,7 @@ function applyBucketValue(factors: Float64Array, bucket: number, value: number, 
 }
 
 function applyDynamicDamageBucketValue(buckets: NumericDamageBuckets, bucket: AtomicBucket, value: number): number {
-  const bucketIndex = BUCKET_IDS[bucket];
+  const bucketIndex = ATOMIC_BUCKET_INDEX[bucket];
   applyBucketValue(buckets.factors, bucketIndex, value, BUCKET_UPDATE_BY_INDEX);
   return buckets.factors[bucketIndex];
 }

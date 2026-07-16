@@ -7,7 +7,7 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
 import { formatHumanSummary, formatStdout } from "./run_testcases";
-import type { TestcaseRunReport } from "../simulator/src/testcases";
+import type { TestcaseRunReport } from "../simulator/src/tooling/testcases";
 
 const repoRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
 

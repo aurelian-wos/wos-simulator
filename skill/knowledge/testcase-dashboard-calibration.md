@@ -4,7 +4,7 @@
 
 Read this before changing:
 
-- `simulator/src/testcases.ts`
+- `simulator/src/tooling/testcases.ts`
 - `scripts/run_testcases.ts`
 - testcase result storage
 - dashboard parity pages

@@ -333,13 +333,6 @@ function resolveHeroDefinitionKey(heroName: string, config: SimulatorConfig): st
   const normalized = normalizeHeroName(heroName);
   const indexed = config.heroAliasIndex?.[normalized];
   if (indexed && config.heroDefinitions[indexed]) return indexed;
-  const manualAliases: Record<string, string> = {
-    lingxue: "Ling",
-    lumakbokan: "Lumak",
-    wuming: "WuMing"
-  };
-  const manual = manualAliases[normalized];
-  if (manual && config.heroDefinitions[manual]) return manual;
   for (const [key, definition] of Object.entries(config.heroDefinitions)) {
     if (normalizeHeroName(key) === normalized || normalizeHeroName(definition.name ?? "") === normalized) return key;
   }

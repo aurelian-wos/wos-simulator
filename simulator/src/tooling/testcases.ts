@@ -9,9 +9,9 @@ import {
   sampleStats
 } from "./calibration";
 import { applyBenjaminiHochberg, compareOutcomeDistribution, type ParityComparisonMetrics } from "./parityMetrics";
-import { prepareBattle, runPrepared } from "./simulator";
-import { DamageAggregationError } from "./staticDamageProfile";
-import type { BattleInput, BattleResult, FighterInput, SimulatorConfig, StatBlock, UnitType } from "./types";
+import { prepareBattle, runPrepared } from "../simulator";
+import { DamageAggregationError } from "../staticDamageProfile";
+import type { BattleInput, BattleResult, FighterInput, SimulatorConfig, StatBlock, UnitType } from "../types";
 
 const DEFAULT_STOCHASTIC_REPEAT = 100;
 const STAT_ROUNDING_MAX_ADJUSTMENT = 0.05;
@@ -166,7 +166,7 @@ export interface TestcaseStatAdjustment {
 }
 
 export function defaultTestcaseRoot(): string {
-  return resolve(dirname(fileURLToPath(import.meta.url)), "..", "testcases");
+  return resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "testcases");
 }
 
 export function discoverTestcaseFiles(options: Pick<TestcaseRunOptions, "testcaseRoot" | "matching" | "includeDisabled"> = {}): string[] {

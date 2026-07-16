@@ -38,6 +38,7 @@ import Zinman from "../config/hero_definitions/Zinman.json" with { type: "json" 
 import { UNIT_TYPES } from "./types";
 import type { ConfigDiagnostics, EffectIntentDefinition, SimulatorConfig, SkillFile, TriggerDamageJobDefinition } from "./types";
 import { bucketDefinition, DYNAMIC_EFFECT_BUCKETS, isPassiveBucket, PASSIVE_BUCKETS } from "./damageBuckets";
+import { normalizeUnitType } from "./normalize";
 
 const KNOWN_EFFECT_TYPES = new Set([
   ...DYNAMIC_EFFECT_BUCKETS,
@@ -178,6 +179,7 @@ function collectEffectDiagnostics(skillFile: SkillFile, file: string, diagnostic
       validateBattleStartEffectSelectors(skill.trigger, effect as EffectIntentDefinition, file, skillId, effectId);
       validateNativeEffectUnits(effect as EffectIntentDefinition, file, skillId, effectId);
       validateNativeEffectValue(effect as EffectIntentDefinition, file, skillId, effectId);
+      if (type === "attack_order") validateAttackOrderEffect(effect as EffectIntentDefinition, file, skillId, effectId);
       validateNativeEffectDuration(effect as EffectIntentDefinition, file, skillId, effectId);
       validateStaticBucketEffect(skill.trigger, effect as EffectIntentDefinition, file, skillId, effectId);
       if (type === "extra_skill_attack") validateExtraSkillAttackEffect(effect as EffectIntentDefinition, file, skillId, effectId);
@@ -307,6 +309,23 @@ function validateNativeEffectValue(effect: EffectIntentDefinition, file: string,
   }
 }
 
+function validateAttackOrderEffect(effect: EffectIntentDefinition, file: string, skillId: string, effectId: string): void {
+  const path = `${file}:${skillId}.${effectId}`;
+  if (!Array.isArray(effect.value) || effect.value.length === 0) {
+    throw new Error(`attack_order value must be a non-empty unit array at ${path}`);
+  }
+  for (const value of effect.value) {
+    if (typeof value !== "string") {
+      throw new Error(`attack_order value must contain only unit names at ${path}`);
+    }
+    try {
+      normalizeUnitType(value);
+    } catch {
+      throw new Error(`attack_order value contains unsupported unit ${JSON.stringify(value)} at ${path}`);
+    }
+  }
+}
+
 function validateNativeEffectDuration(effect: EffectIntentDefinition, file: string, skillId: string, effectId: string): void {
   if (effect.duration === undefined) return;
   const path = `${file}:${skillId}.${effectId}.duration`;
@@ -414,6 +433,7 @@ function buildHeroAliasIndex(heroDefinitions: Record<string, SkillFile>): Record
   for (const [key, definition] of Object.entries(heroDefinitions)) {
     addHeroAlias(index, key, key);
     if (definition.name) addHeroAlias(index, definition.name, key);
+    for (const alias of definition.aliases ?? []) addHeroAlias(index, alias, key);
   }
   return index;
 }

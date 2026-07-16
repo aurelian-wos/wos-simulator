@@ -36,7 +36,7 @@ export function classifyEffectForJob(effect: ActiveEffect, job: DamageJob): Clas
   return { kind: "report_only", reason: unsupportedReason(effect, job) };
 }
 
-export function basicEffectApplies(effect: ActiveEffect, job: DamageJob): boolean {
+function basicEffectApplies(effect: ActiveEffect, job: DamageJob): boolean {
   const affectedUnit = unitForSide(effect.appliesTo.side, job);
   if (!affectedUnit || !unitMaskHas(effect.appliesTo.units, affectedUnit)) return false;
   const opposingUnit = unitForSide(effect.appliesVs.side, job);

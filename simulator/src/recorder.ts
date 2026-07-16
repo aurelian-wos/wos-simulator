@@ -1,5 +1,5 @@
 import type { DamageResult } from "./damage";
-import { ATOMIC_BUCKETS, BUCKET_DEFINITIONS, pctBucketFactor, rawBucketFactor, type AtomicBucket, type StaticDamageBucket, type StaticPlayerBucket, type StaticRawBucket } from "./damageBuckets";
+import { ATOMIC_BUCKET_INDEX, ATOMIC_BUCKETS, BUCKET_DEFINITIONS, pctBucketFactor, rawBucketFactor, type AtomicBucket, type StaticDamageBucket, type StaticPlayerBucket, type StaticRawBucket } from "./damageBuckets";
 import { sourceLabel } from "./effects";
 import { selectPassiveContributions, unitBaseStats, unitPlayerBonuses, type PassiveContribution } from "./staticDamageProfile";
 import { UNIT_TYPES } from "./types";
@@ -456,7 +456,6 @@ class FullDamageJobRecorder extends BasicDamageJobRecorder {
   }
 }
 
-const BUCKET_IDS = Object.fromEntries(ATOMIC_BUCKETS.map((bucket, index) => [bucket, index])) as Record<AtomicBucket, NumericBucketId>;
 const DEFAULT_FACTOR_TERMS = ATOMIC_BUCKETS.map((bucket) => factorTerm(bucket));
 const DEFAULT_NUMERATOR_TERMS = DEFAULT_FACTOR_TERMS.filter((term) => term.placement === "numerator");
 const DEFAULT_DENOMINATOR_TERMS = DEFAULT_FACTOR_TERMS.filter((term) => term.placement === "denominator");
@@ -465,7 +464,7 @@ function factorTerm(bucket: AtomicBucket): DamageFactorTerm {
   const definition = BUCKET_DEFINITIONS[bucket];
   return {
     id: bucket,
-    bucket: BUCKET_IDS[bucket],
+    bucket: ATOMIC_BUCKET_INDEX[bucket],
     bucketName: bucket,
     placement: definition.placement,
     appliesTo: definition.appliesTo

@@ -4,7 +4,7 @@ import { dirname, join, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 
-import type { TestcaseExecutionJob, TestcaseExecutionResult } from "../simulator/src/testcases";
+import type { TestcaseExecutionJob, TestcaseExecutionResult } from "../simulator/src/tooling/testcases";
 
 interface WorkerResponse {
   id: number;

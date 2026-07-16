@@ -177,6 +177,16 @@ test("loadSimulatorConfig rejects negative native bucket effect values", () => {
   assert.throws(() => loadSimulatorConfigFromDir(root), /negative.*active\.hero\.attack\.down.*value/i);
 });
 
+test("loadSimulatorConfig rejects invalid attack_order unit names", () => {
+  const root = writeConfigWithTroopEffect({
+    type: "attack_order",
+    value: ["marksman", "invalid-unit", "lancer"],
+    units: { applies_to: "lancer", applies_vs: "marksman" }
+  });
+
+  assert.throws(() => loadSimulatorConfigFromDir(root), /attack_order.*unsupported unit.*invalid-unit/i);
+});
+
 test("loadSimulatorConfig rejects effects targeting static buckets unless they are fully static", () => {
   const turnRoot = writeConfigWithTroopEffect({
     type: "passive.attack.up",

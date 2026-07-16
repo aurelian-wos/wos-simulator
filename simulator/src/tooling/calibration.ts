@@ -76,8 +76,8 @@ export interface CalibrationComparisonRow extends CalibrationCaseComparison {
   simulatorVsGamePasses?: boolean;
 }
 
-export function defaultCalibrationDir(): string {
-  return resolve(dirname(fileURLToPath(import.meta.url)), "..", "testcase_results");
+function defaultCalibrationDir(): string {
+  return resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "testcase_results");
 }
 
 export function loadCalibrationComparison(path?: string): CalibrationComparison {

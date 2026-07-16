@@ -16,7 +16,7 @@ Use these files before relying on older Python-era notes:
 - `simulator/src/effectIndex.ts` - indexed runtime effect lookup by damage-job shape.
 - `simulator/src/damage.ts` - bucket aggregation and `DamageEquationTrace`.
 - `simulator/src/simulator.ts` - battle loop, `prepareBattle`, `runPrepared`, trace modes.
-- `simulator/src/testcases.ts` and `scripts/run_testcases.ts` - testcase parity execution and CLI output.
+- `simulator/src/tooling/testcases.ts` and `scripts/run_testcases.ts` - testcase parity execution and CLI output.
 
 Ignore `archived/v1/**` for current simulator behavior. Those Python files are historical reference only.
 

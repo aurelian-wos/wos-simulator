@@ -119,6 +119,9 @@ export type BucketDefinition =
   | (BucketDefinitionFields & { path: AtomicBucket; phase: "dynamic" });
 
 export const ATOMIC_BUCKETS = DYNAMIC_BUCKETS.map((bucket) => bucket.path) as AtomicBucket[];
+export const ATOMIC_BUCKET_INDEX = Object.fromEntries(
+  ATOMIC_BUCKETS.map((bucket, index) => [bucket, index])
+) as Readonly<Record<AtomicBucket, number>>;
 export const DYNAMIC_EFFECT_BUCKETS = DYNAMIC_BUCKETS
   .filter((bucket) => bucket.family === "active" || bucket.family === "type")
   .map((bucket) => bucket.path) as AtomicBucket[];

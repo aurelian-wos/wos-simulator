@@ -1,6 +1,6 @@
 import type { ActiveEffect, ActiveEffectGroup, DamageJob, DamageKind, SideId, UnitType } from "./types";
 import { unitsFromMask } from "./types";
-import { ATOMIC_BUCKETS, bucketDefinition, type AtomicBucket } from "./damageBuckets";
+import { ATOMIC_BUCKET_INDEX, bucketDefinition, type AtomicBucket } from "./damageBuckets";
 
 export interface EffectIndex {
   // Prepared stable graph. Repeated synchronous runs reuse these group references and
@@ -100,10 +100,8 @@ export function damageJobShapeSlot(
 }
 
 const JOB_SHAPE_CACHE = new Map<number, Uint8Array>();
-const BUCKET_INDEX = new Map<string, number>(ATOMIC_BUCKETS.map((bucket, index) => [bucket, index]));
-
 export function damageBucketIndex(bucket: AtomicBucket): number {
-  return BUCKET_INDEX.get(bucket) ?? -1;
+  return ATOMIC_BUCKET_INDEX[bucket];
 }
 
 export function damageShapeSlotsForEffect(effect: ActiveEffect, bucketOverride?: AtomicBucket): Uint8Array {
@@ -114,7 +112,7 @@ export function damageShapeSlotsForEffect(effect: ActiveEffect, bucketOverride?:
   const bucket = (bucketOverride ?? runtimeDefinition?.path) as AtomicBucket | undefined;
   if (!bucket) return EMPTY_JOB_SHAPE_SLOTS;
   const key =
-    ((((BUCKET_INDEX.get(bucket) ?? 0) * 2 + sideIndex(effect.appliesTo.side)) * 8 + (effect.appliesTo.units & 7)) * 2 + sideIndex(effect.appliesVs.side)) * 8 +
+    (((ATOMIC_BUCKET_INDEX[bucket] * 2 + sideIndex(effect.appliesTo.side)) * 8 + (effect.appliesTo.units & 7)) * 2 + sideIndex(effect.appliesVs.side)) * 8 +
     (effect.appliesVs.units & 7);
   const cached = JOB_SHAPE_CACHE.get(key);
   if (cached) return cached;
