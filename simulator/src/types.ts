@@ -285,6 +285,8 @@ export interface ActiveEffect {
   appliesTo: ResolvedUnitScope;
   appliesVs: ResolvedUnitScope;
   triggerDamageJobs?: TriggerDamageJobDefinition[];
+  // battle_order effects only: the target preference resolved once from intent.value.
+  attackOrder?: readonly UnitType[];
   createdRound: number;
   startRound: number;
   duration: EffectDuration;

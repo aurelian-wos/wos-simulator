@@ -289,7 +289,7 @@ export class BasicInfoRecorder implements BattleRecorder {
     round: number,
     detail: { kind: "control"; reason: "dodge" | "no_attack" } | { kind: "battle_order"; chosenTarget: UnitType } | { kind: "extra_attack"; spawnedJobCount: number }
   ): AppliedEffect {
-    const summary = appliedEffectSummary(effect, round);
+    const summary = appliedEffectSummary(effect, effect.getCurrentValuePct(round));
     return this.detailedAttackEffects
       ? { ...summary, source: sourceLabel(effect), ...detail }
       : summary;
@@ -357,7 +357,7 @@ class BasicDamageJobRecorder implements DamageJobRecorder {
   constructor(private readonly staticApplied?: StaticAppliedIndex) {}
 
   recordModifier(effect: ActiveEffect, valuePct: number): void {
-    if (valuePct !== 0) this.appliedEffects.push(appliedEffectSummary(effect, effect.createdRound, valuePct));
+    if (valuePct !== 0) this.appliedEffects.push(appliedEffectSummary(effect, valuePct));
   }
   recordRejected(_effect: ActiveEffect, _reason: RejectedEffectReason): void {}
 
@@ -699,7 +699,7 @@ function effectId(effect: ActiveEffect): string {
   return effect.source.effectId ?? effect.intent.id;
 }
 
-function appliedEffectSummary(effect: ActiveEffect, round: number, valuePct = effect.getCurrentValuePct(round)): AppliedEffect {
+function appliedEffectSummary(effect: ActiveEffect, valuePct: number): AppliedEffect {
   return {
     effectId: effectId(effect),
     sourceSide: effect.ownerSide,

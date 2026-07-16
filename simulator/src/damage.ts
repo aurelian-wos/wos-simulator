@@ -89,22 +89,33 @@ const STATIC_BUCKET_UPDATE_BY_INDEX = compileBucketUpdates(STATIC_BUCKETS);
 const EVALUATED_BUCKET_UPDATE_BY_INDEX = compileBucketUpdates([EVALUATED_DAMAGE_BUCKET]);
 const DAMAGE_SCALE_BUCKET = createEvaluatedDamageBucket(1 / 100);
 
+/** sqrt of the smaller side's initial army; battle-invariant, so callers running many jobs should compute it once. */
+export function sqrtMinInitialArmy(fighters: Record<SideId, ResolvedFighter>): number {
+  return Math.sqrt(Math.max(1, Math.min(totalTroops(fighters.attacker.initialTroops), totalTroops(fighters.defender.initialTroops))));
+}
+
 export function calculateDamageJob(
   job: DamageJob,
   fighters: Record<SideId, ResolvedFighter>,
-  options: { recorder: BattleRecorder; effectIndex: EffectIndex; staticDamageProfile: StaticDamageProfile; scratch?: DamageScratch; capToTakerTroops?: boolean; usedEffects?: ActiveEffect[] }
+  options: {
+    recorder: BattleRecorder;
+    effectIndex: EffectIndex;
+    staticDamageProfile: StaticDamageProfile;
+    scratch?: DamageScratch;
+    capToTakerTroops?: boolean;
+    usedEffects?: ActiveEffect[];
+    sqrtMinInitialArmy?: number;
+  }
 ): DamageResult {
   if (!options?.effectIndex) throw new Error("calculateDamageJob requires an effectIndex");
   if (!options.recorder) throw new Error("calculateDamageJob requires a recorder");
   if (!options.staticDamageProfile) throw new Error("calculateDamageJob requires a staticDamageProfile");
   const recording = options.recorder.startDamageJob();
   const staticProfile = options.staticDamageProfile;
-  const dealer = fighters[job.dealerSide];
-  const taker = fighters[job.takerSide];
   const dealerTroops = job.roundStartTroops[job.dealerSide][job.dealerUnit] ?? 0;
   const takerTroops = job.roundStartTroops[job.takerSide][job.takerUnit] ?? 0;
-  const minInitialArmy = Math.max(1, Math.min(totalTroops(dealer.initialTroops), totalTroops(taker.initialTroops)));
-  const armyTerm = Math.ceil(Math.sqrt(Math.max(0, dealerTroops)) * Math.sqrt(minInitialArmy));
+  const sqrtMinArmy = options.sqrtMinInitialArmy ?? sqrtMinInitialArmy(fighters);
+  const armyTerm = Math.ceil(Math.sqrt(Math.max(0, dealerTroops)) * sqrtMinArmy);
   const buckets = options.scratch ? resetDamageScratch(options.scratch) : createNumericDamageBuckets();
   applyDynamicDamageBucketValue(buckets, "troops.count", armyTerm);
   applyDynamicDamageBucketValue(buckets, "source.extraSkill", job.kind === "skill" ? job.sourceMultiplier ?? 1 : 1);
@@ -307,12 +318,12 @@ function resetDamageScratch(buckets: DamageScratch): DamageScratch {
 /** Pure, composable reduction of bucket sets to an ordinary one-value bucket set. */
 export function evaluateDamageExpression(...inputs: DamageBucketSet[]): DamageBucketSet {
   let factor = 1;
-  for (const input of inputs) {
-    const numerator = multiplySlots(1, input.factors, input.expression.numeratorSlots);
-    const denominator = multiplySlots(1, input.factors, input.expression.denominatorSlots);
-    factor *= numerator / denominator;
-  }
+  for (const input of inputs) factor *= bucketSetValue(input);
   return createEvaluatedDamageBucket(factor);
+}
+
+function bucketSetValue(input: DamageBucketSet): number {
+  return multiplySlots(1, input.factors, input.expression.numeratorSlots) / multiplySlots(1, input.factors, input.expression.denominatorSlots);
 }
 
 function createEvaluatedDamageBucket(factor: number): DamageBucketSet {
@@ -321,19 +332,21 @@ function createEvaluatedDamageBucket(factor: number): DamageBucketSet {
   return { factors, expression: EVALUATED_EXPRESSION };
 }
 
+// Same reduction as evaluateDamageExpression over (dynamic, dealer static, taker static, scale),
+// kept scalar so the per-job hot path allocates no evaluated bucket set.
 function evaluateDamageExpressionForJob(
   job: DamageJob,
   buckets: NumericDamageBuckets,
   staticProfile: StaticDamageProfile
 ): number {
-  const dealerFactor = staticProfile[job.dealerSide][job.dealerUnit].dealerFactor;
-  const takerFactor = staticProfile[job.takerSide][job.takerUnit].takerFactor;
-  return evaluateDamageExpression(
-    { factors: buckets.factors, expression: DYNAMIC_EXPRESSIONS[job.kind] },
-    dealerFactor,
-    takerFactor,
-    DAMAGE_SCALE_BUCKET
-  ).factors[0];
+  const expression = DYNAMIC_EXPRESSIONS[job.kind];
+  const dynamicFactor = multiplySlots(1, buckets.factors, expression.numeratorSlots) / multiplySlots(1, buckets.factors, expression.denominatorSlots);
+  return (
+    dynamicFactor *
+    bucketSetValue(staticProfile[job.dealerSide][job.dealerUnit].dealerFactor) *
+    bucketSetValue(staticProfile[job.takerSide][job.takerUnit].takerFactor) *
+    bucketSetValue(DAMAGE_SCALE_BUCKET)
+  );
 }
 
 function totalTroops(troops: Record<UnitType, number>): number {

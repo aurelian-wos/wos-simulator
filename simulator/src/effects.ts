@@ -25,6 +25,7 @@ interface CompiledActivation {
   getCurrentValuePct: ActiveEffect["getCurrentValuePct"];
   valueEvolution?: EvolvingActiveEffect["valueEvolution"];
   triggerDamageJobs: ActiveEffect["triggerDamageJobs"];
+  attackOrder?: readonly UnitType[];
   duration: EffectDuration;
   turnDelay: number;
   attackDelay: number;
@@ -142,6 +143,10 @@ function compiledActivation(skill: ResolvedSkill, intent: ResolvedEffectIntentDe
     getCurrentValuePct: evolution ? evolvingActiveEffectValuePct : constantActiveEffectValuePct,
     valueEvolution: evolution ? { type: evolution.type, step: evolution.step, amount: finiteNumberOrZero(evolution.value) } : undefined,
     triggerDamageJobs: effectKind === "extra_attack" ? intent.trigger_damage_jobs : undefined,
+    attackOrder:
+      effectKind === "battle_order" && Array.isArray(intent.value)
+        ? intent.value.map((value) => normalizeUnitType(String(value)))
+        : undefined,
     duration,
     turnDelay: Math.max(0, duration.turns?.delay ?? 0),
     attackDelay: duration.attacks?.delay ?? 0,
@@ -178,6 +183,7 @@ export function activateEffect(skill: ResolvedSkill, intent: ResolvedEffectInten
     appliesTo,
     appliesVs,
     triggerDamageJobs: compiled.triggerDamageJobs,
+    attackOrder: compiled.attackOrder,
     createdRound: round,
     startRound: Math.max(1, round + compiled.turnDelay),
     duration: compiled.duration,

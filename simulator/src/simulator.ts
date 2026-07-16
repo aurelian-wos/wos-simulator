@@ -20,7 +20,7 @@ import type {
   UnitType
 } from "./types";
 import { ALL_UNIT_MASK, UNIT_TYPES, unitMaskHas, unitsFromMask } from "./types";
-import { calculateDamageJob, createDamageScratch, type DamageResult, type DamageScratch } from "./damage";
+import { calculateDamageJob, createDamageScratch, sqrtMinInitialArmy, type DamageResult, type DamageScratch } from "./damage";
 import { createRecorder, NULL_RECORDER, type BattleRecorder } from "./recorder";
 import {
   activateEffect,
@@ -83,6 +83,7 @@ interface RuntimeSkills {
   attackDeclaredByJobShape: Array<ResolvedSkill[] | undefined>;
   effectGroups: ActiveEffectGroup[];
   damageGroupsByJobShape: ActiveEffectGroup[][];
+  randomness: BattleRandomness;
 }
 
 type DamageJobCalculationOptions = Parameters<typeof calculateDamageJob>[2];
@@ -162,6 +163,8 @@ export interface CompiledBattle {
   staticProfile: StaticDamageProfile;
   runtimeSkills: RuntimeSkills;
   deterministicBattleStart: boolean;
+  // Run-invariant result payload shared by reference across every run of this compiled battle.
+  resolved: BattleResult["resolved"];
 }
 
 export function prepareBattle(input: BattleInput, config: SimulatorConfig): CompiledBattle {
@@ -169,24 +172,25 @@ export function prepareBattle(input: BattleInput, config: SimulatorConfig): Comp
   const defender = resolveFighter(input.defender, "defender", config, input.engagement_type);
   const fighters: Record<SideId, ResolvedFighter> = { attacker, defender };
   const runtimeSkills = buildRuntimeSkills([attacker, defender]);
+  const resolved = buildResolved(attacker, defender);
   const deterministicBattleStart = !runtimeSkills.battleStart.some(hasChanceTrigger);
   if (deterministicBattleStart) {
     // The entire pre-loop runtime is seed-independent, so build it once and clone it per run.
     const template = setupRuntime(fighters, input, "simulator-prepare", NULL_RECORDER, runtimeSkills);
-    return { input, config, fighters, template, staticProfile: template.staticDamageProfile!, runtimeSkills, deterministicBattleStart };
+    return { input, config, fighters, template, staticProfile: template.staticDamageProfile!, runtimeSkills, deterministicBattleStart, resolved };
   }
   // Chance-bearing battle-start effects must be rolled per run. Build only the deterministic
   // setup effects that feed static buckets here; do not execute and discard the stochastic setup.
   const staticEffects = materializeStaticSetupEffects(fighters, input, runtimeSkills);
   const staticProfile = buildStaticDamageProfile(fighters, staticEffects);
-  return { input, config, fighters, staticProfile, runtimeSkills, deterministicBattleStart };
+  return { input, config, fighters, staticProfile, runtimeSkills, deterministicBattleStart, resolved };
 }
 
 export function runPrepared(compiled: CompiledBattle, seed?: string | number, options: SimulationOptions = {}): BattleResult {
   // Only override the compiled input's seed when a seed is explicitly supplied; spreading an
   // undefined seed would otherwise clobber compiled.input.seed and silently lose reproducibility.
   const runInput = seed === undefined ? compiled.input : { ...compiled.input, seed };
-  return buildBattleResult(runBattle(runInput, compiled.config, options, compiled));
+  return buildBattleResult(runBattle(runInput, compiled.config, options, compiled), compiled.resolved);
 }
 
 /**
@@ -210,7 +214,7 @@ export function simulateBattles(
   );
 }
 
-function buildBattleResult(run: BattleRun): BattleResult {
+function buildBattleResult(run: BattleRun, resolved?: BattleResult["resolved"]): BattleResult {
   const { fighters, runtime } = run;
   return {
     winner: run.winner,
@@ -218,11 +222,11 @@ function buildBattleResult(run: BattleRun): BattleResult {
     remaining: { attacker: ceilTroops(fighters.attacker.troops), defender: ceilTroops(fighters.defender.troops) },
     attacks: run.attacks,
     skillReport: run.skillReport,
-    resolved: buildResolved(fighters.attacker, fighters.defender),
+    resolved: resolved ?? buildResolved(fighters.attacker, fighters.defender),
     effectActivationCounts: runtime.effectActivationCounts,
     extraSkillAttackJobsByEffect: runtime.extraSkillAttackJobsByEffect,
     attackControlCounts: runtime.attackControlCounts,
-    randomness: classifyRandomness(runtime.skills.all),
+    randomness: runtime.skills.randomness,
     trace: run.trace
   };
 }
@@ -397,7 +401,8 @@ function runLoop(
     staticDamageProfile: runtime.staticDamageProfile,
     scratch: runtime.damageScratch,
     capToTakerTroops: loopOptions.capJobKills,
-    usedEffects: runtime.usedEffects
+    usedEffects: runtime.usedEffects,
+    sqrtMinInitialArmy: sqrtMinInitialArmy(fighters)
   };
 
   let rounds = 0;
@@ -421,8 +426,8 @@ function runLoop(
     for (const intent of intents) {
       const matchingTriggerSkills = runtime.skills.attackDeclaredByJobShape[
         damageJobShapeSlot("normal", intent.dealerSide, intent.dealerUnit, intent.takerSide, intent.takerUnit)
-      ] ?? [];
-      triggerSkills("attack_declared", round, matchingTriggerSkills, runtime, recorder, intent);
+      ];
+      if (matchingTriggerSkills) triggerSkills("attack_declared", round, matchingTriggerSkills, runtime, recorder, intent);
       const job = normalJob(intent, roundStartTroops);
       declaredNormalJobs.push({ intent, job });
     }
@@ -694,7 +699,8 @@ function buildRuntimeSkills(fighters: ResolvedFighter[]): RuntimeSkills {
     attackDeclared,
     attackDeclaredByJobShape,
     effectGroups,
-    damageGroupsByJobShape
+    damageGroupsByJobShape,
+    randomness: classifyRandomness(all)
   };
 }
 
@@ -914,22 +920,25 @@ function orderFromEffects(
   dealerSide: SideId,
   index: EffectIndex,
   advanceAttackDelay: boolean
-): { order: UnitType[]; effect: ActiveEffect } | undefined {
+): { order: readonly UnitType[]; effect: ActiveEffect } | undefined {
   for (const effect of index.battleOrder) {
     if (effect.appliesTo.side !== dealerSide || !unitMaskHas(effect.appliesTo.units, dealerUnit)) continue;
-    if (Array.isArray(effect.intent.value)) {
-      const order = effect.intent.value.map((value) => normalizeUnitType(String(value)));
-      if (advanceAttackDelay ? !advanceEffectAttackDelay(effect) : !isEffectAttackReady(effect)) continue;
-      return { order, effect };
-    }
+    const order = effect.attackOrder;
+    if (!order) continue;
+    if (advanceAttackDelay ? !advanceEffectAttackDelay(effect) : !isEffectAttackReady(effect)) continue;
+    return { order, effect };
   }
   return undefined;
 }
+
+// Shared empty result for the common no-control-effects case; callers only read it.
+const NO_APPLICABLE_CONTROLS: ApplicableControls = { attackDurationEffects: [] };
 
 function applicableControls(
   job: DamageJob,
   runtime: Runtime
 ): ApplicableControls {
+  if (runtime.effectIndex.controls.length === 0) return NO_APPLICABLE_CONTROLS;
   const controls: ApplicableControls = { attackDurationEffects: [] };
   for (const effect of runtime.effectIndex.controls) {
     const reason = controlType(effect);
