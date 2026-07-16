@@ -32,11 +32,13 @@ test("writeResultsCsv preserves schema and formatting", () => {
     const attackPool = new Pool(teams);
     const defensePool = new Pool(teams);
     for (const pool of [attackPool, defensePool]) {
-      pool.getScore(1).wins = 1;
+      pool.getScore(1).winRateSum = 1;
       pool.getScore(1).matches = 2;
+      pool.getScore(1).games = 20;
       pool.getScore(1).margin = 7;
-      pool.getScore(2).wins = 2;
+      pool.getScore(2).winRateSum = 2;
       pool.getScore(2).matches = 2;
+      pool.getScore(2).games = 20;
       pool.getScore(2).margin = 9;
       pool.finalizeRemaining();
     }
@@ -45,9 +47,9 @@ test("writeResultsCsv preserves schema and formatting", () => {
     const text = readFileSync(join(root, "swiss_off.csv"), "utf8").trim();
     assert.equal(
       text.split("\n")[0],
-      "rank,win_rate,avg_margin,matches,formation,hero_1,hero_2,hero_3,joiner_1,joiner_2,joiner_3,joiner_4"
+      "rank,win_rate,avg_margin,games,formation,hero_1,hero_2,hero_3,joiner_1,joiner_2,joiner_3,joiner_4"
     );
-    assert.match(text, /1,1\.0000,4\.50,2,50-20-30,Wu Ming,Mia,Bradley,Jessie,Seo-yoon,Lumak,Ling/);
+    assert.match(text, /1,1\.0000,4\.50,20,50-20-30,Wu Ming,Mia,Bradley,Jessie,Seo-yoon,Lumak,Ling/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -58,18 +60,21 @@ test("writeCombinedResultsCsv writes combined standings csv", () => {
   try {
     const teams = [team(1)];
     const pool = new Pool(teams);
-    pool.getScore(1).wins = 2;
+    pool.getScore(1).winRateSum = 2;
     pool.getScore(1).matches = 2;
+    pool.getScore(1).games = 20;
     pool.getScore(1).margin = 12;
+    pool.getScore(1).attack = { winRateSum: 1, matches: 1, margin: 8 };
+    pool.getScore(1).defense = { winRateSum: 1, matches: 1, margin: 4 };
     pool.finalizeRemaining();
 
     writeCombinedResultsCsv(join(root, "swiss"), pool, 1);
     const text = readFileSync(join(root, "swiss_combined.csv"), "utf8").trim();
     assert.equal(
       text.split("\n")[0],
-      "rank,win_rate,avg_margin,matches,formation,hero_1,hero_2,hero_3,joiner_1,joiner_2,joiner_3,joiner_4"
+      "rank,win_rate,avg_margin,attack_win_rate,attack_avg_margin,defense_win_rate,defense_avg_margin,games,formation,hero_1,hero_2,hero_3,joiner_1,joiner_2,joiner_3,joiner_4"
     );
-    assert.match(text, /1,1\.0000,6\.00,2,50-20-30,Wu Ming,Mia,Bradley,Jessie,Seo-yoon,Lumak,Ling/);
+    assert.match(text, /1,1\.0000,6\.00,1\.0000,8\.00,1\.0000,4\.00,20,50-20-30,Wu Ming,Mia,Bradley,Jessie,Seo-yoon,Lumak,Ling/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -80,7 +85,7 @@ test("loadAllRankedTeamsFromCsv rebuilds troops from formation and row ids", () 
   try {
     const file = join(root, "swiss_off.csv");
     const csv = [
-      "rank,win_rate,avg_margin,matches,formation,hero_1,hero_2,hero_3,joiner_1,joiner_2,joiner_3,joiner_4",
+      "rank,win_rate,avg_margin,games,formation,hero_1,hero_2,hero_3,joiner_1,joiner_2,joiner_3,joiner_4",
       "1,1.0000,10.00,2,60-40-0,Wu Ming,Mia,Bradley,Jessie,Seo-yoon,Lumak,Ling"
     ].join("\n");
     writeFileSync(file, `${csv}\n`);

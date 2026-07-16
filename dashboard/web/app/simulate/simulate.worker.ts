@@ -6,15 +6,12 @@ import { loadSimulatorConfig } from "@simulator/config";
 import type { SimulatorWorkerRequest, SimulatorWorkerResponse } from "@/lib/simulator/worker-protocol";
 import { runBattleTasksDirect, runTournament, type BattleSummary, type BattleTask, type TournamentRunOptions } from "@/lib/tournament";
 import type { SimulatorConfig } from "@simulator/types";
-import { BatchWorkerPool, batchTasksByWeight, type BatchWorker } from "@simulator/workerPool";
 import type { OptimizeRatioRequestPayload, SimulateRequestPayload } from "@/lib/simulate-run";
 import { recommendedBrowserWorkerCount } from "@/lib/simulator/worker-count";
+import { BrowserBatchRunner } from "./browserBatchWorker";
 
 let activeJobId: number | null = null;
-let activeSimulateWorkers: Worker[] = [];
-let activeOptimizeWorkers: Worker[] = [];
-let activeTournamentPool: BatchWorkerPool<BattleTask, BattleSummary, number> | null = null;
-let activeSurfaceWorkers: Worker[] = [];
+let activeBatchRunner: { close(): Promise<void> } | null = null;
 const AVAILABLE_PROCESSORS = Math.max(1, self.navigator.hardwareConcurrency || 1);
 const BATTLE_WORKER_COUNT = recommendedBrowserWorkerCount(AVAILABLE_PROCESSORS);
 const TOURNAMENT_BATCH_WEIGHT = 64;
@@ -26,25 +23,26 @@ self.onmessage = (event: MessageEvent<SimulatorWorkerRequest>) => {
 async function handleMessage(request: SimulatorWorkerRequest): Promise<void> {
   if (request.type === "cancel") {
     if (activeJobId === request.id) activeJobId = null;
-    for (const worker of activeSimulateWorkers) worker.terminate();
-    activeSimulateWorkers = [];
-    for (const worker of activeOptimizeWorkers) worker.terminate();
-    activeOptimizeWorkers = [];
-    await activeTournamentPool?.close();
-    activeTournamentPool = null;
-    for (const worker of activeSurfaceWorkers) worker.terminate();
-    activeSurfaceWorkers = [];
+    const runner = activeBatchRunner;
+    activeBatchRunner = null;
+    await runner?.close();
     return;
   }
   activeJobId = request.id;
   try {
     if (request.type === "simulate") {
-      const data = await runSimulation(request.payload, {
-        seedBase: `simulate:${request.id}`,
-        onProgress: (done, total) => postIfActive(request.id, { id: request.id, type: "progress", done, total }),
-        runBatches: createSimulateBatchRunner(request.id, BATTLE_WORKER_COUNT),
-      });
-      postIfActive(request.id, { id: request.id, type: "simulateResult", data });
+      const runner = createSimulateBatchRunner(request.payload, BATTLE_WORKER_COUNT);
+      activeBatchRunner = runner;
+      try {
+        const data = await runSimulation(request.payload, {
+          seedBase: `simulate:${request.id}`,
+          onProgress: (done, total) => postIfActive(request.id, { id: request.id, type: "progress", done, total }),
+          runBatches: runner.runBatches,
+        });
+        postIfActive(request.id, { id: request.id, type: "simulateResult", data });
+      } finally {
+        await closeBatchRunner(runner);
+      }
     } else if (request.type === "simulateTrace") {
       const data = runSimulationTrace(request.payload, request.seed, {
         onProgress: (done, total) => postIfActive(request.id, { id: request.id, type: "progress", done, total }),
@@ -70,37 +68,50 @@ async function handleMessage(request: SimulatorWorkerRequest): Promise<void> {
     } else if (request.type === "optimizeRatio") {
       const optimizeStartedAt = performance.now();
       let totalWorkerMs = 0;
-      const data = await runOptimizeRatio(request.payload, {
-        seedBase: `optimize:${request.id}`,
-        onProgress: (done, total) => postIfActive(request.id, { id: request.id, type: "progress", done, total }),
-        onStageTiming: (timing) => {
-          const activeWorkers = optimizeWorkerCount(timing.compositions);
-          totalWorkerMs += timing.totalMs * activeWorkers;
-          logOptimizeStageTiming(timing, activeWorkers);
-        },
-        runBatches: createOptimizeBatchRunner(request.id, BATTLE_WORKER_COUNT),
-      });
-      const totalMs = performance.now() - optimizeStartedAt;
-      console.info(
-        `[optimise] total: ${data.compositions_tested.toLocaleString()} ratios, ${data.projected_battles.toLocaleString()} simulations; ` +
-        `${formatDuration(totalMs)} wall time; ${formatAverage(totalWorkerMs, data.projected_battles)} worker-normalized/simulation; ` +
-        `${BATTLE_WORKER_COUNT.toLocaleString()} workers from ${AVAILABLE_PROCESSORS.toLocaleString()} available processors`,
-      );
-      postIfActive(request.id, { id: request.id, type: "optimizeResult", data });
+      const runner = createOptimizeBatchRunner(request.payload, BATTLE_WORKER_COUNT);
+      activeBatchRunner = runner;
+      try {
+        const data = await runOptimizeRatio(request.payload, {
+          seedBase: `optimize:${request.id}`,
+          onProgress: (done, total) => postIfActive(request.id, { id: request.id, type: "progress", done, total }),
+          onStageTiming: (timing) => {
+            const activeWorkers = optimizeWorkerCount(timing.compositions);
+            totalWorkerMs += timing.totalMs * activeWorkers;
+            logOptimizeStageTiming(timing, activeWorkers);
+          },
+          runBatches: runner.runBatches,
+        });
+        const totalMs = performance.now() - optimizeStartedAt;
+        console.info(
+          `[optimise] total: ${data.compositions_tested.toLocaleString()} ratios, ${data.projected_battles.toLocaleString()} simulations; ` +
+          `${formatDuration(totalMs)} wall time; ${formatAverage(totalWorkerMs, data.projected_battles)} worker-normalized/simulation; ` +
+          `${BATTLE_WORKER_COUNT.toLocaleString()} workers from ${AVAILABLE_PROCESSORS.toLocaleString()} available processors`,
+        );
+        postIfActive(request.id, { id: request.id, type: "optimizeResult", data });
+      } finally {
+        await closeBatchRunner(runner);
+      }
     } else if (request.type === "progressiveSurfaceSweep") {
-      const data = await runProgressiveSurfaceSweep(request.payload, {
-        seedBase: `surface:${request.id}`,
-        onProgress: (done, total) => postIfActive(request.id, { id: request.id, type: "progress", done, total }),
-        onStage: (stage) => postIfActive(request.id, { id: request.id, type: "surfaceStage", data: stage }),
-        runBatches: request.payload.jobs > 1
-          ? createSurfaceBatchRunner(request.id, request.payload.jobs)
-          : undefined,
-      });
-      postIfActive(request.id, { id: request.id, type: "surfaceResult", data });
+      const runner = request.payload.jobs > 1
+        ? createSurfaceBatchRunner(request.payload.jobs)
+        : null;
+      activeBatchRunner = runner;
+      try {
+        const data = await runProgressiveSurfaceSweep(request.payload, {
+          seedBase: `surface:${request.id}`,
+          onProgress: (done, total) => postIfActive(request.id, { id: request.id, type: "progress", done, total }),
+          onStage: (stage) => postIfActive(request.id, { id: request.id, type: "surfaceStage", data: stage }),
+          runBatches: runner?.runBatches,
+        });
+        postIfActive(request.id, { id: request.id, type: "surfaceResult", data });
+      } finally {
+        await closeBatchRunner(runner);
+      }
     } else {
       const tournamentRunner = request.payload.jobs > 1
         ? createTournamentWorkerPoolRunner(request.payload.jobs)
         : null;
+      activeBatchRunner = tournamentRunner;
       try {
         const data = await runTournament(request.payload, {
           seedBase: `tournament:${request.id}`,
@@ -109,7 +120,7 @@ async function handleMessage(request: SimulatorWorkerRequest): Promise<void> {
         });
         postIfActive(request.id, { id: request.id, type: "tournamentResult", data });
       } finally {
-        await tournamentRunner?.close();
+        await closeBatchRunner(tournamentRunner);
       }
     }
   } catch (error) {
@@ -151,112 +162,72 @@ function postIfActive(id: number, message: SimulatorWorkerResponse): void {
   self.postMessage(message);
 }
 
-function createSimulateBatchRunner(
-  parentJobId: number,
-  jobs: number,
-): (payload: SimulateRequestPayload, tasks: SimulateBatchTask[], onProgress?: (done: number, total: number) => void) => Promise<SimulateBatchResult[]> {
-  return async (payload, tasks, onProgress) => {
-    if (tasks.length === 0) return [];
-    const workerCount = Math.max(1, Math.min(Math.floor(jobs), tasks.length));
-    if (workerCount <= 1) {
-      const config = loadSimulatorConfig();
-      return runSimulationBatchDirect(payload, tasks, config, onProgress);
-    }
-    const chunks = chunkTasks(tasks, workerCount);
-    const workers = chunks.map(() => new Worker(new URL("./simulate-batch.worker.ts", import.meta.url), { type: "module" }));
-    const chunkDone = Array.from({ length: chunks.length }, () => 0);
-    const total = tasks.length;
-    const reportChunkProgress = (chunkIndex: number, done: number) => {
-      chunkDone[chunkIndex] = done;
-      onProgress?.(chunkDone.reduce((sum, value) => sum + value, 0), total);
-    };
-    activeSimulateWorkers = workers;
-    try {
-      const resultSets = await Promise.all(
-        chunks.map((chunk, index) => runSimulateBatchChunk(workers[index], parentJobId, index, payload, chunk, (done) => reportChunkProgress(index, done))),
-      );
-      return resultSets.flat();
-    } finally {
-      for (const worker of workers) worker.terminate();
-      activeSimulateWorkers = activeSimulateWorkers.filter((worker) => !workers.includes(worker));
-    }
-  };
+interface BatchRunnerHandle<TRunBatches> {
+  runBatches: TRunBatches;
+  close(): Promise<void>;
 }
 
-function runSimulateBatchChunk(
-  worker: Worker,
-  parentJobId: number,
-  chunkIndex: number,
+type SimulateRunBatches = (
   payload: SimulateRequestPayload,
   tasks: SimulateBatchTask[],
-  onProgress?: (done: number) => void,
-): Promise<SimulateBatchResult[]> {
-  const id = parentJobId * 10000 + chunkIndex + 1;
-  return new Promise((resolve, reject) => {
-    worker.onmessage = (event: MessageEvent<{ id: number; type: "progress" | "result" | "error"; done?: number; data?: SimulateBatchResult[]; message?: string }>) => {
-      const msg = event.data;
-      if (msg.id !== id) return;
-      if (msg.type === "result") resolve(msg.data ?? []);
-      else if (msg.type === "progress") onProgress?.(msg.done ?? 0);
-      else if (msg.type === "error") reject(new Error(msg.message ?? "Simulate batch worker failed"));
-    };
-    worker.onerror = (event) => reject(new Error(event.message));
-    worker.postMessage({ id, type: "run", payload, tasks });
-  });
+  onProgress?: (done: number, total: number) => void,
+) => Promise<SimulateBatchResult[]>;
+
+type OptimizeRunBatches = (
+  payload: OptimizeRatioRequestPayload,
+  tasks: OptimizeBatchTask[],
+  onProgress?: (done: number, total: number) => void,
+) => Promise<OptimizeBatchResult[]>;
+
+type SurfaceRunBatches = (
+  tasks: SurfaceBatchTask[],
+  onProgress?: (done: number, total: number) => void,
+) => Promise<SurfaceBatchResult[]>;
+
+function createSimulateBatchRunner(
+  payload: SimulateRequestPayload,
+  jobs: number,
+): BatchRunnerHandle<SimulateRunBatches> {
+  const runner = new BrowserBatchRunner<SimulateBatchTask, SimulateBatchResult, SimulateRequestPayload>(
+    jobs,
+    () => new Worker(new URL("./simulate-batch.worker.ts", import.meta.url), { type: "module" }),
+    payload,
+  );
+  return {
+    runBatches: async (_payload, tasks, onProgress) => {
+      if (tasks.length === 0) return [];
+      const workerCount = Math.max(1, Math.min(Math.floor(jobs), tasks.length));
+      if (workerCount <= 1) {
+        const config = loadSimulatorConfig();
+        return runSimulationBatchDirect(payload, tasks, config, onProgress);
+      }
+      return runner.run(tasks, { onProgress });
+    },
+    close: () => runner.close(),
+  };
 }
 
 function createOptimizeBatchRunner(
-  parentJobId: number,
-  jobs: number,
-): (payload: OptimizeRatioRequestPayload, tasks: OptimizeBatchTask[], onProgress?: (done: number, total: number) => void) => Promise<OptimizeBatchResult[]> {
-  return async (payload, tasks, onProgress) => {
-    if (tasks.length === 0) return [];
-    const workerCount = Math.max(1, Math.min(Math.floor(jobs), tasks.length));
-    if (workerCount <= 1) {
-      const config = loadSimulatorConfig();
-      return runOptimizeBatchDirect(payload, tasks, config, undefined, onProgress);
-    }
-    const chunks = chunkTasks(tasks, workerCount);
-    const workers = chunks.map(() => new Worker(new URL("./optimize-batch.worker.ts", import.meta.url), { type: "module" }));
-    const chunkDone = Array.from({ length: chunks.length }, () => 0);
-    const total = tasks.length;
-    const reportChunkProgress = (chunkIndex: number, done: number) => {
-      chunkDone[chunkIndex] = done;
-      onProgress?.(chunkDone.reduce((sum, value) => sum + value, 0), total);
-    };
-    activeOptimizeWorkers = workers;
-    try {
-      const resultSets = await Promise.all(
-        chunks.map((chunk, index) => runOptimizeBatchChunk(workers[index], parentJobId, index, payload, chunk, (done) => reportChunkProgress(index, done))),
-      );
-      return resultSets.flat();
-    } finally {
-      for (const worker of workers) worker.terminate();
-      activeOptimizeWorkers = activeOptimizeWorkers.filter((worker) => !workers.includes(worker));
-    }
-  };
-}
-
-function runOptimizeBatchChunk(
-  worker: Worker,
-  parentJobId: number,
-  chunkIndex: number,
   payload: OptimizeRatioRequestPayload,
-  tasks: OptimizeBatchTask[],
-  onProgress?: (done: number) => void,
-): Promise<OptimizeBatchResult[]> {
-  const id = parentJobId * 10000 + chunkIndex + 1;
-  return new Promise((resolve, reject) => {
-    worker.onmessage = (event: MessageEvent<{ id: number; type: "progress" | "result" | "error"; done?: number; data?: OptimizeBatchResult[]; message?: string }>) => {
-      const msg = event.data;
-      if (msg.id !== id) return;
-      if (msg.type === "result") resolve(msg.data ?? []);
-      else if (msg.type === "progress") onProgress?.(msg.done ?? 0);
-      else if (msg.type === "error") reject(new Error(msg.message ?? "Optimize batch worker failed"));
-    };
-    worker.onerror = (event) => reject(new Error(event.message));
-    worker.postMessage({ id, type: "run", payload, tasks });
-  });
+  jobs: number,
+): BatchRunnerHandle<OptimizeRunBatches> {
+  const runner = new BrowserBatchRunner<OptimizeBatchTask, OptimizeBatchResult, OptimizeRatioRequestPayload>(
+    jobs,
+    () => new Worker(new URL("./optimize-batch.worker.ts", import.meta.url), { type: "module" }),
+    payload,
+  );
+  return {
+    runBatches: async (_payload, tasks, onProgress) => {
+      if (tasks.length === 0) return [];
+      const workerCount = Math.max(1, Math.min(Math.floor(jobs), tasks.length));
+      if (workerCount <= 1) {
+        const config = loadSimulatorConfig();
+        return runOptimizeBatchDirect(payload, tasks, config, undefined, onProgress);
+      }
+      return runner.run(tasks, { onProgress });
+    },
+    close: () => runner.close(),
+  };
 }
 
 function createTournamentWorkerPoolRunner(jobs: number): {
@@ -264,135 +235,45 @@ function createTournamentWorkerPoolRunner(jobs: number): {
   close(): Promise<void>;
 } {
   const workerCount = Math.max(1, Math.floor(jobs));
-  const pool = new BatchWorkerPool<BattleTask, BattleSummary, number>(
+  const runner = new BrowserBatchRunner<BattleTask, BattleSummary>(
     workerCount,
-    () => new BrowserTournamentWorker()
+    () => new Worker(new URL("./tournament-battle.worker.ts", import.meta.url), { type: "module" }),
   );
-  activeTournamentPool = pool;
   return {
     async runBattleTasks(tasks: BattleTask[], _config: SimulatorConfig, onBattleDone: (battleReps: number) => void): Promise<BattleSummary[]> {
       if (tasks.length === 0) return [];
       const activeWorkerCount = Math.max(1, Math.min(Math.floor(jobs), tasks.length));
       if (activeWorkerCount <= 1) return runBattleTasksDirect(tasks, _config, onBattleDone);
-      const results: BattleSummary[] = new Array(tasks.length);
-      let offset = 0;
-      const batches = batchTasksByWeight(tasks, TOURNAMENT_BATCH_WEIGHT, (task) => task.reps).map((batch) => {
-        const start = offset;
-        offset += batch.length;
-        return { batch, start };
+      return runner.run(tasks, {
+        getWeight: (task) => task.reps,
+        targetBatchWeight: TOURNAMENT_BATCH_WEIGHT,
+        progressMode: "incremental",
+        onProgress: onBattleDone,
       });
-      await Promise.all(
-        batches.map(async ({ batch, start }) => {
-          const batchResults = await pool.runBatch(batch, onBattleDone);
-          results.splice(start, batchResults.length, ...batchResults);
-        })
-      );
-      return results;
     },
-    async close(): Promise<void> {
-      await pool.close();
-      if (activeTournamentPool === pool) activeTournamentPool = null;
-    }
+    close: () => runner.close(),
   };
-}
-
-class BrowserTournamentWorker implements BatchWorker<BattleTask, BattleSummary, number> {
-  private readonly worker = new Worker(new URL("./tournament-battle.worker.ts", import.meta.url), { type: "module" });
-  private rejectInFlight?: (error: Error) => void;
-
-  runBatch(id: number, tasks: BattleTask[], onProgress?: (battleReps: number) => void): Promise<BattleSummary[]> {
-    if (this.rejectInFlight) return Promise.reject(new Error("Tournament worker already has an in-flight batch"));
-    return new Promise((resolve, reject) => {
-      const cleanup = () => {
-        this.rejectInFlight = undefined;
-        this.worker.onmessage = null;
-        this.worker.onerror = null;
-      };
-      this.rejectInFlight = reject;
-      this.worker.onmessage = (event: MessageEvent<{ id: number; type: "progress" | "result" | "error"; battleReps?: number; data?: BattleSummary[]; message?: string }>) => {
-        const message = event.data;
-        if (message.id !== id) return;
-        if (message.type === "progress") {
-          onProgress?.(message.battleReps ?? 0);
-          return;
-        }
-        cleanup();
-        if (message.type === "result") resolve(message.data ?? []);
-        else reject(new Error(message.message ?? "Tournament battle worker failed"));
-      };
-      this.worker.onerror = (event) => {
-        cleanup();
-        reject(new Error(event.message));
-      };
-      this.worker.postMessage({ id, type: "run", tasks });
-    });
-  }
-
-  close(): void {
-    if (this.rejectInFlight) {
-      this.rejectInFlight(new Error("Tournament worker closed before completing in-flight batch"));
-      this.rejectInFlight = undefined;
-    }
-    this.worker.terminate();
-  }
-}
-
-function chunkTasks<T>(tasks: T[], workerCount: number): T[][] {
-  const chunks: T[][] = Array.from({ length: workerCount }, () => []);
-  tasks.forEach((task, index) => chunks[index % workerCount].push(task));
-  return chunks.filter((chunk) => chunk.length > 0);
 }
 
 function createSurfaceBatchRunner(
-  parentJobId: number,
   jobs: number,
-): (tasks: SurfaceBatchTask[], onProgress?: (done: number, total: number) => void) => Promise<SurfaceBatchResult[]> {
-  return async (tasks: SurfaceBatchTask[], onProgress?: (done: number, total: number) => void): Promise<SurfaceBatchResult[]> => {
-    if (tasks.length === 0) return [];
-    const workerCount = Math.max(1, Math.min(Math.floor(jobs), tasks.length));
-    if (workerCount <= 1) return runSurfaceBatchDirect(tasks, onProgress);
-    const chunkSize = Math.ceil(tasks.length / workerCount);
-    const chunks: SurfaceBatchTask[][] = [];
-    for (let i = 0; i < tasks.length; i += chunkSize) chunks.push(tasks.slice(i, i + chunkSize));
-    const workers = chunks.map(() => new Worker(new URL("./surface-batch.worker.ts", import.meta.url), { type: "module" }));
-    const chunkDone = Array.from({ length: chunks.length }, () => 0);
-    const total = tasks.reduce((sum, task) => sum + task.replicates, 0);
-    const reportChunkProgress = (chunkIndex: number, done: number) => {
-      chunkDone[chunkIndex] = done;
-      onProgress?.(chunkDone.reduce((sum, value) => sum + value, 0), total);
-    };
-    activeSurfaceWorkers = workers;
-    try {
-      const resultSets = await Promise.all(
-        chunks.map((chunk, index) => runSurfaceBatchChunk(workers[index], parentJobId, index, chunk, (done) => reportChunkProgress(index, done))),
-      );
-      return resultSets.flat();
-    } finally {
-      for (const worker of workers) worker.terminate();
-      activeSurfaceWorkers = activeSurfaceWorkers.filter((w) => !workers.includes(w));
-    }
+): BatchRunnerHandle<SurfaceRunBatches> {
+  const runner = new BrowserBatchRunner<SurfaceBatchTask, SurfaceBatchResult>(
+    jobs,
+    () => new Worker(new URL("./surface-batch.worker.ts", import.meta.url), { type: "module" }),
+  );
+  return {
+    runBatches: async (tasks, onProgress) => {
+      if (tasks.length === 0) return [];
+      const workerCount = Math.max(1, Math.min(Math.floor(jobs), tasks.length));
+      if (workerCount <= 1) return runSurfaceBatchDirect(tasks, onProgress);
+      return runner.run(tasks, {
+        getWeight: (task) => task.replicates,
+        onProgress,
+      });
+    },
+    close: () => runner.close(),
   };
-}
-
-function runSurfaceBatchChunk(
-  worker: Worker,
-  parentJobId: number,
-  chunkIndex: number,
-  tasks: SurfaceBatchTask[],
-  onProgress?: (done: number) => void,
-): Promise<SurfaceBatchResult[]> {
-  const id = parentJobId * 10000 + chunkIndex + 1;
-  return new Promise((resolve, reject) => {
-    worker.onmessage = (event: MessageEvent<{ id: number; type: "progress" | "result" | "error"; done?: number; data?: SurfaceBatchResult[]; message?: string }>) => {
-      const msg = event.data;
-      if (msg.id !== id) return;
-      if (msg.type === "result") resolve(msg.data ?? []);
-      else if (msg.type === "progress") onProgress?.(msg.done ?? 0);
-      else if (msg.type === "error") reject(new Error(msg.message ?? "Surface batch worker failed"));
-    };
-    worker.onerror = (event) => reject(new Error(event.message));
-    worker.postMessage({ id, type: "run", tasks });
-  });
 }
 
 function runSurfaceBatchDirect(
@@ -408,4 +289,10 @@ function runSurfaceBatchDirect(
     onProgress?.(done, total);
     return { attIdx: t.attIdx, defIdx: t.defIdx, winrate };
   }));
+}
+
+async function closeBatchRunner(runner: { close(): Promise<void> } | null): Promise<void> {
+  if (!runner) return;
+  await runner.close();
+  if (activeBatchRunner === runner) activeBatchRunner = null;
 }

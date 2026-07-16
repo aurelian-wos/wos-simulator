@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { Pool } from "./pools";
+import { Pool, winRate } from "./pools";
 import { aggregateBattleResults, createDualRankingTasks, createRandomRoundTasks, runDualSwissTournament, runFinalsRoundRobin } from "./dualSwiss";
 import type { BattleSummary, BattleTask, Team } from "./types";
 
@@ -20,14 +20,31 @@ test("aggregateBattleResults applies asymmetric offense and defense scoring", ()
   const attackPool = new Pool(teams);
   const defensePool = new Pool(teams);
   aggregateBattleResults(attackPool, defensePool, [
-    { attackerId: 1, defenderId: 2, avgAttackerLeft: 10, avgDefenderLeft: 0 },
-    { attackerId: 2, defenderId: 1, avgAttackerLeft: 0, avgDefenderLeft: 8 }
+    { attackerId: 1, defenderId: 2, games: 1, attackerWins: 1, defenderWins: 0, avgAttackerLeft: 10, avgDefenderLeft: 0 },
+    { attackerId: 2, defenderId: 1, games: 1, attackerWins: 0, defenderWins: 1, avgAttackerLeft: 0, avgDefenderLeft: 8 }
   ]);
 
-  assert.equal(attackPool.getScore(1).wins, 1);
+  assert.equal(attackPool.getScore(1).winRateSum, 1);
   assert.equal(attackPool.getScore(1).margin, 10);
-  assert.equal(defensePool.getScore(1).wins, 1);
+  assert.equal(defensePool.getScore(1).winRateSum, 1);
   assert.equal(defensePool.getScore(1).margin, 8);
+});
+
+test("aggregateBattleResults averages replicate win rates within each matchup", () => {
+  const attackPool = new Pool([team(1)]);
+  const defensePool = new Pool([team(2)]);
+  aggregateBattleResults(attackPool, defensePool, [
+    { attackerId: 1, defenderId: 2, games: 10, attackerWins: 4, defenderWins: 6, avgAttackerLeft: 20, avgDefenderLeft: 30 }
+  ]);
+
+  assert.equal(attackPool.getScore(1).matches, 1);
+  assert.equal(attackPool.getScore(1).games, 10);
+  assert.equal(attackPool.getScore(1).winRateSum, 0.4);
+  assert.equal(winRate(attackPool.getScore(1)), 0.4);
+  assert.equal(defensePool.getScore(2).matches, 1);
+  assert.equal(defensePool.getScore(2).games, 10);
+  assert.equal(defensePool.getScore(2).winRateSum, 0.6);
+  assert.equal(winRate(defensePool.getScore(2)), 0.6);
 });
 
 test("createDualRankingTasks pairs attackers and defenders by active rank", () => {
@@ -69,6 +86,9 @@ test("runDualSwissTournament freezes equal pool counts by accumulated loss thres
       return {
         attackerId: task.attacker.id,
         defenderId: task.defender.id,
+        games: 1,
+        attackerWins: attackerWins ? 1 : 0,
+        defenderWins: attackerWins ? 0 : 1,
         avgAttackerLeft: attackerWins ? 10 : 0,
         avgDefenderLeft: attackerWins ? 0 : 10
       };
@@ -107,6 +127,9 @@ test("runFinalsRoundRobin scores from scratch", async () => {
     tasks.map((task) => ({
       attackerId: task.attacker.id,
       defenderId: task.defender.id,
+      games: 1,
+      attackerWins: task.attacker.id === 1 ? 1 : 0,
+      defenderWins: task.attacker.id === 1 ? 0 : 1,
       avgAttackerLeft: task.attacker.id === 1 ? 10 : 0,
       avgDefenderLeft: task.attacker.id === 1 ? 0 : 5
     }));

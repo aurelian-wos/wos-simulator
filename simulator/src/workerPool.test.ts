@@ -47,6 +47,24 @@ test("BatchWorkerPool refills idle workers from the queue", async () => {
   await pool.close();
 });
 
+test("BatchWorkerPool runs one task and preserves batch order", async () => {
+  const workers = [new DeferredWorker(), new DeferredWorker()];
+  const pool = new BatchWorkerPool<number, number>(2, (index) => workers[index]!);
+
+  const single = pool.runTask(1);
+  workers[0]!.resolveNext([10]);
+  assert.equal(await single, 10);
+
+  const batches = pool.runBatches([[2], [3], [4]]);
+  workers[0]!.resolveNext([20]);
+  workers[1]!.resolveNext([30]);
+  await Promise.resolve();
+  workers[0]!.resolveNext([40]);
+  assert.deepEqual(await batches, [20, 30, 40]);
+
+  await pool.close();
+});
+
 test("batchTasksByWeight groups tasks without exceeding the target when possible", () => {
   assert.deepEqual(
     batchTasksByWeight([1, 1, 3, 1, 1], 2, (value) => value),

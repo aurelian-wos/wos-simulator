@@ -44,6 +44,9 @@ test("createBattleTaskRunner reuses one worker pool across batches", async () =>
         return {
           attackerId: task.attacker.id,
           defenderId: task.defender.id,
+          games: 1,
+          attackerWins: 1,
+          defenderWins: 0,
           avgAttackerLeft: 1,
           avgDefenderLeft: 0
         };
@@ -52,6 +55,9 @@ test("createBattleTaskRunner reuses one worker pool across batches", async () =>
         return batch.map((task) => ({
           attackerId: task.attacker.id,
           defenderId: task.defender.id,
+          games: 1,
+          attackerWins: 1,
+          defenderWins: 0,
           avgAttackerLeft: 1,
           avgDefenderLeft: 0
         }));
@@ -86,6 +92,9 @@ test("createBattleTaskRunner sends worker tasks in configured batches", async ()
       return {
         attackerId: task.attacker.id,
         defenderId: task.defender.id,
+        games: 1,
+        attackerWins: 1,
+        defenderWins: 0,
         avgAttackerLeft: 1,
         avgDefenderLeft: 0
       };
@@ -95,6 +104,9 @@ test("createBattleTaskRunner sends worker tasks in configured batches", async ()
       return batch.map((task) => ({
         attackerId: task.attacker.id,
         defenderId: task.defender.id,
+        games: 1,
+        attackerWins: 1,
+        defenderWins: 0,
         avgAttackerLeft: 1,
         avgDefenderLeft: 0
       }));

@@ -21,6 +21,14 @@ test("runSingleBattleDirect returns integer average survivors", () => {
   const result = runSingleBattleDirect({ attacker: team, defender: { ...team, id: 2 }, seed: 42, reps: 1 }, loadSimulatorConfig());
   assert.equal(result.attackerId, 1);
   assert.equal(result.defenderId, 2);
+  assert.equal(result.games, 1);
+  assert.equal(result.attackerWins + result.defenderWins <= result.games, true);
   assert.equal(Number.isInteger(result.avgAttackerLeft), true);
   assert.equal(Number.isInteger(result.avgDefenderLeft), true);
+});
+
+test("runSingleBattleDirect reports every replicate as a game", () => {
+  const result = runSingleBattleDirect({ attacker: team, defender: { ...team, id: 2 }, seed: 42, reps: 3 }, loadSimulatorConfig());
+  assert.equal(result.games, 3);
+  assert.equal(result.attackerWins + result.defenderWins <= result.games, true);
 });

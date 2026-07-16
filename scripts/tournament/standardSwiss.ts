@@ -46,12 +46,22 @@ export function aggregateCombinedBattleResults(pool: Pool, results: BattleSummar
     const margin = result.avgAttackerLeft - result.avgDefenderLeft;
     const attackerScore = pool.getScore(result.attackerId);
     const defenderScore = pool.getScore(result.defenderId);
+    const attackerWinRate = result.attackerWins / result.games;
+    const defenderWinRate = result.defenderWins / result.games;
     attackerScore.matches += 1;
+    attackerScore.games += result.games;
     attackerScore.margin += margin;
-    if (result.avgAttackerLeft > 0 && result.avgDefenderLeft === 0) attackerScore.wins += 1;
+    attackerScore.winRateSum += attackerWinRate;
+    attackerScore.attack.matches += 1;
+    attackerScore.attack.margin += margin;
+    attackerScore.attack.winRateSum += attackerWinRate;
     defenderScore.matches += 1;
+    defenderScore.games += result.games;
     defenderScore.margin += -margin;
-    if (result.avgDefenderLeft > 0 && result.avgAttackerLeft === 0) defenderScore.wins += 1;
+    defenderScore.winRateSum += defenderWinRate;
+    defenderScore.defense.matches += 1;
+    defenderScore.defense.margin += -margin;
+    defenderScore.defense.winRateSum += defenderWinRate;
   }
 }
 

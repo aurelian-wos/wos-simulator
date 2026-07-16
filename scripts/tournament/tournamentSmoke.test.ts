@@ -22,6 +22,9 @@ test("small tournament with stubbed battles finalizes offense and defense pools"
     tasks.map((task) => ({
       attackerId: task.attacker.id,
       defenderId: task.defender.id,
+      games: 1,
+      attackerWins: task.attacker.id >= task.defender.id ? 1 : 0,
+      defenderWins: task.attacker.id >= task.defender.id ? 0 : 1,
       avgAttackerLeft: task.attacker.id >= task.defender.id ? 10 : 0,
       avgDefenderLeft: task.attacker.id >= task.defender.id ? 0 : 10
     }));

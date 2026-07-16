@@ -51,12 +51,16 @@ export function aggregateBattleResults(attackerPool: Pool, defenderPool: Pool, r
     const margin = result.avgAttackerLeft - result.avgDefenderLeft;
     const attackScore = attackerPool.getScore(result.attackerId);
     const defenseScore = defenderPool.getScore(result.defenderId);
+    const attackerWinRate = result.attackerWins / result.games;
+    const defenderWinRate = result.defenderWins / result.games;
     attackScore.matches += 1;
+    attackScore.games += result.games;
     attackScore.margin += margin;
-    if (result.avgAttackerLeft > 0 && result.avgDefenderLeft === 0) attackScore.wins += 1;
+    attackScore.winRateSum += attackerWinRate;
     defenseScore.matches += 1;
+    defenseScore.games += result.games;
     defenseScore.margin += -margin;
-    if (result.avgDefenderLeft > 0 && result.avgAttackerLeft === 0) defenseScore.wins += 1;
+    defenseScore.winRateSum += defenderWinRate;
   }
 }
 

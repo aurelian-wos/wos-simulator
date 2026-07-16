@@ -251,7 +251,12 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     }
 
     if (topAttackers && topDefenders) {
-      console.log(`Running finals round-robin: ${topAttackers.length} attackers vs ${topDefenders.length} defenders`);
+      const finalsMatches = topAttackers.length * topDefenders.length;
+      const finalsGames = finalsMatches * finalsReps;
+      console.log(
+        `Running finals round-robin: ${topAttackers.length} attackers vs ${topDefenders.length} defenders ` +
+        `(${finalsMatches} matches, ${finalsReps} games/match, ${finalsGames} games)`
+      );
       const [finalAttackPool, finalDefensePool] = await runFinalsRoundRobin(
         topAttackers,
         topDefenders,
@@ -322,7 +327,7 @@ function timestamp(date = new Date()): string {
 
 function printProgress(label: string, completed: number, total: number): void {
   const pct = total > 0 ? (completed * 100) / total : 100;
-  process.stdout.write(`\r  ${label}: ${pct.toFixed(1)}% (${completed}/${total})`);
+  process.stdout.write(`\r  ${label}: ${pct.toFixed(1)}% (${completed}/${total} matches)`);
   if (completed >= total) process.stdout.write("\n");
 }
 

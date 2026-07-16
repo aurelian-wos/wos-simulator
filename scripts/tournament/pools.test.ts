@@ -17,13 +17,13 @@ function team(id: number): Team {
 test("active scores sort by win rate, average margin, then team id descending", () => {
   const pool = new Pool([team(1), team(2), team(3)]);
   pool.getScore(1).matches = 2;
-  pool.getScore(1).wins = 1;
+  pool.getScore(1).winRateSum = 1;
   pool.getScore(1).margin = 20;
   pool.getScore(2).matches = 2;
-  pool.getScore(2).wins = 1;
+  pool.getScore(2).winRateSum = 1;
   pool.getScore(2).margin = 20;
   pool.getScore(3).matches = 2;
-  pool.getScore(3).wins = 2;
+  pool.getScore(3).winRateSum = 2;
   pool.getScore(3).margin = 1;
 
   assert.deepEqual(pool.teamsActiveOrdered.map((item) => item.id), [3, 2, 1]);
@@ -50,13 +50,13 @@ test("freezeBottomTeams inserts later better freezes before earlier worse freeze
 test("freezeBottomCount freezes the requested number of lowest active teams", () => {
   const pool = new Pool([team(1), team(2), team(3), team(4)]);
   pool.getScore(1).matches = 2;
-  pool.getScore(1).wins = 2;
+  pool.getScore(1).winRateSum = 2;
   pool.getScore(2).matches = 2;
-  pool.getScore(2).wins = 1;
+  pool.getScore(2).winRateSum = 1;
   pool.getScore(3).matches = 2;
-  pool.getScore(3).wins = 0;
+  pool.getScore(3).winRateSum = 0;
   pool.getScore(4).matches = 2;
-  pool.getScore(4).wins = 0;
+  pool.getScore(4).winRateSum = 0;
   pool.getScore(4).margin = -10;
 
   pool.freezeBottomCount(2);
@@ -68,13 +68,13 @@ test("freezeBottomCount freezes the requested number of lowest active teams", ()
 test("freezeLossesAtLeast freezes loss threshold matches plus any extra bottom-ranked teams", () => {
   const pool = new Pool([team(1), team(2), team(3), team(4)]);
   pool.getScore(1).matches = 5;
-  pool.getScore(1).wins = 3;
+  pool.getScore(1).winRateSum = 3;
   pool.getScore(2).matches = 4;
-  pool.getScore(2).wins = 1;
+  pool.getScore(2).winRateSum = 1;
   pool.getScore(3).matches = 6;
-  pool.getScore(3).wins = 1;
+  pool.getScore(3).winRateSum = 1;
   pool.getScore(4).matches = 3;
-  pool.getScore(4).wins = 3;
+  pool.getScore(4).winRateSum = 3;
 
   pool.freezeLossesAtLeast(3, 3);
 

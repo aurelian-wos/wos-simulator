@@ -14,16 +14,28 @@ export interface Team {
   };
 }
 
-export interface Score {
-  team: Team;
-  wins: number;
+export interface RoleScore {
+  winRateSum: number;
   matches: number;
   margin: number;
+}
+
+export interface Score {
+  team: Team;
+  winRateSum: number;
+  matches: number;
+  games: number;
+  margin: number;
+  attack: RoleScore;
+  defense: RoleScore;
 }
 
 export interface BattleSummary {
   attackerId: number;
   defenderId: number;
+  games: number;
+  attackerWins: number;
+  defenderWins: number;
   avgAttackerLeft: number;
   avgDefenderLeft: number;
 }

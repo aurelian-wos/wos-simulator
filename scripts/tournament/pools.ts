@@ -1,7 +1,15 @@
-import type { Score, Team } from "./types";
+import type { RoleScore, Score, Team } from "./types";
+
+export function roleWinRate(score: RoleScore): number {
+  return score.matches > 0 ? score.winRateSum / score.matches : 0;
+}
+
+export function roleAvgMargin(score: RoleScore): number {
+  return score.matches > 0 ? score.margin / score.matches : 0;
+}
 
 export function winRate(score: Score): number {
-  return score.matches > 0 ? score.wins / score.matches : 0;
+  return score.matches > 0 ? score.winRateSum / score.matches : 0;
 }
 
 export function avgMargin(score: Score): number {
@@ -9,7 +17,7 @@ export function avgMargin(score: Score): number {
 }
 
 export function losses(score: Score): number {
-  return score.matches - score.wins;
+  return score.matches - score.winRateSum;
 }
 
 export class Pool {
@@ -20,7 +28,15 @@ export class Pool {
 
   constructor(teams: Team[]) {
     this.teams = teams;
-    this.scoresActive = teams.map((team) => ({ team, wins: 0, matches: 0, margin: 0 }));
+    this.scoresActive = teams.map((team) => ({
+      team,
+      winRateSum: 0,
+      matches: 0,
+      games: 0,
+      margin: 0,
+      attack: { winRateSum: 0, matches: 0, margin: 0 },
+      defense: { winRateSum: 0, matches: 0, margin: 0 }
+    }));
     for (const score of this.scoresActive) this.scoreById.set(score.team.id, score);
   }
 

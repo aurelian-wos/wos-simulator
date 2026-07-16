@@ -1,5 +1,5 @@
 import { loadSimulatorConfig } from "../../simulator/src/config";
-import { prepareBattle, runPrepared, signedRemainingScore } from "../../simulator/src/simulator";
+import { signedRemainingScore, simulateBattles } from "../../simulator/src/simulator";
 import type { BattleResult, SimulatorConfig } from "../../simulator/src/types";
 import { batchTasksByWeight } from "../../simulator/src/workerPool";
 import { teamToBattleInput } from "./teamInput";
@@ -21,16 +21,23 @@ export function runSingleBattleDirect(task: BattleTask, config: SimulatorConfig)
   if (task.reps < 1) throw new Error("reps must be at least 1");
   let totalAttackerLeft = 0;
   let totalDefenderLeft = 0;
+  let attackerWins = 0;
+  let defenderWins = 0;
   const input = teamToBattleInput(task.attacker, task.defender, task.seed, config, task.playerStats);
-  const prepared = prepareBattle(input, config);
-  for (let rep = 0; rep < task.reps; rep += 1) {
-    const score = signedRemainingScore(runPrepared(prepared, task.seed + rep, { mode: "fast" }));
+  const results = simulateBattles(input, config, { mode: "fast", count: task.reps });
+  for (const result of results) {
+    if (result.winner === "attacker") attackerWins += 1;
+    else if (result.winner === "defender") defenderWins += 1;
+    const score = signedRemainingScore(result);
     if (score > 0) totalAttackerLeft += score;
     else if (score < 0) totalDefenderLeft += -score;
   }
   return {
     attackerId: task.attacker.id,
     defenderId: task.defender.id,
+    games: results.length,
+    attackerWins,
+    defenderWins,
     avgAttackerLeft: Math.floor(totalAttackerLeft / task.reps),
     avgDefenderLeft: Math.floor(totalDefenderLeft / task.reps)
   };

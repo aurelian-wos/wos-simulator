@@ -3,6 +3,17 @@ export interface BatchWorker<TTask, TResult, TProgress = never> {
   close(): Promise<void> | void;
 }
 
+export interface BatchWorkerRequest<TTask, TContext = undefined> {
+  id: number;
+  tasks: TTask[];
+  context?: TContext;
+}
+
+export type BatchWorkerResponse<TResult, TProgress = never> =
+  | { id: number; type: "progress"; progress: TProgress }
+  | { id: number; type: "result"; results: TResult[] }
+  | { id: number; type: "error"; error: string };
+
 interface PendingBatch<TTask, TResult, TProgress> {
   tasks: TTask[];
   onProgress?: (progress: TProgress) => void;
@@ -38,6 +49,26 @@ export class BatchWorkerPool<TTask, TResult, TProgress = never> {
       this.queue.push({ tasks, onProgress, resolve, reject });
       this.pump();
     });
+  }
+
+  async runTask(task: TTask, onProgress?: (progress: TProgress) => void): Promise<TResult> {
+    const results = await this.runBatch([task], onProgress);
+    const result = results[0];
+    if (result === undefined) throw new Error("Worker returned no result for task");
+    return result;
+  }
+
+  async runBatches(
+    batches: readonly TTask[][],
+    onProgress?: (batchIndex: number, progress: TProgress) => void,
+  ): Promise<TResult[]> {
+    const results = await Promise.all(
+      batches.map((batch, batchIndex) => this.runBatch(
+        batch,
+        onProgress ? (progress) => onProgress(batchIndex, progress) : undefined,
+      )),
+    );
+    return results.flat();
   }
 
   async close(): Promise<void> {

@@ -1,12 +1,23 @@
 import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 
-import { avgMargin, Pool, winRate } from "./pools";
+import { avgMargin, Pool, roleAvgMargin, roleWinRate, winRate } from "./pools";
 import { parseRatio } from "./teamGeneration";
 import type { Score, Team } from "./types";
 
 const RESULTS_DIR_TIMESTAMP_RE = /^\d{8}-\d{6}$/;
-const CSV_FIELDS = ["rank", "win_rate", "avg_margin", "matches", "formation", "hero_1", "hero_2", "hero_3", "joiner_1", "joiner_2", "joiner_3", "joiner_4"];
+const TEAM_CSV_FIELDS = ["games", "formation", "hero_1", "hero_2", "hero_3", "joiner_1", "joiner_2", "joiner_3", "joiner_4"];
+const CSV_FIELDS = ["rank", "win_rate", "avg_margin", ...TEAM_CSV_FIELDS];
+const COMBINED_CSV_FIELDS = [
+  "rank",
+  "win_rate",
+  "avg_margin",
+  "attack_win_rate",
+  "attack_avg_margin",
+  "defense_win_rate",
+  "defense_avg_margin",
+  ...TEAM_CSV_FIELDS
+];
 
 export function deriveResultsLabel(source: string): string {
   const name = basename(source);
@@ -55,7 +66,7 @@ export function writeResultsCsv(pathPrefix: string, attackerPool: Pool, defender
 }
 
 export function writeCombinedResultsCsv(pathPrefix: string, pool: Pool, topN: number, teams?: Team[]): void {
-  writeOneCsv(`${pathPrefix}_combined.csv`, filterScores(pool, teams).slice(0, topN));
+  writeOneCsv(`${pathPrefix}_combined.csv`, filterScores(pool, teams).slice(0, topN), true);
 }
 
 function filterScores(pool: Pool, allowedTeams?: Team[]): Score[] {
@@ -65,13 +76,13 @@ function filterScores(pool: Pool, allowedTeams?: Team[]): Score[] {
   return scores.filter((score) => allowed.has(score.team.id));
 }
 
-function writeOneCsv(path: string, scores: Score[]): void {
+function writeOneCsv(path: string, scores: Score[], includeRoleScores = false): void {
   mkdirSync(dirname(path), { recursive: true });
   if (scores.length === 0) {
     writeFileSync(path, "");
     return;
   }
-  const lines = [CSV_FIELDS.join(",")];
+  const lines = [(includeRoleScores ? COMBINED_CSV_FIELDS : CSV_FIELDS).join(",")];
   scores.forEach((score, index) => {
     const team = score.team;
     lines.push(
@@ -79,7 +90,15 @@ function writeOneCsv(path: string, scores: Score[]): void {
         String(index + 1),
         winRate(score).toFixed(4),
         avgMargin(score).toFixed(2),
-        String(score.matches),
+        ...(includeRoleScores
+          ? [
+              roleWinRate(score.attack).toFixed(4),
+              roleAvgMargin(score.attack).toFixed(2),
+              roleWinRate(score.defense).toFixed(4),
+              roleAvgMargin(score.defense).toFixed(2)
+            ]
+          : []),
+        String(score.games),
         team.ratioLabel,
         ...team.mains,
         ...team.joiners

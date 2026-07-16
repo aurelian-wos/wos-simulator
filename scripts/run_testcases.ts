@@ -13,11 +13,14 @@ import {
   runPreparedTestcasesAsync,
   runTestcases,
   type TestcaseCaseReport,
+  type TestcaseExecutionJob,
+  type TestcaseExecutionResult,
   type TestcaseSummaryEntry,
   type TestcaseRunOptions,
   type TestcaseRunReport
 } from "../simulator/src/tooling/testcases";
-import { TestcaseWorkerPool } from "./testcase_worker_pool";
+import { BatchWorkerPool } from "../simulator/src/workerPool";
+import { WorkerThreadBatchWorker } from "./workerThreadBatchWorker";
 
 export async function main(argv = process.argv.slice(2)): Promise<void> {
   try {
@@ -56,9 +59,18 @@ async function runCliTestcases(options: CliOptions, config: ReturnType<typeof lo
   const workers = options.testcaseOptions.workers ?? 1;
   if (workers <= 1) return runTestcases(options.testcaseOptions, config);
   const prepared = prepareTestcaseCases(options.testcaseOptions);
-  const pool = new TestcaseWorkerPool(workers);
+  const profileArgs = process.env.PROFILE_WORKERS
+    ? ["--cpu-prof", "--cpu-prof-dir=/tmp/wos-prof"]
+    : [];
+  const pool = new BatchWorkerPool(
+    workers,
+    () => new WorkerThreadBatchWorker<TestcaseExecutionJob, TestcaseExecutionResult>(
+      new URL("./testcase_worker.ts", import.meta.url),
+      { execArgv: profileArgs },
+    ),
+  );
   try {
-    return await runPreparedTestcasesAsync(options.testcaseOptions, config, prepared, (job) => pool.run(job));
+    return await runPreparedTestcasesAsync(options.testcaseOptions, config, prepared, (job) => pool.runTask(job));
   } finally {
     await pool.close();
   }

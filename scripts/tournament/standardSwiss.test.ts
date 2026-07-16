@@ -25,16 +25,37 @@ function team(id: number): Team {
 test("aggregateCombinedBattleResults scores attacker and defender in one standings pool", () => {
   const pool = new Pool([team(1), team(2)]);
   aggregateCombinedBattleResults(pool, [
-    { attackerId: 1, defenderId: 2, avgAttackerLeft: 10, avgDefenderLeft: 0 },
-    { attackerId: 2, defenderId: 1, avgAttackerLeft: 0, avgDefenderLeft: 8 }
+    { attackerId: 1, defenderId: 2, games: 1, attackerWins: 1, defenderWins: 0, avgAttackerLeft: 10, avgDefenderLeft: 0 },
+    { attackerId: 2, defenderId: 1, games: 1, attackerWins: 0, defenderWins: 1, avgAttackerLeft: 0, avgDefenderLeft: 8 }
   ]);
 
-  assert.equal(pool.getScore(1).wins, 2);
+  assert.equal(pool.getScore(1).winRateSum, 2);
   assert.equal(pool.getScore(1).matches, 2);
+  assert.equal(pool.getScore(1).games, 2);
   assert.equal(pool.getScore(1).margin, 18);
-  assert.equal(pool.getScore(2).wins, 0);
+  assert.deepEqual(pool.getScore(1).attack, { winRateSum: 1, matches: 1, margin: 10 });
+  assert.deepEqual(pool.getScore(1).defense, { winRateSum: 1, matches: 1, margin: 8 });
+  assert.equal(pool.getScore(2).winRateSum, 0);
   assert.equal(pool.getScore(2).matches, 2);
   assert.equal(pool.getScore(2).margin, -18);
+  assert.deepEqual(pool.getScore(2).attack, { winRateSum: 0, matches: 1, margin: -8 });
+  assert.deepEqual(pool.getScore(2).defense, { winRateSum: 0, matches: 1, margin: -10 });
+});
+
+test("aggregateCombinedBattleResults averages replicate win rates within each directional matchup", () => {
+  const pool = new Pool([team(1), team(2)]);
+  aggregateCombinedBattleResults(pool, [
+    { attackerId: 1, defenderId: 2, games: 10, attackerWins: 7, defenderWins: 3, avgAttackerLeft: 30, avgDefenderLeft: 10 }
+  ]);
+
+  assert.equal(pool.getScore(1).matches, 1);
+  assert.equal(pool.getScore(1).games, 10);
+  assert.equal(pool.getScore(1).winRateSum, 0.7);
+  assert.deepEqual(pool.getScore(1).attack, { winRateSum: 0.7, matches: 1, margin: 20 });
+  assert.equal(pool.getScore(2).matches, 1);
+  assert.equal(pool.getScore(2).games, 10);
+  assert.equal(pool.getScore(2).winRateSum, 0.3);
+  assert.deepEqual(pool.getScore(2).defense, { winRateSum: 0.3, matches: 1, margin: -20 });
 });
 
 test("createStandardSwissPairings avoids previous pairings when possible", () => {
@@ -68,6 +89,9 @@ test("runStandardSwissTournament finalizes a single combined pool", async () => 
     return tasks.map((task) => ({
       attackerId: task.attacker.id,
       defenderId: task.defender.id,
+      games: 1,
+      attackerWins: task.attacker.id < task.defender.id ? 1 : 0,
+      defenderWins: task.attacker.id < task.defender.id ? 0 : 1,
       avgAttackerLeft: task.attacker.id < task.defender.id ? 10 : 0,
       avgDefenderLeft: task.attacker.id < task.defender.id ? 0 : 10
     }));
@@ -102,6 +126,9 @@ test("runCombinedFinalsRoundRobin evaluates every matchup in both directions", a
     return tasks.map((task) => ({
       attackerId: task.attacker.id,
       defenderId: task.defender.id,
+      games: 1,
+      attackerWins: task.attacker.id === 1 ? 1 : 0,
+      defenderWins: task.attacker.id === 1 ? 0 : 1,
       avgAttackerLeft: task.attacker.id === 1 ? 10 : 0,
       avgDefenderLeft: task.attacker.id === 1 ? 0 : 5
     }));
