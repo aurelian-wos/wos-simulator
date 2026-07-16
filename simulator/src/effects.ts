@@ -190,7 +190,7 @@ export function activateEffect(skill: ResolvedSkill, intent: ResolvedEffectInten
     remainingAttackDelay: compiled.attackDelay,
     uses: 0,
     sameEffectStacking: compiled.sameEffectStacking,
-    effectGroup: intent.effectGroup ?? intent.effectGroupsByScopeKey?.[resolvedEffectScopeKey(appliesTo, appliesVs)],
+    effectGroup: intent.effectGroupsByScopeKey?.[resolvedEffectScopeKey(appliesTo, appliesVs)],
     effectGroupPosition: undefined
   };
   if (!compiled.valueEvolution) return effect;

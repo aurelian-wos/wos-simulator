@@ -10,7 +10,6 @@ import type {
   BattleTrace,
   DamageJob,
   FighterInput,
-  ResolvedEffectIntentDefinition,
   ResolvedFighter,
   ResolvedSkill,
   SideId,
@@ -628,7 +627,9 @@ function buildRuntimeSkills(fighters: ResolvedFighter[]): RuntimeSkills {
   for (const skill of all) compiledTriggerForSkill(skill);
   const effectGroups: ActiveEffectGroup[] = [];
   const damageGroupsByJobShape: ActiveEffectGroup[][] = Array.from({ length: DAMAGE_JOB_SHAPE_SLOTS }, () => []);
-  const plansByDefinition: Record<SideId, Map<object, EffectGroupPlan>> = {
+  // One scope-key table per (side, config definition); duplicate main/joiner copies of the
+  // same config effect share it, so their activations land in the same groups.
+  const groupTablesByDefinition: Record<SideId, Map<object, Array<ActiveEffectGroup | undefined>>> = {
     attacker: new Map(),
     defender: new Map()
   };
@@ -643,9 +644,9 @@ function buildRuntimeSkills(fighters: ResolvedFighter[]): RuntimeSkills {
       }
       const isDynamicModifier = definition?.valueType === "pct";
       if (!isDynamicModifier) continue;
-      const existingPlan = plansByDefinition[skill.side].get(intent.sourceDefinition);
-      if (existingPlan) {
-        assignEffectGroupPlan(intent, existingPlan);
+      const existingTable = groupTablesByDefinition[skill.side].get(intent.sourceDefinition);
+      if (existingTable) {
+        intent.effectGroupsByScopeKey = existingTable;
         continue;
       }
       const groupsByScopeKey: Array<ActiveEffectGroup | undefined> = [];
@@ -670,9 +671,8 @@ function buildRuntimeSkills(fighters: ResolvedFighter[]): RuntimeSkills {
         for (const slot of slots) damageGroupsByJobShape[slot].push(group);
       }
       if (groupsForDefinition.length === 0) throw new Error(`Runtime effect ${intent.id} has no resolvable effect group`);
-      const plan: EffectGroupPlan = groupsForDefinition.length === 1 ? { fixed: groupsForDefinition[0] } : { byScopeKey: groupsByScopeKey };
-      plansByDefinition[skill.side].set(intent.sourceDefinition, plan);
-      assignEffectGroupPlan(intent, plan);
+      groupTablesByDefinition[skill.side].set(intent.sourceDefinition, groupsByScopeKey);
+      intent.effectGroupsByScopeKey = groupsByScopeKey;
     }
   }
   const battleStart = all.filter((skill) => skill.trigger.type === "battle_start");
@@ -704,16 +704,6 @@ function buildRuntimeSkills(fighters: ResolvedFighter[]): RuntimeSkills {
   };
 }
 
-interface EffectGroupPlan {
-  fixed?: ActiveEffectGroup;
-  byScopeKey?: Array<ActiveEffectGroup | undefined>;
-}
-
-function assignEffectGroupPlan(intent: ResolvedEffectIntentDefinition, plan: EffectGroupPlan): void {
-  intent.effectGroup = plan.fixed;
-  intent.effectGroupsByScopeKey = plan.byScopeKey;
-}
-
 function assertDisjointResolvedGroupSlots(effectId: string, slots: Uint8Array, existingGroups: Iterable<Uint8Array>): void {
   for (const existing of existingGroups) {
     for (const slot of slots) {
@@ -724,6 +714,9 @@ function assertDisjointResolvedGroupSlots(effectId: string, slots: Uint8Array, e
   }
 }
 
+// Enumerate the attack-intent shapes this skill's trigger can ever activate with, so
+// preparation can pre-create an effect group for every reachable resolved scope. The
+// activations built from these intents are throwaway scope probes, never indexed.
 function potentialActivationIntents(skill: ResolvedSkill): Array<AttackIntent | undefined> {
   if (skill.trigger.type === "battle_start" || (skill.trigger.type === "turn" && skill.trigger.source === undefined)) return [undefined];
   const trigger = compiledTriggerForSkill(skill);

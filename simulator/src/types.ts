@@ -100,9 +100,8 @@ export interface ResolvedEffectIntentDefinition extends EffectIntentDefinition {
   // Canonical config object retained across per-instance/level resolution. Duplicate
   // main/joiner copies use this identity to share prepared activation groups.
   sourceDefinition: Omit<EffectIntentDefinition, "id">;
-  // Fixed-scope runtime modifiers take the direct group fast path. Dynamically resolved scopes
-  // use the compact scope-key table populated during battle preparation.
-  effectGroup?: ActiveEffectGroup;
+  // Runtime damage modifiers only: prepared groups for every resolved scope this definition can
+  // activate with, indexed by resolvedEffectScopeKey. Populated during battle preparation.
   effectGroupsByScopeKey?: Array<ActiveEffectGroup | undefined>;
 }
 
