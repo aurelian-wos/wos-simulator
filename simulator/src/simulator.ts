@@ -43,7 +43,7 @@ import { bucketDefinition } from "./damageBuckets";
 
 const DEFAULT_MAX_ROUNDS = 1500;
 const BEAR_ROUNDS = 10;
-const BEAR_DEFENSE = 36;
+const BEAR_DEFENSE = 250/3;
 const BEAR_TROOP_ID = "bear_infantry";
 
 interface Runtime {
