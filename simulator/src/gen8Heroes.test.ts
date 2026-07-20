@@ -3,6 +3,8 @@ import { test } from "node:test";
 
 import { loadSimulatorConfig } from "./config";
 import { resolveFighter } from "./fighterResolution";
+import { simulateBattles } from "./simulator";
+import type { BattleInput } from "./types";
 
 test("Gen8 heroes are registered with the shared S8 expedition stats", () => {
   const config = loadSimulatorConfig();
@@ -72,7 +74,7 @@ test("Gen8 combat skill values and active effect buckets match their definitions
   assert.deepEqual(gatot.KingsBestowal.effects["KingsBestowal/1"], {
     type: "active.hero.shield",
     value: [6, 12, 18, 24, 30],
-    value_formula: { type: "percent_of", source: "trigger.total_kills" },
+    value_formula: { type: "percent_of", source: "trigger.source_attack" },
     units: { applies_to: "trigger.source", applies_vs: "enemy.any" },
     duration: { turns: { delay: 1, count: 1 } },
     same_effect_stacking: "max"
@@ -104,3 +106,63 @@ test("Gen8 combat skill values and active effect buckets match their definitions
     { source: "use.source", target: "enemy.living" }
   ]);
 });
+
+test("Gatot converts source formation Attack into next-turn shield protection", () => {
+  const config = loadSimulatorConfig();
+  const input = gatotInfantryBattle(5000, 1000, 2);
+  const result = simulateBattles(input, config, { mode: "trace" })[0]!;
+  const roundTwoLeftAttack = result.attacks.find(
+    (attack) => attack.round === 2 && attack.kind === "normal" && attack.dealerSide === "attacker"
+  );
+  const rightShield = roundTwoLeftAttack?.appliedEffects?.find((effect) => "kind" in effect && effect.kind === "shield");
+  const expectedRightShield = Math.sqrt(1000) * (243 * (1 + 326.1 / 100)) / (730 * (1 + 18.2 / 100)) * 0.12;
+
+  assert.ok(rightShield && "value" in rightShield);
+  assert.ok(Math.abs(rightShield.value - expectedRightShield) < 1e-12);
+  assert.equal(roundTwoLeftAttack?.kills, Math.max(0, (roundTwoLeftAttack?.trace?.damageBeforeOffsets ?? 0) - expectedRightShield));
+});
+
+test("Gatot source-Attack shields reproduce the observed army-size threshold", () => {
+  const config = loadSimulatorConfig();
+  const expectations = [
+    { left: 4900, right: 1000, winner: "draw", rounds: 1500, leftLosses: 3, rightLosses: 4 },
+    { left: 5100, right: 1000, winner: "attacker", rounds: 1374, leftLosses: 3, rightLosses: 1000 },
+    { left: 10000, right: 2000, winner: "attacker", rounds: 452, leftLosses: 7, rightLosses: 2000 },
+    { left: 20000, right: 4000, winner: "attacker", rounds: 337, leftLosses: 14, rightLosses: 4000 }
+  ] as const;
+
+  for (const expected of expectations) {
+    const result = simulateBattles(gatotInfantryBattle(expected.left, expected.right), config, { mode: "fast" })[0]!;
+    assert.deepEqual(
+      {
+        winner: result.winner,
+        rounds: result.rounds,
+        leftLosses: expected.left - result.remaining.attacker.infantry,
+        rightLosses: expected.right - result.remaining.defender.infantry
+      },
+      {
+        winner: expected.winner,
+        rounds: expected.rounds,
+        leftLosses: expected.leftLosses,
+        rightLosses: expected.rightLosses
+      }
+    );
+  }
+});
+
+function gatotInfantryBattle(left: number, right: number, maxRounds = 1500): BattleInput {
+  return {
+    maxRounds,
+    seed: "gatot-source-attack-shield",
+    attacker: {
+      troops: { infantry_t6: left },
+      stats: { infantry: { attack: 285.3, defense: 283.3, lethality: 0, health: 0 } },
+      heroes: { Gatot: { skill_1: 1, skill_2: 2, skill_3: 3 } }
+    },
+    defender: {
+      troops: { infantry_t6: right },
+      stats: { infantry: { attack: 326.1, defense: 330.1, lethality: 18.2, health: 18.2 } },
+      heroes: { Gatot: { skill_1: 2, skill_2: 2, skill_3: 2 } }
+    }
+  };
+}

@@ -152,8 +152,9 @@ export function triggerSkills(
 }
 
 // Attack-triggered effects with a value_formula are gated here with the rest of
-// their skill, but materialized only after the normal attack and its immediate
-// extra-skill jobs have produced finalized kill counts.
+// their skill, but materialized after the normal attack and its immediate
+// extra-skill jobs. Kill-derived formulas therefore use finalized kill counts;
+// source-attack formulas retain the same next-turn scheduling path.
 export function triggerAttackSkills(
   round: number,
   preparedSkills: PreparedAttackSkill[],
@@ -188,17 +189,20 @@ export function materializeDeferredEffects(
   intent: AttackIntent,
   normalKills: number,
   skillKills: number,
+  sourceAttack: number,
   runtime: Runtime,
   recorder: BattleRecorder
 ): void {
   if (!plans) return;
   for (const { skill, intent: effectIntent } of plans) {
     const formula = effectIntent.value_formula!;
-    const basis = formula.source === "trigger.normal_kills"
-      ? normalKills
-      : formula.source === "trigger.skill_kills"
-        ? skillKills
-        : normalKills + skillKills;
+    const basis = formula.source === "trigger.source_attack"
+      ? sourceAttack
+      : formula.source === "trigger.normal_kills"
+        ? normalKills
+        : formula.source === "trigger.skill_kills"
+          ? skillKills
+          : normalKills + skillKills;
     const coefficientPct = Number(effectIntent.value);
     const resolvedValue = basis * coefficientPct / 100;
     if (!Number.isFinite(resolvedValue) || resolvedValue <= 0) continue;

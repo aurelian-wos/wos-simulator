@@ -44,7 +44,7 @@
           ],
           "value_formula": {
             "type": "percent_of",
-            "source": "trigger.total_kills"
+            "source": "trigger.source_attack"
           },
           "units": {
             "applies_to": "trigger.source",

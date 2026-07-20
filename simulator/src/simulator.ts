@@ -54,7 +54,7 @@ import { processExtraSkillAttacks } from "./extraAttacks";
 // Re-exported so the public battle API stays importable from one module.
 export { prepareBattle, type CompiledBattle } from "./prepare";
 import { emptyTroops, resolveFighter } from "./fighterResolution";
-import { buildStaticDamageProfile, type StaticDamageProfile } from "./staticDamageProfile";
+import { buildStaticDamageProfile, unitBaseStats, unitPlayerBonuses, type StaticDamageProfile } from "./staticDamageProfile";
 
 const DEFAULT_MAX_ROUNDS = 1500;
 const BEAR_ROUNDS = 10;
@@ -341,7 +341,18 @@ function runLoop(
       if (loopOptions.scoreSide && job.dealerSide === loopOptions.scoreSide.dealerSide && job.takerSide === loopOptions.scoreSide.takerSide) {
         score += triggeredKills;
       }
-      materializeDeferredEffects(deferredEffects, round, intent, normalResult.kills, triggeredKills, runtime, recorder);
+      if (deferredEffects) {
+        materializeDeferredEffects(
+          deferredEffects,
+          round,
+          intent,
+          normalResult.kills,
+          triggeredKills,
+          sourceAttackProtectionBasis(job, fighters),
+          runtime,
+          recorder
+        );
+      }
     }
 
     if (loopOptions.commitLosses) commitRound(cancelled, results, runtime);
@@ -363,6 +374,18 @@ function runLoop(
     skillReport: recorder.skillReport,
     score
   };
+}
+
+// Formation "Attack" for Gatot S2. I'm sure there's a good reason for this to be the way it is,
+//  but it either eludes me for now or there is a mistake here
+function sourceAttackProtectionBasis(job: DamageJob, fighters: Record<SideId, ResolvedFighter>): number {
+  const troopCount = Math.max(0, job.roundStartTroops[job.dealerSide][job.dealerUnit] ?? 0);
+  const fighter = fighters[job.dealerSide];
+  const base = unitBaseStats(fighter, job.dealerUnit);
+  const bonuses = unitPlayerBonuses(fighter, job.dealerUnit);
+  const attack = base.attack * (1 + bonuses.attack / 100);
+  const health = base.health * (1 + bonuses.health / 100);
+  return health > 0 ? Math.sqrt(troopCount) * attack / health : 0;
 }
 
 function triggerRoundStartSkills(

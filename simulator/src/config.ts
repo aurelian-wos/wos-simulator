@@ -363,7 +363,7 @@ function validateEffectValueFormula(
   if (record.type !== "percent_of") {
     throw new Error(`effect value_formula type must be "percent_of" at ${path}`);
   }
-  if (!new Set(["trigger.normal_kills", "trigger.skill_kills", "trigger.total_kills"]).has(String(record.source))) {
+  if (!new Set(["trigger.normal_kills", "trigger.skill_kills", "trigger.total_kills", "trigger.source_attack"]).has(String(record.source))) {
     throw new Error(`invalid value_formula source ${JSON.stringify(record.source)} at ${path}`);
   }
 }

@@ -95,7 +95,11 @@ export interface EffectIntentDefinition {
   reason?: string;
 }
 
-export type TriggerValueSource = "trigger.normal_kills" | "trigger.skill_kills" | "trigger.total_kills";
+export type TriggerValueSource =
+  | "trigger.normal_kills"
+  | "trigger.skill_kills"
+  | "trigger.total_kills"
+  | "trigger.source_attack";
 
 export interface PercentOfValueFormula {
   type: "percent_of";

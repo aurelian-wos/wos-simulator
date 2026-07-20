@@ -373,6 +373,17 @@ test("loadSimulatorConfig accepts the deferred shield value formula schema", () 
   }, { type: "attack", source: "infantry" });
 
   assert.doesNotThrow(() => loadSimulatorConfigFromDir(root));
+
+  const sourceAttackRoot = writeConfigWithTroopEffect({
+    type: "active.hero.shield",
+    value: 30,
+    value_formula: { type: "percent_of", source: "trigger.source_attack" },
+    units: { applies_to: "trigger.source", applies_vs: "enemy.any" },
+    duration: { turns: { delay: 1, count: 1 } },
+    same_effect_stacking: "max"
+  }, { type: "attack", source: "infantry" });
+
+  assert.doesNotThrow(() => loadSimulatorConfigFromDir(sourceAttackRoot));
 });
 
 test("loadSimulatorConfig rejects malformed or non-attack value formulas", () => {
