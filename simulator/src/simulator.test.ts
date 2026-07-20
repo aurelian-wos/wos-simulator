@@ -1024,6 +1024,62 @@ test("array joiner heroes preserve duplicate skill instances", () => {
   );
 });
 
+test("joiner heroes contribute only their first skill when later levels are supplied", () => {
+  const config = minimalConfig({
+    Joiner: {
+      name: "Joiner",
+      skills: {
+        FirstSkill: {
+          trigger: { type: "pre_battle" },
+          effects: { first: { type: "passive.attack.up", value: 10 } }
+        },
+        SecondSkill: {
+          trigger: { type: "pre_battle" },
+          effects: { second: { type: "passive.attack.up", value: 100 } }
+        },
+        ThirdSkill: {
+          trigger: { type: "pre_battle" },
+          effects: { third: { type: "passive.lethality.up", value: 100 } }
+        },
+        FourthSkill: {
+          trigger: { type: "pre_battle" },
+          effects: { fourth: { type: "passive.lethality.up", value: 100 } }
+        }
+      }
+    }
+  });
+  const battle = (levels: Record<string, number>): BattleInput => ({
+    maxRounds: 1,
+    seed: "joiner-first-skill-only",
+    attacker: {
+      troops: { infantry_t1: 100 },
+      joiner_heroes: [{ name: "Joiner", levels }]
+    },
+    defender: {
+      troops: { infantry_t1: 100 },
+      heroes: {}
+    }
+  });
+
+  const firstOnly = runOnce(battle({ skill_1: 1 }), config, { mode: "trace" });
+  const laterLevelsPresent = runOnce(
+    battle({ skill_1: 1, skill_2: 1, skill_3: 1, skill_4: 1 }),
+    config,
+    { mode: "trace" }
+  );
+
+  assert.deepEqual(semanticBattleSummary(laterLevelsPresent), semanticBattleSummary(firstOnly));
+  assert.deepEqual(laterLevelsPresent.resolved.attacker.heroes[0]?.skillIds, ["FirstSkill"]);
+  assert.deepEqual(
+    laterLevelsPresent.skillReport.attacker.map((entry) => entry.skillId),
+    ["FirstSkill"]
+  );
+  const attack = laterLevelsPresent.attacks.find(
+    (entry) => entry.dealerSide === "attacker" && entry.dealerUnit === "infantry"
+  );
+  assert.equal(attack?.trace?.atomicBuckets["passive.attack.up"].totalPct, 10);
+});
+
 test("joiner hero generation stats are not applied when main hero stats are enabled", () => {
   const config = minimalConfig({
     Main: {

@@ -189,6 +189,9 @@ function resolveHeroesAndSkills(
     let index = 0;
     for (const [skillId, rawSkill] of Object.entries(definition.skills ?? {})) {
       index += 1;
+      // Joiners contribute exactly their first expedition skill. Treat any later levels in
+      // low-level input as inert rather than rejecting an otherwise valid battle request.
+      if (instance.role === "joiner" && index > 1) continue;
       const level = Number(instance.levels[`skill_${index}`] ?? instance.levels[skillId] ?? 0);
       if (level <= 0) continue;
       if (!heroRequirementsSatisfied(rawSkill.requirements, level, side, engagementType)) continue;
